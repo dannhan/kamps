@@ -6,10 +6,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Panes, gh-dash style: a plain rounded border, with the pane's title as the
-// first line of content underlined by a rule. Titles embedded in borders
-// ("╭─ list ────╮") read as 1990s BBS and cost a row; the chrome stays out of
-// the way instead.
+// Pane lines and titles.
+//
+// A pane's interior is the whole span between its two border glyphs, w-2 columns.
+// panel passes each row through untouched, so a row owns that space — margins
+// included. That is what lets a highlighted row's background reach both borders
+// instead of stopping one column short and leaving a visible gap; ordinary text
+// rows simply start with a space of their own.
 //
 // Every helper returns a string of exactly w visible columns, which is what the
 // alignment tests check.
@@ -38,24 +41,24 @@ func paneBottom(w int, focused bool) string {
 }
 
 func paneLine(content string, w int, focused bool) string {
-	inner := maxInt(0, w-4)
+	inner := maxInt(0, w-2)
 	content = ansiTruncate(content, inner)
 	gap := inner - lipgloss.Width(content)
 	if gap < 0 {
 		gap = 0
 	}
-	return paneBorder(focused).Render("│") + " " + content +
-		strings.Repeat(" ", gap) + " " + paneBorder(focused).Render("│")
+	return paneBorder(focused).Render("│") + content +
+		strings.Repeat(" ", gap) + paneBorder(focused).Render("│")
 }
 
 // panel draws a bordered pane of width w. An empty title skips the title row.
 // The height follows the content, so pair panels with sideBySide, which pads
 // the shorter one.
 func panel(title string, w int, rows []string, focused bool) []string {
-	inner := maxInt(1, w-4)
+	inner := maxInt(1, w-2)
 	content := make([]string, 0, len(rows)+2)
 	if title != "" {
-		content = append(content, stPaneTitle.Render(truncate(title, inner)), rule(inner))
+		content = append(content, " "+stPaneTitle.Render(truncate(title, inner-1)), rule(inner))
 	}
 	content = append(content, rows...)
 

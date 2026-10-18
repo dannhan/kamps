@@ -957,7 +957,10 @@ func (m *App) bodyLines(w, budget int) []string {
 
 func (m *App) helpLines(w int) []string {
 	full := m.help.FullHelpView(m.keys.FullHelp())
-	box := stHelpBox.Render(stTitle.Render("kamps — keys") + "\n\n" + full)
+	// kamps never captures the mouse: that is what keeps the terminal's own
+	// drag-to-select working, and it is why clicking a row does nothing.
+	note := "note  mouse off: drag to select text"
+	box := stHelpBox.Render(stTitle.Render("kamps — keys") + "\n\n" + full + "\n" + stFaint.Render(note))
 	return strings.Split(box, "\n")
 }
 

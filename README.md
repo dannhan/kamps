@@ -11,23 +11,23 @@ It is written from scratch in Go: type-safe, compiled, single file, runs the
 same on Linux, macOS and Windows.
 
 ```
- kamps  Tasks 42   Materials 16   Sync                 backup 0d · sync 1/2 · cookie ok
+ kamps  Tasks 42   Materials 16   Sync                              backup 0d · sync 1/2 · cookie ok
 ╭────────────────────────────────────────────────────╮ ╭───────────────────────────────────────────╮
 │ today                                              │ │ backlog · smt11                           │
-│ ────────────────────────────────────────────────── │ │ ───────────────────────────────────────── │
+│────────────────────────────────────────────────────│ │───────────────────────────────────────────│
 │ ▾ overdue  19                                      │ │ tracked    6  ███░░░░░░░░░░░░░░░░░░░░░    │
-│ ▌   ppl      08-19 Progress Report 1               │ │ missed     3  █░░░░░░░░░░░░░░░░░░░░░░░    │
-│     strukdat 08-24 Submission Praktikum 1          │ │ undecided 28  ████████████████░░░░░░░░    │
+│     ppl      08-19 Progress Report 1               │ │ missed     3  █░░░░░░░░░░░░░░░░░░░░░░░    │
+│ ▌   strukdat 08-24 Submission Praktikum 1          │ │ undecided 28  ████████████████░░░░░░░░    │
 │     ppl      08-26 Progress Report 2               │ │ ignored    5  ██░░░░░░░░░░░░░░░░░░░░░░    │
 │     metnum   08-27 Tugas Kelompok I. Galat         │ │                                           │
 │     basdat   08-29 Latihan ERD                     │ │ 19 past-due undecided                     │
 │     strukdat 08-31 Submission Praktikum 2          │ │                                           │
 │     ppl      09-02 Progress Report 3               │ │ by course                                 │
-│     metnum   09-03 Latihan Deret Taylor            │ │ strukdat  8/11 ██████████████████░░░░░░░░ │
-│     basdat   09-04 Quiz Normalisasi                │ │ metnum    7/12 ███████████████░░░░░░░░░░░ │
-│     strukdat 09-07 Submission Praktikum 3          │ │ basdat    6/9  █████████████████░░░░░░░░░ │
-│     ppl      09-09 Progress Report 4               │ │ ppl       6/8  ███████████████████░░░░░░░ │
-│     metnum   09-10 Kuis Biseksi                    │ │ imk       1/2  █████████████░░░░░░░░░░░░░ │
+│     metnum   09-03 Latihan Deret Taylor            │ │ strukdat  8/11 ███████████████████░░░░░░░░│
+│     basdat   09-04 Quiz Normalisasi                │ │ metnum    7/12 ███████████████░░░░░░░░░░░░│
+│     strukdat 09-07 Submission Praktikum 3          │ │ basdat    6/9  ██████████████████░░░░░░░░░│
+│     ppl      09-09 Progress Report 4               │ │ ppl       6/8  ████████████████████░░░░░░░│
+│     metnum   09-10 Kuis Biseksi                    │ │ imk       1/2  █████████████░░░░░░░░░░░░░░│
 │     basdat   09-11 Tugas SQL Dasar                 │ │                                           │
 │     strukdat 09-14 Submission Praktikum 4          │ │                                           │
 │     metnum   09-17 Tugas Individu III              │ │                                           │
@@ -52,6 +52,11 @@ The cursor row is a background band, so you always know what `t`/`m`/`i` will
 hit. Colour is reserved for status — green tracked, red overdue, amber due soon;
 everything else is white text on grey, and the palette adapts to a light or dark
 terminal.
+
+It is keyboard-only on purpose: `kamps` never captures the mouse, which is what
+keeps your terminal's own drag-to-select working. Clicking a row does nothing,
+and the hint bar says `mouse off` so you find that out from the UI rather than by
+trying.
 
 ## What it is (and is not)
 

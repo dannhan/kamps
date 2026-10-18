@@ -79,15 +79,33 @@ keep it inside its width budget or extend `assignRow`/`hintsFit`/`barW`, which
 already degrade (drop the id column, shrink the course column, drop hint items)
 rather than overflow. Never "fix" an overflow by widening past the terminal.
 
+A pane's **interior is `w-2`**: everything between its two border glyphs.
+`panel` passes each row through untouched, so a row owns that space, margin
+included. That is what lets a highlighted row's background reach both borders;
+short text rows start with a space of their own. Do not reintroduce an automatic
+margin in `paneLine` — it shows up as a one-column gap through the selection
+band, which is the bug `TestCursorBandIsContinuous` exists for.
+
 Tasks layouts must all expose their rows through `App.focusedList()` so the
 cursor and `t`/`m`/`i`/`u` behave identically in every view. `v` only cycles the
 layouts in `viewCycle`; the board and wizard are deliberately outside it.
 
-The **cursor row is always a background band** and a space-selected row always
-carries the `▪` marker — a highlight the user can see is not optional. `assignRow`
-is the single place rows are built; it tints every cell with `tint(style, band)`
-so the band spans the full row, and it returns styled text of at most `contentW`
-columns (callers pad).
+The **cursor row is a background band** and a space-selected row always carries
+the `▪` marker — a highlight the user can see is not optional. `assignRow` is the
+single place rows are built; it tints *every* column with the band's background
+(`tint`, `gap`, `blanks`) so the bar is continuous, and it pads the row to the
+full interior `contentW`. Never join row cells with a plain `" "`: that punches
+unstyled holes through the band and the highlight comes out striped, with the
+marker at the far left and the background only starting at a later column.
+`TestCursorBandIsContinuous` walks every layout at four widths and fails if any
+column inside the band is unbackgrounded, or if the band stops short of a border.
+
+kamps never turns on mouse reporting (`tea.WithMouseCellMotion` and friends) —
+that is what keeps the terminal's own drag-to-select working, so clicking a row
+does nothing on purpose. The bottom bar says `mouse off` where it fits (it is
+last, so a narrow terminal drops it first) and the `?` overlay spells it out. If
+mouse support is ever added, clicking must select the row under the pointer in
+every layout, not just the list.
 
 The dashboard's today pane draws exactly the items `App.dashShown()` returns, and
 `dashAlloc` (over `dashContentHeight()`) is the only thing that decides how many

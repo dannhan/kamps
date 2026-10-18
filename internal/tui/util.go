@@ -168,10 +168,11 @@ func bar(label string, n, total, width int) string {
 	return barW(label, n, total, width, 9)
 }
 
-// barW is bar with an explicit label column width.
+// barW is bar with an explicit label column width. The leading column is the
+// pane's margin, so the bar lines up with the rest of the pane's content.
 func barW(label string, n, total, width, labelW int) string {
-	barWidth := clampInt(width-(labelW+5), 4, 24)
-	return stLabel.Render(pad(label, labelW, false)) + stValue.Render(fmt.Sprintf("%3d", n)) + "  " +
+	barWidth := clampInt(width-(labelW+5)-1, 4, 24)
+	return " " + stLabel.Render(pad(label, labelW, false)) + stValue.Render(fmt.Sprintf("%3d", n)) + "  " +
 		barCells(n, total, barWidth, barStyleFor(label))
 }
 
