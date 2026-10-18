@@ -6,69 +6,74 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Hand-drawn boxes. lipgloss.Border cannot embed a title in the border, and we
-// want titles like "╭─ list ────╮", so we build the lines ourselves. Every
-// helper returns a string of *exactly* w visible columns (see the alignment
-// tests) so nested boxes line up.
+// Panes, gh-dash style: a plain rounded border, with the pane's title as the
+// first line of content underlined by a rule. Titles embedded in borders
+// ("╭─ list ────╮") read as 1990s BBS and cost a row; the chrome stays out of
+// the way instead.
 //
-// The outer frame is drawn in Charm purple (stFrame); nested panels use the
-// muted grey stBorder, so the shell reads at a glance.
+// Every helper returns a string of exactly w visible columns, which is what the
+// alignment tests check.
 
-func frameTop(left, right string, w int) string {
-	f := w - lipgloss.Width(left) - lipgloss.Width(right) - 8
-	if f < 1 {
-		f = 1
+// rule is a horizontal line of exactly w columns.
+func rule(w int) string {
+	if w < 1 {
+		return ""
 	}
-	return stFrame.Render("╭─ ") + left + stFrame.Render(" "+strings.Repeat("─", f)+" ") + right + stFrame.Render(" ─╮")
+	return stRule.Render(strings.Repeat("─", w))
 }
 
-func frameLine(content string, w int) string {
-	gap := w - 4 - lipgloss.Width(content)
+func paneBorder(focused bool) lipgloss.Style {
+	if focused {
+		return stBorderHi
+	}
+	return stBorder
+}
+
+func paneTop(w int, focused bool) string {
+	return paneBorder(focused).Render("╭" + strings.Repeat("─", maxInt(0, w-2)) + "╮")
+}
+
+func paneBottom(w int, focused bool) string {
+	return paneBorder(focused).Render("╰" + strings.Repeat("─", maxInt(0, w-2)) + "╯")
+}
+
+func paneLine(content string, w int, focused bool) string {
+	inner := maxInt(0, w-4)
+	content = ansiTruncate(content, inner)
+	gap := inner - lipgloss.Width(content)
 	if gap < 0 {
 		gap = 0
 	}
-	return stFrame.Render("│") + " " + content + strings.Repeat(" ", gap) + " " + stFrame.Render("│")
+	return paneBorder(focused).Render("│") + " " + content +
+		strings.Repeat(" ", gap) + " " + paneBorder(focused).Render("│")
 }
 
-func frameBottom(w int) string {
-	return stFrame.Render("╰" + strings.Repeat("─", w-2) + "╯")
-}
-
-func panelTop(title string, w int) string {
-	f := w - lipgloss.Width(title) - 5
-	if f < 1 {
-		f = 1
+// panel draws a bordered pane of width w. An empty title skips the title row.
+// The height follows the content, so pair panels with sideBySide, which pads
+// the shorter one.
+func panel(title string, w int, rows []string, focused bool) []string {
+	inner := maxInt(1, w-4)
+	content := make([]string, 0, len(rows)+2)
+	if title != "" {
+		content = append(content, stPaneTitle.Render(truncate(title, inner)), rule(inner))
 	}
-	return stBorder.Render("╭─ ") + stBoxTtl.Render(title) + stBorder.Render(" "+strings.Repeat("─", f)+"╮")
-}
+	content = append(content, rows...)
 
-func panelLine(content string, w int) string {
-	gap := w - 4 - lipgloss.Width(content)
-	if gap < 0 {
-		gap = 0
+	out := make([]string, 0, len(content)+2)
+	out = append(out, paneTop(w, focused))
+	for _, c := range content {
+		out = append(out, paneLine(c, w, focused))
 	}
-	return stBorder.Render("│") + " " + content + strings.Repeat(" ", gap) + " " + stBorder.Render("│")
+	return append(out, paneBottom(w, focused))
 }
 
-func panelBottom(w int) string {
-	return stBorder.Render("╰" + strings.Repeat("─", w-2) + "╯")
-}
-
-// panel wraps rows in a titled box of width w.
-func panel(title string, w int, rows []string) []string {
-	out := []string{panelTop(title, w)}
-	for _, r := range rows {
-		out = append(out, panelLine(r, w))
-	}
-	return append(out, panelBottom(w))
-}
-
-// sideBySide joins two stacked panels, padding the shorter with blank lines.
-func sideBySide(left []string, lw int, right []string, rw int) []string {
+// sideBySide joins two panes, padding the shorter one with blank pane lines so
+// both borders line up.
+func sideBySide(left []string, lw int, lFocused bool, right []string, rw int, rFocused bool) []string {
 	n := maxInt(len(left), len(right))
 	out := make([]string, n)
 	for i := 0; i < n; i++ {
-		l, r := panelLine("", lw), panelLine("", rw)
+		l, r := paneLine("", lw, lFocused), paneLine("", rw, rFocused)
 		if i < len(left) {
 			l = left[i]
 		}
@@ -78,50 +83,6 @@ func sideBySide(left []string, lw int, right []string, rw int) []string {
 		out[i] = l + " " + r
 	}
 	return out
-}
-
-// chips renders the filter row: the active chip highlighted, the rest muted,
-// with a right-aligned value. Chips are dropped (never the active one) when the
-// row would not fit, and the right value is dropped first.
-func chips(active string, names []string, right string, w int) string {
-	seg := func(n string) string {
-		if n == active {
-			return stChipOn.Render(n)
-		}
-		return stChipOff.Render(n)
-	}
-	render := func(list []string) string {
-		parts := make([]string, len(list))
-		for i, n := range list {
-			parts[i] = seg(n)
-		}
-		return strings.Join(parts, "  ")
-	}
-
-	list := append([]string(nil), names...)
-	for {
-		left := render(list)
-		if lipgloss.Width(left) <= w {
-			if right != "" && lipgloss.Width(left)+1+lipgloss.Width(right) <= w {
-				return spread(left, right, w)
-			}
-			return left
-		}
-		if len(list) <= 1 {
-			return left
-		}
-		dropped := false
-		for i := len(list) - 1; i >= 0; i-- {
-			if list[i] != active {
-				list = append(list[:i], list[i+1:]...)
-				dropped = true
-				break
-			}
-		}
-		if !dropped {
-			return left
-		}
-	}
 }
 
 // hintsFit drops items from the end until they fit in w columns.
@@ -142,16 +103,16 @@ func hintsFit(items []string, w int) []string {
 	return out
 }
 
-// hints renders "key label · key label …".
+// hints renders "key label · key label …" for the help bar.
 func hints(items []string) string {
 	parts := make([]string, len(items))
 	for i, it := range items {
 		fields := strings.SplitN(it, " ", 2)
 		if len(fields) == 2 {
-			parts[i] = stKey.Render(fields[0]) + " " + stRowDim.Render(fields[1])
+			parts[i] = stHelpKey.Render(fields[0]) + " " + stHelpTxt.Render(fields[1])
 		} else {
-			parts[i] = stKey.Render(fields[0])
+			parts[i] = stHelpKey.Render(fields[0])
 		}
 	}
-	return strings.Join(parts, stRowDim.Render(" · "))
+	return strings.Join(parts, stHelpSep.Render(" · "))
 }

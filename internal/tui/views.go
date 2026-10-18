@@ -29,73 +29,119 @@ func (m *App) shortCode(courseID int) string {
 //
 // The cursor row is drawn as a solid bar — the strongest "you are here" we have
 // — and a space-selected row carries a filled ▪ marker in the gutter.
+// rowCols picks the column widths for one table row, dropping the id column and
+// then shrinking the course column as space runs out — never overflowing.
+func rowCols(w int, withID bool) (shortW, idW, nameW int) {
+	shortW = 7
+	if w >= 40 {
+		shortW = 8 // room for the full short label ("strukdat")
+	}
+	if withID && w >= 34 {
+		idW = 8
+	}
+	for {
+		prefix := 3 + 1 + shortW + 1 + 5 + 1 // gutter + course + due
+		if idW > 0 {
+			prefix += idW + 1
+		}
+		nameW = w - prefix
+		if nameW >= 6 {
+			return
+		}
+		switch {
+		case idW > 0:
+			idW = 0
+		case shortW > 3:
+			shortW--
+		default:
+			nameW = maxInt(1, nameW)
+			return
+		}
+	}
+}
+
+// tint adds the cursor band's background to a style, so a whole row reads as one
+// selected line rather than a coloured marker next to unhighlighted text.
+func tint(s lipgloss.Style, band bool) lipgloss.Style {
+	if band {
+		return s.Background(colSelBg)
+	}
+	return s
+}
+
+// assignRow renders one assignment line of exactly contentW columns:
+//
+//	▌▪t strukdat 08-21 K150001  Kuis Struktur Data awal
+//	│└┴─ triage flag
+//	│ └── space-selected
+//	└──── where the keyboard is (also gets the band, gh-dash style)
 func (m *App) assignRow(a model.Assignment, contentW int, cursor, selected, withID bool) string {
-	mark := " "
+	band := cursor || selected
+
+	gutter := " "
 	if cursor {
-		mark = stCursorGutter.Render("▌")
+		gutter = tint(stCursor, band).Render("▌")
 	}
 	pick := " "
 	if selected {
-		pick = stSelMark.Render("▪")
+		pick = tint(stSelMark, band).Render("▪")
 	}
 
-	shortW, idW := 7, 0
-	if contentW >= 40 {
-		shortW = 8 // room for the full short label ("strukdat")
-	}
-	if withID {
-		idW = 8
-	}
-	nameW := contentW - 13 - shortW - idW
-	if nameW < 6 && withID {
-		idW = 0
-		nameW = contentW - 11 - shortW
-	}
-	if nameW < 6 {
-		shortW = clampInt(contentW-17, 3, 7)
-		nameW = contentW - 11 - shortW
-	}
-	if nameW < 1 {
-		nameW = 1
-	}
+	shortW, idW, nameW := rowCols(contentW, withID)
 
 	nameStyle := stRow
-	switch {
-	case selected:
-		nameStyle = stSelName
-	case a.Triage != model.Undecided:
-		nameStyle = stRowDim
+	if a.Triage != model.Undecided && !selected {
+		nameStyle = stIgnored
 	}
 
 	parts := []string{
-		mark + pick + flagGlyph(a.Triage),
-		stCode.Render(pad(m.shortCode(a.CourseID), shortW, false)),
-		stRowDim.Render(listDate(a)),
+		gutter + pick + tint(triageStyle(a.Triage), band).Render(flagChar(a.Triage)),
+		tint(stCode, band).Render(pad(m.shortCode(a.CourseID), shortW, false)),
+		tint(stRowDim, band).Render(listDate(a)),
 	}
 	if idW > 0 {
-		parts = append(parts, stRowDim.Render(pad(a.ID, idW, false)))
+		parts = append(parts, tint(stRowDim, band).Render(pad(a.ID, idW, false)))
 	}
-	parts = append(parts, nameStyle.Render(truncate(a.Name, nameW)))
+	parts = append(parts, tint(nameStyle, band).Render(truncate(a.Name, nameW)))
 	row := strings.Join(parts, " ")
 
-	if cursor {
-		return stRowCursor.Render(pad(stripANSI(row), contentW, false))
+	if padW := contentW - lipgloss.Width(row); padW > 0 {
+		row += tint(stRow, band).Render(strings.Repeat(" ", padW))
 	}
 	return row
 }
 
+// assignHeader is the column header above the rows, so the pane reads as a
+// table. gh-dash keeps its column headings visible; it is what makes a dense
+// list scannable.
+func assignHeader(contentW int, withID bool) string {
+	shortW, idW, nameW := rowCols(contentW, withID)
+	parts := []string{
+		"   ",
+		pad("course", shortW, false),
+		pad("due", 5, false),
+	}
+	if idW > 0 {
+		parts = append(parts, pad("id", idW, false))
+	}
+	parts = append(parts, pad("title", nameW, false))
+	return stFaint.Render(strings.Join(parts, " "))
+}
+
 // ---- Tasks: list layout (two panes) ----
 
+// listLines is gh-dash's shape: every task on the left, the selected one's
+// detail on the right, both panes filling the screen.
 func (m *App) listLines(w, budget int) []string {
-	cw := w - 4
-	leftW := cw * 54 / 100
-	rightW := cw - leftW - 1
+	leftW := w * 42 / 100
+	rightW := w - leftW - 1
+	contentH := maxInt(3, budget-4)
 
-	listRows := maxInt(1, budget-7)
 	items := m.visible()
+	listRows := maxInt(1, contentH-1) // one row goes to the column header
 	start, end := windowRange(len(items), m.taskCursor, listRows)
 
-	rows := make([]string, 0, end-start+1)
+	rows := []string{assignHeader(leftW-4, true)}
 	if len(items) == 0 {
 		rows = append(rows, stEmpty.Render("nothing matches this filter"))
 	}
@@ -108,17 +154,11 @@ func (m *App) listLines(w, budget int) []string {
 		detail = m.detailRows(items[m.taskCursor], rightW-4)
 	}
 
-	left := panel("list", leftW, rows)
-	right := panel(m.detailTitle(items), rightW, detail)
-
-	body := []string{
-		chips(m.filter, filterNames, m.layout.String()+" · course: all ▾", cw),
-		"",
-	}
-	body = append(body, sideBySide(left, leftW, right, rightW)...)
-	body = append(body, "", m.statusLine(cw))
-	body = append(body, m.hintsLine(cw, "tasks"))
-	return body
+	title := fmt.Sprintf("▾ %s (%d)", m.filter, len(items))
+	return sideBySide(
+		panel(title, leftW, padRows(rows, contentH), true), leftW, true,
+		panel(m.detailTitle(items), rightW, padRows(detail, contentH), false), rightW, false,
+	)
 }
 
 func (m *App) detailTitle(items []model.Assignment) string {
@@ -230,26 +270,27 @@ func (m *App) courseStats() []courseStat {
 // dashboardLines is the overview screen: what is overdue, due today and coming
 // up on the left; how the whole backlog splits on the right; sync state below.
 // Every item in the today panel is live — ↑↓ walks it and t/m/i/u decide it.
+// dashboardLines is the overview: what is overdue, due today and coming up on
+// the left; how the whole backlog splits on the right. Every item in the today
+// pane is live — ↑↓ walks it and t/m/i/u decide it.
 func (m *App) dashboardLines(w, budget int) []string {
-	cw := w - 4
-	leftW := cw * 54 / 100
-	rightW := cw - leftW - 1
-
-	panelH := m.dashPanelHeight()
-	contentH := maxInt(1, panelH-2)
+	leftW := w * 54 / 100
+	rightW := w - leftW - 1
+	contentH := maxInt(3, budget-4)
 
 	overdue, dueToday, soon := m.todayBuckets()
 	alloc := m.dashAlloc(overdue, dueToday, soon)
 
-	// The today panel. The cursor index counts only *items*, in the same order
-	// dashShown() returns them, so the highlight always matches the keyboard.
+	// The cursor index counts only *items*, in the same order dashShown()
+	// returns them, so the highlight always matches the keyboard.
 	todayRows := []string{}
 	n := 0
 	section := func(label string, items []model.Assignment, cap int, style lipgloss.Style) {
 		if n > 0 {
 			todayRows = append(todayRows, "")
 		}
-		todayRows = append(todayRows, style.Bold(true).Render(fmt.Sprintf("%s  %d", label, len(items))))
+		todayRows = append(todayRows,
+			stFaint.Render("▾ ")+style.Render(label)+stFaint.Render(fmt.Sprintf("  %d", len(items))))
 		shown := shownCount(cap, len(items))
 		for i := 0; i < shown; i++ {
 			a := items[i]
@@ -257,63 +298,46 @@ func (m *App) dashboardLines(w, budget int) []string {
 			n++
 		}
 		if shown < len(items) {
-			todayRows = append(todayRows, stRowDim.Render(fmt.Sprintf("   … %d more", len(items)-shown)))
+			todayRows = append(todayRows, stFaint.Render(fmt.Sprintf("   … %d more", len(items)-shown)))
 		}
 	}
-	section("OVERDUE", overdue, alloc[0], stOverdue)
-	section("DUE TODAY", dueToday, alloc[1], stSoon)
-	section("NEXT 3 DAYS", soon, alloc[2], stRowDim)
-	if len(todayRows) > contentH {
-		todayRows = todayRows[:contentH]
-	}
+	section("overdue", overdue, alloc[0], stOverdue)
+	section("due today", dueToday, alloc[1], stSoon)
+	section("next 3 days", soon, alloc[2], stFaint)
 
 	und, tr, mi, ig := m.triageCounts()
 	total := maxInt(1, len(m.assignments))
-	triageRows := []string{
-		bar("track", tr, total, rightW-4),
+	summary := []string{
+		bar("tracked", tr, total, rightW-4),
 		bar("missed", mi, total, rightW-4),
-		bar("ignore", ig, total, rightW-4),
 		bar("undecided", und, total, rightW-4),
-	}
-	if contentH >= 6 {
-		triageRows = append(triageRows, "", stSoon.Render(fmt.Sprintf("%d past-due undecided", m.overdueCount())))
+		bar("ignored", ig, total, rightW-4),
 	}
 	if contentH >= 7 {
-		triageRows = append(triageRows, stRowDim.Render("→ ")+stKey.Render("[c]")+stRowDim.Render(" review & commit"))
+		summary = append(summary, "", stSoon.Render(fmt.Sprintf("%d past-due undecided", m.overdueCount())))
 	}
-	// Whatever room is left goes to a compact per-course breakdown, so the
-	// panel says where the backlog actually lives.
-	if contentH-len(triageRows) >= 3 {
-		triageRows = append(triageRows, "", stLabel.Render("by course"))
+	// Whatever room is left goes to a per-course breakdown, so the pane says
+	// where the backlog actually lives.
+	if contentH-len(summary) >= 3 {
+		summary = append(summary, "", stFaint.Render("by course"))
 		for _, s := range m.courseStats() {
-			if len(triageRows) >= contentH {
+			if len(summary) >= contentH {
 				break
 			}
-			barW := maxInt(3, (rightW-4)-15)
-			triageRows = append(triageRows, stCode.Render(pad(s.code, 8, false))+" "+
-				stValue.Render(fmt.Sprintf("%2d", s.undecided))+stRowDim.Render(fmt.Sprintf("/%-2d", s.total))+" "+
-				barCells(s.undecided, s.total, barW, stSoon))
+			bw := maxInt(3, (rightW-4)-15)
+			summary = append(summary, stCode.Render(pad(s.code, 8, false))+" "+
+				stValue.Render(fmt.Sprintf("%2d", s.undecided))+stFaint.Render(fmt.Sprintf("/%-2d", s.total))+" "+
+				barCells(s.undecided, s.total, bw, stSoon))
 		}
 	}
-	if len(triageRows) > contentH {
-		triageRows = triageRows[:contentH]
-	}
 
-	syncRows := []string{
-		stRowDim.Render("backup ") + stDone.Render("0d") + stRowDim.Render(" · sync ") + stSoon.Render("1/2 today") + stRowDim.Render(" · cookie ") + stDone.Render("ok"),
-		stRowDim.Render(m.lastSyncLine()),
-		stKey.Render("[s]") + stRowDim.Render(" sync now   ") + stKey.Render("[b]") + stRowDim.Render(" backup   ") + stKey.Render("[c]") + stRowDim.Render(" review & commit"),
-	}
-
-	body := []string{chips("today", []string{"today", "courses", "materials", "sync"}, m.termLabel()+" ▾", cw), ""}
-	body = append(body, sideBySide(panel("today", leftW, todayRows), leftW, panel("triage", rightW, triageRows), rightW)...)
-	body = append(body, "")
-	body = append(body, panel("sync", cw, syncRows)...)
-	body = append(body, "", m.statusLine(cw), m.hintsLine(cw, "tasks"))
-	return body
+	return sideBySide(
+		panel("today", leftW, padRows(todayRows, contentH), true), leftW, true,
+		panel("backlog · "+m.termLabel(), rightW, padRows(summary, contentH), false), rightW, false,
+	)
 }
 
-// lastSyncLine summarises the last sync for the dashboard's sync panel.
+// lastSyncLine summarises the last sync: when, what, and what came in.
 func (m *App) lastSyncLine() string {
 	name := "—"
 	if len(m.courses) > 0 {
@@ -326,7 +350,7 @@ func (m *App) lastSyncLine() string {
 		}
 	}
 	stamp := time.Now().Add(-20 * time.Hour).Format("2006-01-02 15:04")
-	return fmt.Sprintf("last sync %s · %s (+%d materials)", stamp, name, fresh)
+	return fmt.Sprintf("%s · %s (+%d materials)", stamp, name, fresh)
 }
 
 // termLabel is the term shown at the right of the dashboard's chip row.
@@ -342,64 +366,60 @@ func (m *App) termLabel() string {
 // ---- Tasks: board layout (2x2 buckets) ----
 
 func (m *App) boardLines(w, budget int) []string {
-	cw := w - 4
-	colW := (cw - 1) / 2
-	colW2 := cw - 1 - colW
+	colW := (w - 1) / 2
+	colW2 := w - 1 - colW
 
-	avail := maxInt(4, budget-4) // chips, blank, blank, hints
-	panelH := (avail - 1) / 2
-	listRows := maxInt(1, panelH-2)
+	rowH := maxInt(6, (budget-1)/2)
+	listRows := maxInt(1, rowH-4)
 
 	col := func(idx, width int) []string {
 		items := m.boardItems(idx)
 		cursor := m.boardCursor[idx]
 		start, end := windowRange(len(items), cursor, listRows)
-		out := make([]string, 0, end-start+1)
+		out := make([]string, 0, listRows)
 		if len(items) == 0 {
 			out = append(out, stEmpty.Render("—"))
 		}
 		for i := start; i < end; i++ {
 			out = append(out, m.assignRow(items[i], width-4, i == cursor && idx == m.boardCol, m.selected[items[i].ID], false))
 		}
-		return out
+		return padRows(out, listRows)
 	}
 	title := func(idx int) string {
-		return fmt.Sprintf("%s %d", boardOrder[idx].String(), len(m.boardItems(idx)))
+		return fmt.Sprintf("▾ %s (%d)", boardOrder[idx].String(), len(m.boardItems(idx)))
 	}
 
-	row1 := sideBySide(panel(title(0), colW, col(0, colW)), colW, panel(title(1), colW2, col(1, colW2)), colW2)
-	row2 := sideBySide(panel(title(2), colW, col(2, colW)), colW, panel(title(3), colW2, col(3, colW2)), colW2)
+	row1 := sideBySide(
+		panel(title(0), colW, col(0, colW), m.boardCol == 0), colW, m.boardCol == 0,
+		panel(title(1), colW2, col(1, colW2), m.boardCol == 1), colW2, m.boardCol == 1)
+	row2 := sideBySide(
+		panel(title(2), colW, col(2, colW), m.boardCol == 2), colW, m.boardCol == 2,
+		panel(title(3), colW2, col(3, colW2), m.boardCol == 3), colW2, m.boardCol == 3)
 
-	body := []string{chips(m.filter, filterNames, m.layout.String()+" · course: all ▾", cw), ""}
-	body = append(body, row1...)
+	body := append([]string{}, row1...)
 	body = append(body, "")
-	body = append(body, row2...)
-	body = append(body, m.hintsLine(cw, "tasks"))
-	return body
+	return append(body, row2...)
 }
 
 // ---- Tasks: wizard layout ----
 
 func (m *App) wizardLines(w, budget int) []string {
-	cw := w - 4
-	body := []string{"", m.stepRail(m.wizStep), ""}
+	inner := w - 4 // the pane's interior
+	rows := []string{"", m.stepRail(inner), ""}
 
 	switch m.wizStep {
 	case 0:
-		body = append(body, m.wizStepAttempt(cw)...)
-		body = append(body, "   "+stKey.Render("↑↓")+stRowDim.Render(" move · ")+stKey.Render("space")+stRowDim.Render(" toggle · ")+stKey.Render("a")+stRowDim.Render(" all · ")+stKey.Render("enter")+stRowDim.Render(" confirm"))
+		rows = append(rows, m.wizStepAttempt(inner)...)
 	case 1:
-		body = append(body, m.wizStepAction(cw)...)
-		body = append(body, "   "+stKey.Render("t")+stRowDim.Render(" track · ")+stKey.Render("m")+stRowDim.Render(" missed · ")+stKey.Render("i")+stRowDim.Render(" ignore · ")+stKey.Render("enter")+stRowDim.Render(" apply"))
+		rows = append(rows, m.wizStepAction(inner)...)
 	case 2:
-		body = append(body, m.wizStepReview(cw)...)
-		body = append(body, "   "+stKey.Render("enter")+stRowDim.Render(" apply · ")+stKey.Render("esc")+stRowDim.Render(" back"))
+		rows = append(rows, m.wizStepReview(inner)...)
 	default:
-		body = append(body, m.wizStepDone(cw)...)
+		rows = append(rows, m.wizStepDone(inner)...)
 	}
 
-	body = append(body, "", m.statusLine(cw), m.hintsLine(cw, "wizard"))
-	return body
+	rows = append(rows, "", m.hintsLine(inner, "wizard"))
+	return panel("review & commit", w, rows, true)
 }
 
 func (m *App) stepRail(step int) string {
@@ -424,11 +444,7 @@ func (m *App) wizStepAttempt(w int) []string {
 	start, end := windowRange(len(items), m.taskCursor, 6)
 	for i := start; i < end; i++ {
 		a := items[i]
-		row := m.assignRow(a, w-4, i == m.taskCursor, m.selected[a.ID], true)
-		if i != m.taskCursor {
-			row = " " + row
-		}
-		out = append(out, row)
+		out = append(out, m.assignRow(a, w-4, i == m.taskCursor, m.selected[a.ID], true))
 	}
 	return out
 }
@@ -489,23 +505,33 @@ func (m *App) wizStepDone(w int) []string {
 // ---- Materials ----
 
 func (m *App) materialsLines(w, budget int) []string {
-	cw := w - 4
-	rowsBudget := maxInt(1, budget-6)
+	leftW := w * 58 / 100
+	rightW := w - leftW - 1
+	contentH := maxInt(3, budget-4)
 
-	// fixed cells: sel(3)+week(8)+size(9)+state(8) + 4 separators = 32
-	flexW := maxInt(10, cw-2-32)
-	head := t("", 3) + " " + t("WEEK", 8) + " " + t("MATERIAL", flexW) + " " + t("SIZE", 9) + " " + t("STATE", 8)
+	// gutter(1)+mark(1)+space + week + space + material + space + state
+	weekW, stateW := 8, 7
+	inner := leftW - 4
+	flexW := maxInt(8, inner-21)
 
-	start, end := windowRange(len(m.materials), m.matCursor, rowsBudget)
-	lines := []string{"  " + head}
+	rows := []string{stFaint.Render(strings.Join([]string{
+		"   ", pad("week", weekW, false), pad("material", flexW, false), pad("state", stateW, false),
+	}, " "))}
+
+	start, end := windowRange(len(m.materials), m.matCursor, contentH-1)
 	if len(m.materials) == 0 {
-		lines = append(lines, stEmpty.Render("  nothing here"))
+		rows = append(rows, stEmpty.Render("nothing here"))
 	}
 	for i := start; i < end; i++ {
 		mt := m.materials[i]
-		sel := "[ ]"
+		band := i == m.matCursor
+
+		gutter, mark := " ", " "
+		if band {
+			gutter = tint(stCursor, true).Render("▌")
+		}
 		if m.selectedM[mt.ID] {
-			sel = "[×]"
+			mark = tint(stSelMark, band).Render("▪")
 		}
 		week := mt.Section
 		if week == "" {
@@ -513,35 +539,70 @@ func (m *App) materialsLines(w, budget int) []string {
 		}
 		state, stateStyle := materialState(mt)
 
-		plain := pad(sel, 3, false) + " " + pad(week, 8, false) + " " +
-			pad(truncate(mt.Name, flexW), flexW, false) + " " +
-			pad(humanSize(mt.Size), 9, true) + " " + pad(state, 8, false)
-		styled := stRowDim.Render(pad(sel, 3, false)) + " " +
-			stRowDim.Render(pad(week, 8, false)) + " " +
-			stRow.Render(pad(truncate(mt.Name, flexW), flexW, false)) + " " +
-			stRowDim.Render(pad(humanSize(mt.Size), 9, true)) + " " +
-			stateStyle.Render(pad(state, 8, false))
-
-		if i == m.matCursor {
-			lines = append(lines, stCursorGutter.Render("▌")+" "+stRowCursor.Render(plain))
-			continue
+		row := gutter + mark + " " +
+			tint(stRowDim, band).Render(pad(week, weekW, false)) + " " +
+			tint(stRow, band).Render(pad(truncate(mt.Name, flexW), flexW, false)) + " " +
+			tint(stateStyle, band).Render(pad(state, stateW, false))
+		if padW := inner - lipgloss.Width(row); padW > 0 {
+			row += tint(stRow, band).Render(strings.Repeat(" ", padW))
 		}
-		lines = append(lines, "  "+styled)
+		rows = append(rows, row)
 	}
-	lines = append(lines, "", m.materialStatus(cw), m.hintsLine(cw, "materials"))
-	return lines
-}
 
-func (m *App) materialStatus(w int) string {
+	var detail []string
+	if len(m.materials) > 0 && m.matCursor < len(m.materials) {
+		detail = m.materialDetail(m.materials[m.matCursor], rightW-4)
+	}
+
 	local := 0
 	for _, mt := range m.materials {
 		if mt.Downloaded {
 			local++
 		}
 	}
-	left := stRowDim.Render(fmt.Sprintf("%d local · %d missing", local, len(m.materials)-local))
-	right := stKey.Render("[d]") + " " + stRowDim.Render("download")
-	return spread(left, right, w)
+	title := fmt.Sprintf("▾ materials (%d) · %d local", len(m.materials), local)
+
+	return sideBySide(
+		panel(title, leftW, padRows(rows, contentH), true), leftW, true,
+		panel("detail", rightW, padRows(detail, contentH), false), rightW, false,
+	)
+}
+
+func (m *App) materialDetail(mt model.Material, width int) []string {
+	state, stateStyle := materialState(mt)
+	section := mt.Section
+	if section == "" {
+		section = "—"
+	}
+	size := humanSize(mt.Size)
+	if mt.Size == 0 {
+		size = "unknown"
+	}
+	origin := "Kulon2 course page"
+	if mt.Kind == "url" {
+		origin = "WhatsApp hand-out"
+	}
+
+	rows := []string{
+		stRow.Bold(true).Render(truncate(mt.Name, width)),
+		"",
+		kv("course", m.shortCode(mt.CourseID), stCode),
+		kv("week", section, stRowDim),
+		kv("kind", mt.Kind, stRowDim),
+		kv("size", size, stRowDim),
+		kv("state", state, stateStyle),
+		kv("from", origin, stRowDim),
+	}
+	if mt.URL != "" {
+		rows = append(rows, "", stFaint.Render("source"))
+		for _, ln := range wrapCell(mt.URL, width) {
+			rows = append(rows, stCode.Render(ln))
+		}
+	}
+	if !mt.Downloaded {
+		rows = append(rows, "", stFaint.Render("press ")+stKey.Render("d")+stFaint.Render(" to fetch into the library"))
+	}
+	return rows
 }
 
 func materialState(mt model.Material) (string, lipgloss.Style) {
@@ -557,26 +618,40 @@ func materialState(mt model.Material) (string, lipgloss.Style) {
 // ---- Sync ----
 
 func (m *App) syncLines(w, budget int) []string {
-	cw := w - 4
+	leftW := w * 42 / 100
+	rightW := w - leftW - 1
+	contentH := maxInt(3, budget-4)
+
 	und, tr, mi, ig := m.triageCounts()
-	rows := []string{
+	status := []string{
 		kv("state", "idle", stRowDim),
 		kv("today", "1/2 runs", stSoon),
 		kv("cookie", "ok (expires in ~6h)", stDone),
-		kv("backup", "0d old · ~/.local/share/kamps/backups", stRowDim),
+		kv("backup", "0d old", stRowDim),
 		"",
-		stLabel.Render("local library"),
+		stFaint.Render("source"),
+		stRowDim.Render("  " + m.src.Label()),
+		"",
+		stFaint.Render("last sync"),
+		stRowDim.Render("  " + truncate(m.lastSyncLine(), rightW-6)),
+	}
+
+	library := []string{
+		stFaint.Render("local library"),
 		stRowDim.Render("  ~/Documents/kamps/<course>/<week>/"),
 		"",
-		stLabel.Render("triaged"),
+		stFaint.Render("triaged"),
 		stRowDim.Render(fmt.Sprintf("  tracked %d · missed %d · ignored %d · undecided %d", tr, mi, ig, und)),
 		"",
-		stKey.Render("[s]") + stRowDim.Render(" run a sync   ") + stKey.Render("[b]") + stRowDim.Render(" back up state"),
+		stFaint.Render("keys"),
+		stRowDim.Render("  ") + stKey.Render("s") + stRowDim.Render(" run a sync"),
+		stRowDim.Render("  ") + stKey.Render("b") + stRowDim.Render(" back up state"),
 	}
-	body := []string{chips("sync", []string{"status", "runs", "library"}, m.src.Label(), cw), ""}
-	body = append(body, panel("sync", cw, rows)...)
-	body = append(body, m.hintsLine(cw, "sync"))
-	return body
+
+	return sideBySide(
+		panel("status", leftW, padRows(status, contentH), true), leftW, true,
+		panel("library", rightW, padRows(library, contentH), false), rightW, false,
+	)
 }
 
 // ---- small helpers ----
@@ -585,19 +660,30 @@ func (m *App) hintsLine(w int, where string) string {
 	var items []string
 	switch where {
 	case "materials":
-		items = []string{"↑↓ move", "space select", "d download", "/ filter", "tab", "? help", "q quit"}
+		items = []string{"↑↓ move", "space select", "d download", "1-3 tabs", "? help", "q quit"}
 	case "sync":
-		items = []string{"s sync", "? help", "q quit"}
+		items = []string{"s sync", "b backup", "1-3 tabs", "? help", "q quit"}
 	case "wizard":
-		items = []string{"↑↓ move", "space toggle", "enter confirm", "esc back", "? help"}
+		items = []string{"↑↓ move", "space toggle", "enter next", "esc back", "? help"}
 	default:
-		items = []string{"↑↓ move", "space select", "t/m/i/u triage", "/ filter", "v view", "c commit", "? help"}
+		items = []string{"↑↓ move", "t track", "m missed", "i ignore", "u undecided",
+			"space select", "v view", "/ filter", "c commit", "? help"}
 	}
 	return hints(hintsFit(items, w))
 }
 
-func t(s string, w int) string {
-	return stHeaderDim.Bold(true).Render(pad(s, w, false))
+// padRows pads a pane's content out to n rows, so panes fill the screen even
+// when there is little to show.
+func padRows(rows []string, n int) []string {
+	out := make([]string, 0, maxInt(n, len(rows)))
+	out = append(out, rows...)
+	for len(out) < n {
+		out = append(out, "")
+	}
+	if len(out) > n {
+		out = out[:n]
+	}
+	return out
 }
 
 func listDate(a model.Assignment) string {

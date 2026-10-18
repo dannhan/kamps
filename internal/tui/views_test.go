@@ -34,7 +34,7 @@ func runeKey(r rune) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: [
 // rendered line must be exactly boxWidth wide, at every size and on every
 // screen. A stray character shows up as a broken border otherwise.
 func TestViewAlignment(t *testing.T) {
-	for _, size := range [][2]int{{100, 30}, {80, 24}, {72, 18}} {
+	for _, size := range [][2]int{{140, 40}, {100, 30}, {80, 24}, {72, 18}, {40, 12}} {
 		m := newTestApp(t, size[0], size[1])
 		want := m.boxWidth()
 		wantH := m.boxHeight()

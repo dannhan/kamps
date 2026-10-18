@@ -11,29 +11,47 @@ It is written from scratch in Go: type-safe, compiled, single file, runs the
 same on Linux, macOS and Windows.
 
 ```
-╭─ kamps  Tasks 42   Materials 16   Sync  ────────────── backup 0d · sync 1/2 · cookie ok ─╮
-│  today   courses  materials  sync                                                   smt11 ▾ │
-│ ╭─ today ─────────────────────────────────────╮ ╭─ triage ───────────────────────────────╮ │
-│ │ OVERDUE  19                                 │ │ track      6  ███░░░░░░░░░░░░░░░░░░░░░ │ │
-│ │     ppl      08-19 Progress Report 1        │ │ missed     3  █░░░░░░░░░░░░░░░░░░░░░░░ │ │
-│ │ ▌   strukdat 08-24 Submission Praktikum 1   │ │ ignore     5  ██░░░░░░░░░░░░░░░░░░░░░░ │ │
-│ │     metnum   08-27 Tugas Kelompok I. Galat  │ │ undecided 28  ████████████████░░░░░░░░ │ │
-│ │    … 11 more                                │ │                                        │ │
-│ │                                             │ │ 19 past-due undecided                  │ │
-│ │ NEXT 3 DAYS  1                              │ │ → [c] review & commit                  │ │
-│ │     ppl      10-19 Progress report 9        │ │ by course                              │ │
-│ ╰─────────────────────────────────────────────╯ │ strukdat  8/11 █████████████████░░░░░░ │ │
-│                                                 │ metnum    7/12 ██████████████░░░░░░░░░ │ │
-│                                                 ╰────────────────────────────────────────╯ │
-│  queue: nothing to commit                                        [c] review & commit      │
-│  ↑↓ move · space select · t/m/i/u triage · / filter · v view · c commit · ? help           │
-╰────────────────────────────────────────────────────────────────────────────────────────────╯
+ kamps  Tasks 42   Materials 16   Sync                 backup 0d · sync 1/2 · cookie ok
+╭────────────────────────────────────────────────────╮ ╭───────────────────────────────────────────╮
+│ today                                              │ │ backlog · smt11                           │
+│ ────────────────────────────────────────────────── │ │ ───────────────────────────────────────── │
+│ ▾ overdue  19                                      │ │ tracked    6  ███░░░░░░░░░░░░░░░░░░░░░    │
+│ ▌   ppl      08-19 Progress Report 1               │ │ missed     3  █░░░░░░░░░░░░░░░░░░░░░░░    │
+│     strukdat 08-24 Submission Praktikum 1          │ │ undecided 28  ████████████████░░░░░░░░    │
+│     ppl      08-26 Progress Report 2               │ │ ignored    5  ██░░░░░░░░░░░░░░░░░░░░░░    │
+│     metnum   08-27 Tugas Kelompok I. Galat         │ │                                           │
+│     basdat   08-29 Latihan ERD                     │ │ 19 past-due undecided                     │
+│     strukdat 08-31 Submission Praktikum 2          │ │                                           │
+│     ppl      09-02 Progress Report 3               │ │ by course                                 │
+│     metnum   09-03 Latihan Deret Taylor            │ │ strukdat  8/11 ██████████████████░░░░░░░░ │
+│     basdat   09-04 Quiz Normalisasi                │ │ metnum    7/12 ███████████████░░░░░░░░░░░ │
+│     strukdat 09-07 Submission Praktikum 3          │ │ basdat    6/9  █████████████████░░░░░░░░░ │
+│     ppl      09-09 Progress Report 4               │ │ ppl       6/8  ███████████████████░░░░░░░ │
+│     metnum   09-10 Kuis Biseksi                    │ │ imk       1/2  █████████████░░░░░░░░░░░░░ │
+│     basdat   09-11 Tugas SQL Dasar                 │ │                                           │
+│     strukdat 09-14 Submission Praktikum 4          │ │                                           │
+│     metnum   09-17 Tugas Individu III              │ │                                           │
+│     basdat   09-18 Latihan JOIN                    │ │                                           │
+│     strukdat 09-21 Submission Praktikum 5          │ │                                           │
+│    … 2 more                                        │ │                                           │
+│                                                    │ │                                           │
+│ ▾ due today  0                                     │ │                                           │
+│                                                    │ │                                           │
+│ ▾ next 3 days  1                                   │ │                                           │
+│     ppl      10-19 Progress report 9               │ │                                           │
+╰────────────────────────────────────────────────────╯ ╰───────────────────────────────────────────╯
+ ↑↓ move · t track · m missed · i ignore · u undecided · space select · v view · / filter · c commit
 ```
 
 It runs **full-screen** and restores your shell exactly as it was when you quit.
-The cursor row is a solid bar, so you always know what `t`/`m`/`i` will hit. The
-colours are Charm's defaults: a purple frame, pink accents, and 256-colour greys
-that adapt to a light or dark terminal.
+
+The look is modelled on [gh-dash](https://gh-dash.dev): no outer frame, a plain
+top bar, quiet borders that only brighten on the pane you are actually in, and
+one bottom bar carrying the keys on the left and the commit queue on the right.
+The cursor row is a background band, so you always know what `t`/`m`/`i` will
+hit. Colour is reserved for status — green tracked, red overdue, amber due soon;
+everything else is white text on grey, and the palette adapts to a light or dark
+terminal.
 
 ## What it is (and is not)
 
@@ -85,12 +103,12 @@ kamps --no-anim        # plain motion-free session
 Three tabs, switched with `1`–`3` or `tab`:
 
 - **Tasks** — your backlog, with two everyday views cycled by `v`:
-  - **dashboard** — overdue, due today and coming up, the triage split, where the
-    backlog lives per course, and sync state (the default)
-  - **list** — a two-pane list plus a detail panel showing what would be written
-    to `tasks.md`
+  - **dashboard** — overdue, due today and coming up, the triage split, and where
+    the backlog lives per course (the default)
+  - **list** — every task in a table with column headers, plus a detail pane
+    showing what would be written to `tasks.md`
 - **Materials** — course files, slides and lab Drive links; `d` downloads.
-- **Sync** — sync state, backup age and your local library path.
+- **Sync** — sync state, backup age, source, and your local library path.
 
 The guided **review & commit** wizard opens with `c`, and a parked **board** view
 still exists in the code (§ *Status*).
@@ -151,9 +169,9 @@ reports what it did, but touches no files. The real writer is a later step.
 cmd/kamps/        entry point (flags, plain-text fallback, launch TUI)
 internal/model/   Course, Assignment, Material — dumb data
 internal/source/  the Source interface + the demo source
-internal/tui/     the Bubble Tea app: app.go (state), views.go (screens),
-                  frame.go (boxes), util.go (helpers), theme.go (colours),
-                  keys.go (bindings), plain.go (no-TTY output)
+internal/tui/     the Bubble Tea app: app.go (state + the two bars),
+                  views.go (screens), frame.go (panes), util.go (helpers),
+                  theme.go (colours), keys.go (bindings), plain.go (no-TTY output)
 internal/config/  paths and settings
 docs/kulon2.md    verified notes on the Moodle/Kulon2 instance
 ```

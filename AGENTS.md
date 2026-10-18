@@ -46,9 +46,9 @@ Materials(ctx)   ([]model.Material, error)
   wrong; fix the abstraction instead.
 
 Other packages: `internal/model` (plain structs), `internal/tui` (`app.go` =
-Elm-style model/update + key handling, `views.go` = the screens/layouts,
-`frame.go` = hand-drawn boxes/chips/hints, `util.go` = pure helpers, `theme.go`
-= colours/styles, `keys.go` = keybindings, `plain.go` = no-TTY output),
+Elm-style model/update + key handling + the top and bottom bars, `views.go` = the
+screens/layouts, `frame.go` = panes/rules/hints, `util.go` = pure helpers,
+`theme.go` = colours/styles, `keys.go` = keybindings, `plain.go` = no-TTY output),
 `internal/config` (paths/settings).
 
 ## The task model
@@ -73,41 +73,48 @@ The UI runs **full-screen** (`tea.WithAltScreen()`), sized to the terminal:
 tried and parked; if you bring it back, it needs its own sizing rules.
 
 Every line of `App.View()` must be exactly `boxWidth()` columns. Overflows are
-caught by `TestViewAlignment` at 100/80/72 columns across every tab and Tasks
-layout (dashboard · list · board · wizard) — if you add a row or a column, keep
-it inside its width budget or extend `assignRow`/`chips`/`hintsFit`/`barW`, which
-already degrade (drop the id column, drop chips, drop hint items) rather than
-overflow. Never "fix" an overflow by widening the box past the terminal.
+caught by `TestViewAlignment` at 140/100/80/72/40 columns across every tab and
+Tasks layout (dashboard · list · board · wizard) — if you add a row or a column,
+keep it inside its width budget or extend `assignRow`/`hintsFit`/`barW`, which
+already degrade (drop the id column, shrink the course column, drop hint items)
+rather than overflow. Never "fix" an overflow by widening past the terminal.
 
 Tasks layouts must all expose their rows through `App.focusedList()` so the
 cursor and `t`/`m`/`i`/`u` behave identically in every view. `v` only cycles the
 layouts in `viewCycle`; the board and wizard are deliberately outside it.
 
-The **cursor row is always drawn as a solid bar** (`stRowCursor`) and a
-space-selected row always carries the `▪` marker — a highlight the user can see
-is not optional. `assignRow` is the single place rows are built, and it returns
-styled text of at most `contentW` columns; callers pad.
+The **cursor row is always a background band** and a space-selected row always
+carries the `▪` marker — a highlight the user can see is not optional. `assignRow`
+is the single place rows are built; it tints every cell with `tint(style, band)`
+so the band spans the full row, and it returns styled text of at most `contentW`
+columns (callers pad).
 
-The dashboard's today panel draws exactly the items `App.dashShown()` returns,
-and `dashAlloc` is the only thing that decides how many fit. If you change one
-without the other, the highlight lands on the wrong row.
+The dashboard's today pane draws exactly the items `App.dashShown()` returns, and
+`dashAlloc` (over `dashContentHeight()`) is the only thing that decides how many
+fit. If you change one without the other, the highlight lands on the wrong row.
 
 ## Conventions
 
 - **Elm architecture.** `Init` starts async work; `Update` handles messages;
   `View` is pure and returns a string. Never mutate state inside `View`.
 - **Style in one place.** Colours and text styles live in `internal/tui/theme.go`.
-  The palette is Charm's defaults: adaptive 256-colour greys for structure plus
-  purple/pink accents. Keep it adaptive (works on light and dark terminals),
-  keep contrast high, and do not scatter `lipgloss.NewStyle()` calls through the
-  views.
+  The look is gh-dash's: quiet slate borders (the focused pane gets the brighter
+  `colBorderHi`), near-white text, two greys for de-emphasis, colour only for
+  status. No frame around the terminal — `View()` is a top bar, the body, and one
+  bottom bar. Keep the palette adaptive (works on light and dark terminals), keep
+  contrast high, and do not scatter `lipgloss.NewStyle()` calls through the views.
+  The greys are deliberately neutral: a tinted near-white degrades to magenta on
+  a 16-colour terminal.
 - **Keys in one place.** Add bindings to `KeyMap` in `keys.go`; they drive the
-  `?` overlay. The one-line footer hints are hand-built in `hintsLine`
-  (`views.go`) because `bubbles/help` truncates; keep them short — `hintsFit`
-  drops trailing items rather than overflow.
+  `?` overlay. The bottom bar hints are hand-built in `hintsLine` (`views.go`)
+  because `bubbles/help` truncates; keep them short — `hintsFit` drops trailing
+  items rather than overflow. The bottom bar's right slot is the commit queue, or
+  the last thing the app did (`footer()`).
 - **One screen, one function.** Each tab (and each Tasks layout) renders in its
   own `*Lines(w, budget int) []string` in `views.go`. Compose them from
-  `frame.go` (`panel`, `sideBySide`, `chips`, `spread`); do not hand-roll boxes.
+  `frame.go` (`panel`, `sideBySide`, `padRows`, `rule`, `hints`); do not hand-roll
+  boxes, and do not put titles in the border — the pane title is the first line of
+  content, underlined by a rule.
 - **Data is dumb; behaviour is elsewhere.** `internal/model` types are plain
   structs with no I/O.
 - **Politeness and safety for any networking** (when it lands): ≥1 s between

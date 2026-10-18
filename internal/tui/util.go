@@ -33,6 +33,25 @@ func padStyled(s string, w int) string {
 	return s + strings.Repeat(" ", n)
 }
 
+// ansiTruncate clamps styled text to w visible columns without cutting an escape
+// sequence in half, which is what plain rune-slicing would do.
+func ansiTruncate(s string, w int) string {
+	if lipgloss.Width(s) <= w {
+		return s
+	}
+	return lipgloss.NewStyle().MaxWidth(w).Render(s)
+}
+
+// fitLine clamps styled text to exactly w visible columns: it truncates overlong
+// lines (ANSI-aware) and pads short ones. Every line the app emits goes through
+// this, so nothing can ever spill past the terminal.
+func fitLine(s string, w int) string {
+	if lipgloss.Width(s) > w {
+		s = lipgloss.NewStyle().MaxWidth(w).Render(s)
+	}
+	return padStyled(s, w)
+}
+
 func truncate(s string, w int) string {
 	if lipgloss.Width(s) <= w {
 		return s
@@ -45,14 +64,6 @@ func truncate(s string, w int) string {
 		return string(r[:w])
 	}
 	return string(r[:w-1]) + "…"
-}
-
-func spread(left, right string, w int) string {
-	g := w - lipgloss.Width(left) - lipgloss.Width(right)
-	if g < 1 {
-		g = 1
-	}
-	return left + strings.Repeat(" ", g) + right
 }
 
 func windowRange(total, cursor, height int) (int, int) {
@@ -123,14 +134,14 @@ func sortSlice(s []model.Assignment) {
 
 // ---- styled atoms ----
 
-func flagGlyph(t model.Triage) string {
+func flagChar(t model.Triage) string {
 	switch t {
 	case model.Tracked:
-		return stFlagT.Render("t")
+		return "t"
 	case model.Missed:
-		return stFlagM.Render("m")
+		return "m"
 	case model.Ignored:
-		return stFlagI.Render("i")
+		return "i"
 	}
 	return " "
 }

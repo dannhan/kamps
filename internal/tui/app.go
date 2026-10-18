@@ -451,11 +451,11 @@ func (m *App) boardItems(col int) []model.Assignment {
 
 // ---- dashboard (today) data ----
 
-// dashPanelHeight is the height of the dashboard's top row (the today and
-// triage panels). It is derived from the terminal so the panel sizes and the
-// keyboard cursor can never disagree.
-func (m *App) dashPanelHeight() int {
-	return clampInt(m.boxHeight()-13, 5, 40)
+// dashContentHeight is how many rows the dashboard's today pane has to show
+// items in. dashAlloc and the renderer both read it, so what is drawn and what
+// the keyboard walks can never disagree.
+func (m *App) dashContentHeight() int {
+	return clampInt(m.boxHeight()-6, 5, 40) // tab bar + pane chrome
 }
 
 // dashAlloc decides how many items each today section shows. Every non-empty
@@ -464,7 +464,7 @@ func (m *App) dashPanelHeight() int {
 func (m *App) dashAlloc(overdue, dueToday, soon []model.Assignment) [3]int {
 	items := [3][]model.Assignment{overdue, dueToday, soon}
 
-	content := maxInt(3, m.dashPanelHeight()-2)
+	content := m.dashContentHeight()
 	left := maxInt(3, content-5) // three section headers + two spacer lines
 
 	var alloc [3]int
@@ -834,24 +834,20 @@ func (m *App) View() string {
 	}
 
 	lines := make([]string, 0, h)
-	right := m.headerRight()
-	if lipgloss.Width(right)+lipgloss.Width("kamps")+10 > w {
-		right = ""
-	}
-	left := m.headerLeft(w - lipgloss.Width(right) - 10)
-	lines = append(lines, frameTop(left, right, w))
+	lines = append(lines, m.tabBar(w))
 	for _, b := range body {
-		lines = append(lines, frameLine(b, w))
+		lines = append(lines, fitLine(b, w))
 	}
 	for len(lines) < h-1 {
-		lines = append(lines, frameLine("", w))
+		lines = append(lines, strings.Repeat(" ", w))
 	}
-	lines = append(lines, frameBottom(w))
+	lines = append(lines, m.helpBar(w))
 	return strings.Join(lines, "\n")
 }
 
-// headerLeft renders "kamps" plus as many tabs as fit in maxW columns.
-func (m *App) headerLeft(maxW int) string {
+// tabBar is the top line: the app name, the tabs, and a right-aligned status.
+// No box — gh-dash lets the top and bottom bars sit flush against the screen.
+func (m *App) tabBar(w int) string {
 	type item struct {
 		label  string
 		active bool
@@ -861,31 +857,81 @@ func (m *App) headerLeft(maxW int) string {
 		{fmt.Sprintf("Materials %d", len(m.materials)), m.tab == TabMaterials},
 		{"Sync", m.tab == TabSync},
 	}
-	head := stHeader.Render("kamps")
-	parts := []string{head}
-	used := lipgloss.Width(head)
+
+	left := stTitle.Render("kamps")
 	for _, it := range items {
 		seg := stTabOff.Render(it.label)
 		if it.active {
 			seg = stTabOn.Render(it.label)
 		}
-		if used+1+lipgloss.Width(seg) > maxW {
-			break
-		}
-		used += 1 + lipgloss.Width(seg)
-		parts = append(parts, seg)
+		left += " " + seg
 	}
-	return strings.Join(parts, " ")
+	return " " + barLine(left, m.statusLabel(), w-1)
 }
 
-func (m *App) headerRight() string {
+// helpBar is the bottom line: the keys that work right now on the left, and the
+// commit queue — or whatever the app just did — on the right.
+func (m *App) helpBar(w int) string {
+	inner := w - 1
+	right := m.queueLabel()
+	if f := m.footer(); f != "" {
+		right = f
+	}
+	return " " + barLine(m.hintsLine(inner, m.helpWhere()), right, inner)
+}
+
+// barLine lays a left and a right segment on one line of exactly w columns,
+// dropping the right segment when the two would collide.
+func barLine(left, right string, w int) string {
+	if right == "" || lipgloss.Width(left)+3+lipgloss.Width(right) > w {
+		return fitLine(left, w)
+	}
+	gap := maxInt(1, w-lipgloss.Width(left)-lipgloss.Width(right))
+	return fitLine(left+strings.Repeat(" ", gap)+right, w)
+}
+
+// statusLabel is the right-hand side of the top bar: sync and cookie health.
+func (m *App) statusLabel() string {
 	if m.syncing {
 		if m.noAnim {
 			return stSoon.Render("syncing…")
 		}
-		return m.spinner.View() + stSoon.Render(" syncing")
+		return m.spinner.View() + stSoon.Render(" syncing ")
 	}
-	return stLabel.Render("backup 0d · sync 1/2 · cookie ok")
+	return stFaint.Render("backup 0d · sync 1/2 · cookie ok")
+}
+
+// queueLabel summarises what `c` would commit.
+func (m *App) queueLabel() string {
+	t, mi, ig := m.pendingCounts()
+	if t == 0 && mi == 0 && ig == 0 {
+		return stFaint.Render("queue empty ")
+	}
+	parts := []string{}
+	if t > 0 {
+		parts = append(parts, stFlagT.Render(fmt.Sprintf("%d track", t)))
+	}
+	if mi > 0 {
+		parts = append(parts, stFlagM.Render(fmt.Sprintf("%d missed", mi)))
+	}
+	if ig > 0 {
+		parts = append(parts, stFlagI.Render(fmt.Sprintf("%d ignore", ig)))
+	}
+	return strings.Join(parts, stFaint.Render(" · ")) + stFaint.Render(" to commit ")
+}
+
+// helpWhere names the key set for the help bar.
+func (m *App) helpWhere() string {
+	switch {
+	case m.tab == TabMaterials:
+		return "materials"
+	case m.tab == TabSync:
+		return "sync"
+	case m.layout == LayWizard:
+		return "wizard"
+	default:
+		return "tasks"
+	}
 }
 
 func (m *App) bodyLines(w, budget int) []string {
@@ -917,23 +963,12 @@ func (m *App) helpLines(w int) []string {
 
 // ---- shared footer pieces ----
 
-func (m *App) statusLine(w int) string {
-	t, mi, ig := m.pendingCounts()
-	left := stRowDim.Render("queue: ")
-	if t == 0 && mi == 0 && ig == 0 {
-		left += stRowDim.Render("nothing to commit")
-	} else {
-		left += stFlagT.Render(fmt.Sprintf("%d track", t)) + stRowDim.Render(" · ") +
-			stFlagM.Render(fmt.Sprintf("%d missed", mi)) + stRowDim.Render(" · ") +
-			stFlagI.Render(fmt.Sprintf("%d ignore", ig))
-	}
-	right := stKey.Render("[c]") + " " + stRowDim.Render("review & commit")
-	return spread(left, right, w)
-}
-
+// footer shows the last thing the app did. It replaces the commit-queue readout
+// while it is on screen, the way gh-dash surfaces notifications in its status
+// bar rather than in a modal.
 func (m *App) footer() string {
 	if m.toast != "" {
-		return stToast.Render(m.toast)
+		return stKey.Render("✻ ") + stFaint.Render(m.toast+" ")
 	}
 	return ""
 }

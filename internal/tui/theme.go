@@ -2,87 +2,79 @@ package tui
 
 import "github.com/charmbracelet/lipgloss"
 
-// The default Charm palette, tuned for contrast first.
+// The palette is gh-dash's.
 //
-// These are the colours the Bubble Tea / Lip Gloss / Bubbles examples ship with:
-// ANSI-256 greys for structure plus Charm's purple and pink for accents. They
-// are adaptive, so the app stays readable whether your terminal is light or
-// dark — nothing here is a bespoke brand colour.
+// gh-dash keeps its chrome quiet: near-white primary text, two greys for
+// de-emphasis, and borders sitting a shade off the background so content is the
+// only thing that stands out. Real colour is reserved for status. Everything is
+// adaptive, so it holds up on a light or dark terminal.
 //
-//	greys    253 body · 248 secondary · 245 muted · 240 structure
-//	accents  62 purple (frame) · 212 pink (cursor/keys) · 170 plum (codes)
-//	meaning  42 green (tracked) · 214 orange (due soon) · 203 red (missed)
-//
-// The ladder is deliberately bright-ish: on a dark terminal 245/248 still read
-// clearly, which is where the earlier low-contrast greys failed.
+// The greys are deliberately neutral. A tinted near-white reads better on
+// paper, but a 16-colour terminal quantises it to magenta, and it is not worth
+// the app turning purple for anyone on a basic terminal.
 var (
-	colFg      = lipgloss.AdaptiveColor{Light: "235", Dark: "253"} // body text
-	colDim     = lipgloss.AdaptiveColor{Light: "240", Dark: "248"} // secondary text
-	colMuted   = lipgloss.AdaptiveColor{Light: "243", Dark: "245"} // tertiary / structure
-	colBorder  = lipgloss.AdaptiveColor{Light: "250", Dark: "240"} // inner panel borders
-	colFrame   = lipgloss.AdaptiveColor{Light: "62", Dark: "62"}   // outer frame — Charm purple
-	colAccent  = lipgloss.AdaptiveColor{Light: "162", Dark: "212"} // pink — cursor, keys, emphasis
-	colAccent2 = lipgloss.AdaptiveColor{Light: "128", Dark: "170"} // plum — course codes, tags
-	colGreen   = lipgloss.AdaptiveColor{Light: "28", Dark: "42"}   // tracked / ok
-	colYellow  = lipgloss.AdaptiveColor{Light: "166", Dark: "214"} // due soon / warning
-	colRed     = lipgloss.AdaptiveColor{Light: "160", Dark: "203"} // missed / overdue
-	colSurface = lipgloss.AdaptiveColor{Light: "254", Dark: "236"}
-	colBarBG   = lipgloss.AdaptiveColor{Light: "252", Dark: "235"}
-	colOnBar   = lipgloss.AdaptiveColor{Light: "232", Dark: "232"} // text on a highlighted bar
+	colText     = lipgloss.AdaptiveColor{Light: "#1B1B26", Dark: "#EDEDED"} // primary text
+	colTextDim  = lipgloss.AdaptiveColor{Light: "#5C5C5C", Dark: "#C6C6C6"} // secondary
+	colFaint    = lipgloss.AdaptiveColor{Light: "#8A8A8A", Dark: "#8A8A8A"} // faint
+	colSelBg    = lipgloss.AdaptiveColor{Light: "#E4E4E4", Dark: "#333355"} // cursor band
+	colBorder   = lipgloss.AdaptiveColor{Light: "#C8C8D0", Dark: "#3B3E5E"} // unfocused pane
+	colBorderHi = lipgloss.AdaptiveColor{Light: "#5B60A0", Dark: "#5B60A0"} // focused pane
+	colAccent   = lipgloss.AdaptiveColor{Light: "#4B4FA0", Dark: "#8288B8"} // markers, ids
+	colSuccess  = lipgloss.AdaptiveColor{Light: "#1F8A4C", Dark: "#6FCF97"}
+	colWarn     = lipgloss.AdaptiveColor{Light: "#A5680F", Dark: "#E0AF68"}
+	colError    = lipgloss.AdaptiveColor{Light: "#C0392B", Dark: "#F7768E"}
 )
 
 // All text styles live here. Views compose these; they never call
 // lipgloss.NewStyle() themselves (see AGENTS.md).
 var (
-	// chrome / header
-	stHeader    = lipgloss.NewStyle().Foreground(colAccent2).Bold(true)
-	stHeaderDim = lipgloss.NewStyle().Foreground(colMuted).Bold(true)
-	stEmpty     = lipgloss.NewStyle().Foreground(colMuted).Italic(true)
-	stTitle     = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
-	stToast     = lipgloss.NewStyle().Foreground(colOnBar).Background(colGreen).Bold(true).Padding(0, 1)
-	stHelpBox   = lipgloss.NewStyle().
+	// text hierarchy
+	stFaint   = lipgloss.NewStyle().Foreground(colFaint)
+	stTitle   = lipgloss.NewStyle().Foreground(colText).Bold(true)
+	stEmpty   = lipgloss.NewStyle().Foreground(colFaint).Italic(true)
+	stHelpBox = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colFrame).
+			BorderForeground(colBorder).
 			Padding(1, 2)
 
-	// tabs — the active one is filled, so "where am I" is never ambiguous
-	stTabOn  = lipgloss.NewStyle().Foreground(colOnBar).Background(colAccent).Bold(true).Padding(0, 1)
-	stTabOff = lipgloss.NewStyle().Foreground(colMuted).Padding(0, 1)
+	// the top bar: the active tab is a filled pill, the way gh-dash marks the
+	// view you are in
+	stTabOn  = lipgloss.NewStyle().Foreground(colText).Background(colSelBg).Padding(0, 1)
+	stTabOff = lipgloss.NewStyle().Foreground(colFaint).Padding(0, 1)
 
-	// list rows — the cursor row is a solid bar, the strongest highlight we have
-	stRow          = lipgloss.NewStyle().Foreground(colFg)
-	stRowDim       = lipgloss.NewStyle().Foreground(colMuted)
-	stRowCursor    = lipgloss.NewStyle().Foreground(colOnBar).Background(colAccent).Bold(true)
-	stCursorGutter = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
-	stSelMark      = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
-	stSelName      = lipgloss.NewStyle().Foreground(colAccent)
+	// the bottom help bar
+	stHelpKey = lipgloss.NewStyle().Foreground(colText)
+	stHelpTxt = lipgloss.NewStyle().Foreground(colFaint)
+	stHelpSep = lipgloss.NewStyle().Foreground(colBorder)
+
+	// rows. The cursor is a background band; a space-selected row gets a marker,
+	// so "where the keyboard is" and "what I queued" stay distinguishable.
+	stRow     = lipgloss.NewStyle().Foreground(colText)
+	stRowDim  = lipgloss.NewStyle().Foreground(colFaint)
+	stCursor  = lipgloss.NewStyle().Foreground(colAccent)
+	stSelMark = lipgloss.NewStyle().Foreground(colAccent)
 
 	// meaning
-	stDone    = lipgloss.NewStyle().Foreground(colGreen)
-	stIgnored = lipgloss.NewStyle().Foreground(colMuted)
-	stOverdue = lipgloss.NewStyle().Foreground(colRed).Bold(true)
-	stSoon    = lipgloss.NewStyle().Foreground(colYellow)
-	stCode    = lipgloss.NewStyle().Foreground(colAccent2)
+	stDone    = lipgloss.NewStyle().Foreground(colSuccess)
+	stSoon    = lipgloss.NewStyle().Foreground(colWarn)
+	stOverdue = lipgloss.NewStyle().Foreground(colError)
+	stIgnored = lipgloss.NewStyle().Foreground(colFaint)
+	stCode    = lipgloss.NewStyle().Foreground(colAccent)
 
-	// boxes / frames
-	stFrame    = lipgloss.NewStyle().Foreground(colFrame)  // outer frame
-	stBorder   = lipgloss.NewStyle().Foreground(colBorder) // inner panels
-	stBoxTtl   = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
-	stLabel    = lipgloss.NewStyle().Foreground(colMuted)
-	stValue    = lipgloss.NewStyle().Foreground(colFg)
-	stKey      = lipgloss.NewStyle().Foreground(colAccent)
-	stSection  = lipgloss.NewStyle().Foreground(colAccent).Bold(true) // ◆ active step
-	stStep     = lipgloss.NewStyle().Foreground(colMuted)             // ◇ pending step
-	stChipOn   = lipgloss.NewStyle().Foreground(colOnBar).Background(colAccent).Bold(true).Padding(0, 1)
-	stChipOff  = lipgloss.NewStyle().Foreground(colMuted)
-	stBarEmpty = lipgloss.NewStyle().Foreground(colBorder) // empty track of a bar
+	// panes
+	stBorder    = lipgloss.NewStyle().Foreground(colBorder)
+	stBorderHi  = lipgloss.NewStyle().Foreground(colBorderHi)
+	stPaneTitle = lipgloss.NewStyle().Foreground(colText)
+	stRule      = lipgloss.NewStyle().Foreground(colBorder)
+	stLabel     = lipgloss.NewStyle().Foreground(colTextDim)
+	stValue     = lipgloss.NewStyle().Foreground(colText)
+	stKey       = lipgloss.NewStyle().Foreground(colAccent)
+	stSection   = lipgloss.NewStyle().Foreground(colText) // ◆ active step
+	stStep      = lipgloss.NewStyle().Foreground(colFaint)
+	stBarEmpty  = lipgloss.NewStyle().Foreground(colBorder)
 
 	// triage flags
-	stFlagT = lipgloss.NewStyle().Foreground(colGreen).Bold(true) // track
-	stFlagM = lipgloss.NewStyle().Foreground(colRed).Bold(true)   // missed
-	stFlagI = lipgloss.NewStyle().Foreground(colMuted).Bold(true) // ignore
-
-	// selection markers
-	stCheckOn  = lipgloss.NewStyle().Foreground(colAccent)
-	stCheckOff = lipgloss.NewStyle().Foreground(colMuted)
+	stFlagT = lipgloss.NewStyle().Foreground(colSuccess)
+	stFlagM = lipgloss.NewStyle().Foreground(colError)
+	stFlagI = lipgloss.NewStyle().Foreground(colFaint)
 )
