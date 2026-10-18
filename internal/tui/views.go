@@ -27,17 +27,24 @@ func (m *App) shortCode(courseID int) string {
 // rowCols picks the column widths for one table row, dropping the id column and
 // then shrinking the course column as space runs out — never overflowing. w is
 // the pane's interior: the margin, the cursor gutter, the selection marker and
-// the triage flag all live in the 4-column left gutter.
+// the triage flag all live in the 4-column left gutter. Tree rows carry one
+// more lead column and use treeRowCols (tree.go).
 func rowCols(w int, withID bool) (shortW, idW, nameW int) {
+	return colsFor(w, withID, 4)
+}
+
+// colsFor is the shared column solve; lead is the width of the row's left
+// gutter (margin + cursor + marker + any extra columns).
+func colsFor(w int, withID bool, lead int) (shortW, idW, nameW int) {
 	shortW = 7
-	if w >= 40 {
+	if w >= lead+36 {
 		shortW = 8 // room for the full short label ("strukdat")
 	}
-	if withID && w >= 34 {
+	if withID && w >= lead+30 {
 		idW = 8
 	}
 	for {
-		prefix := 4 + 1 + shortW + 1 + 5 + 1 // margin + gutter + course + due
+		prefix := lead + 1 + shortW + 1 + 5 + 1 // gutter + course + due
 		if idW > 0 {
 			prefix += idW + 1
 		}
@@ -137,65 +144,68 @@ func (m *App) assignRow(a model.Assignment, contentW int, cursor, selected, with
 	return row + blanks(band, contentW-lipgloss.Width(row))
 }
 
-// assignHeader is the column header above the rows, so the pane reads as a
-// table. gh-dash keeps its column headings visible; it is what makes a dense
-// list scannable. It is padded to contentW by the same rule as the rows, so
-// every line of a pane ends on the same column.
-func assignHeader(contentW int, withID bool) string {
-	shortW, idW, nameW := rowCols(contentW, withID)
-	parts := []string{
-		"    ",
-		pad("course", shortW, false),
-		pad("due", 5, false),
-	}
-	if idW > 0 {
-		parts = append(parts, pad("id", idW, false))
-	}
-	parts = append(parts, pad("title", nameW, false))
-	line := strings.Join(parts, " ")
-	return stFaint.Render(line) + blanks(false, contentW-lipgloss.Width(line))
-}
+// ---- Tasks: list layout (the tree) ----
 
-// ---- Tasks: list layout (two panes) ----
-
-// listLines is gh-dash's shape: every task on the left, the selected one's
-// detail on the right, both panes filling the screen.
+// listLines is the Tasks tree: courses as parents, their assignments as
+// children, both panes filling the screen with the selected row's detail on
+// the right. The node list treeNodes() returns is exactly what is drawn here
+// and exactly what the keyboard walks.
 func (m *App) listLines(w, budget int) []string {
 	leftW := w * 42 / 100
 	rightW := w - leftW - 1
 	contentH := maxInt(3, budget-4)
 
-	items := m.visible()
+	nodes := m.taskNodes()
 	leftInner := leftW - 2            // the pane's interior: the whole span between borders
 	listRows := maxInt(1, contentH-1) // one row goes to the column header
-	start, end := windowRange(len(items), m.taskCursor, listRows)
+	start, end := windowRange(len(nodes), m.taskCursor, listRows)
 
-	rows := []string{assignHeader(leftInner, true)}
-	if len(items) == 0 {
-		rows = append(rows, stEmpty.Render("  nothing matches this filter"))
+	tasks := 0
+	for _, n := range nodes {
+		if n.kind == nodeTask {
+			tasks++
+		}
+	}
+
+	rows := []string{treeAssignHeader(leftInner, true)}
+	if len(nodes) == 0 {
+		rows = append(rows, stEmpty.Render("nothing matches this filter"))
 	}
 	for i := start; i < end; i++ {
-		rows = append(rows, m.assignRow(items[i], leftInner, i == m.taskCursor, m.selected[items[i].ID], true))
+		n := nodes[i]
+		cursor := i == m.taskCursor
+		var row string
+		if n.kind == nodeCourse {
+			row = m.courseRow(n, len(m.courseChildren(n.courseID)), len(m.courseAll(n.courseID)), leftInner, cursor)
+		} else {
+			row = m.taskRow(n.task, leftInner, cursor, m.selected[n.task.ID], true)
+		}
+		rows = append(rows, row)
 	}
 
-	var detail []string
-	if len(items) > 0 && m.taskCursor < len(items) {
-		detail = m.detailRows(items[m.taskCursor], rightW-2)
-	}
-
-	title := fmt.Sprintf("▾ %s (%d)", m.filter, len(items))
+	detail, dtitle := m.treeDetail(nodes, rightW-2)
+	title := fmt.Sprintf("▾ %s (%d)", m.filter, tasks)
 	return sideBySide(
 		panel(title, leftW, padRows(rows, contentH), true), leftW, true,
-		panel(m.detailTitle(items), rightW, padRows(detail, contentH), false), rightW, false,
+		panel(dtitle, rightW, padRows(detail, contentH), false), rightW, false,
 	)
 }
 
-func (m *App) detailTitle(items []model.Assignment) string {
-	if len(items) > 0 && m.taskCursor < len(items) {
-		a := items[m.taskCursor]
-		return a.ID + " · " + m.shortCode(a.CourseID)
+// treeDetail fills the right pane for whatever row the cursor is on: an
+// assignment, or the course its children roll up into.
+func (m *App) treeDetail(nodes []node, width int) ([]string, string) {
+	if m.taskCursor < 0 || m.taskCursor >= len(nodes) {
+		return nil, "detail"
 	}
-	return "detail"
+	n := nodes[m.taskCursor]
+	if n.kind == nodeTask {
+		return m.detailRows(n.task, width), n.task.ID + " · " + m.shortCode(n.courseID)
+	}
+	title := m.shortCode(n.courseID)
+	if c, ok := m.courseByID(n.courseID); ok && c.Name != "" {
+		title = c.Name
+	}
+	return m.courseDetail(n.courseID, width), title
 }
 
 // detailRows renders the right-hand pane. width is the pane's interior; every
@@ -538,56 +548,52 @@ func (m *App) wizStepDone(w int) []string {
 
 // ---- Materials ----
 
+// materialsLines is the Materials tree: courses as parents, weeks (or the
+// "general" section) as children, the files under each. matNodes() is what
+// the pane draws and what the keyboard walks.
 func (m *App) materialsLines(w, budget int) []string {
 	leftW := w * 58 / 100
 	rightW := w - leftW - 1
 	contentH := maxInt(3, budget-4)
 
-	// margin(1) + gutter(1) + mark(1) + gap + week + gap + material + gap + state
-	weekW, stateW := 8, 7
-	inner := leftW - 2
-	flexW := maxInt(8, inner-21)
+	nodes := m.matNodes()
+	leftInner := leftW - 2
+	start, end := windowRange(len(nodes), m.matCursor, contentH)
 
-	// The header obeys the same width rule as the rows: same columns, padded to
-	// the same interior width.
-	head := strings.Join([]string{
-		"   ", pad("week", weekW, false), pad("material", flexW, false), pad("state", stateW, false),
-	}, " ")
-	rows := []string{stFaint.Render(head) + blanks(false, inner-lipgloss.Width(head))}
-
-	start, end := windowRange(len(m.materials), m.matCursor, contentH-1)
-	if len(m.materials) == 0 {
+	rows := []string{}
+	if len(nodes) == 0 {
 		rows = append(rows, " "+stEmpty.Render("nothing here"))
 	}
 	for i := start; i < end; i++ {
-		mt := m.materials[i]
-		band := i == m.matCursor
-
-		// The row's leading margin is part of the row, so the band reaches the
-		// pane border.
-		margin, gutter, mark := gap(band), gap(band), gap(band)
-		if band {
-			gutter = tint(stCursor, true).Render("▌")
+		n := nodes[i]
+		selected := false
+		switch n.kind {
+		case nodeFile:
+			selected = m.selectedM[n.mat.ID]
+		case nodeCourse:
+			selected = allSelected(m.selectedM, idsOf(m.courseFiles(n.courseID)))
+		case nodeWeek:
+			selected = allSelected(m.selectedM, idsOf(m.sectionFiles(n.courseID, n.mat.Section)))
 		}
-		if m.selectedM[mt.ID] {
-			mark = tint(stSelMark, band).Render("▪")
-		}
-		week := mt.Section
-		if week == "" {
-			week = "—"
-		}
-		state, stateStyle := materialState(mt)
-
-		row := margin + gutter + mark + gap(band) +
-			tint(stRowDim, band).Render(pad(week, weekW, false)) + gap(band) +
-			tint(stRow, band).Render(pad(truncate(mt.Name, flexW), flexW, false)) + gap(band) +
-			tint(stateStyle, band).Render(pad(state, stateW, false))
-		rows = append(rows, row+blanks(band, inner-lipgloss.Width(row)))
+		rows = append(rows, m.matRow(n, leftInner, i == m.matCursor, selected))
 	}
 
 	var detail []string
-	if len(m.materials) > 0 && m.matCursor < len(m.materials) {
-		detail = m.materialDetail(m.materials[m.matCursor], rightW-2)
+	title := "detail"
+	if m.matCursor >= 0 && m.matCursor < len(nodes) {
+		n := nodes[m.matCursor]
+		switch n.kind {
+		case nodeFile:
+			detail = m.materialDetail(n.mat, rightW-2)
+		case nodeWeek:
+			files := m.sectionFiles(n.courseID, n.mat.Section)
+			detail = m.matGroupDetail(sectionLabel(n.mat.Section), files, rightW-2)
+			title = m.shortCode(n.courseID) + " · " + sectionLabel(n.mat.Section)
+		case nodeCourse:
+			files := m.courseFiles(n.courseID)
+			detail = m.matGroupDetail(m.shortCode(n.courseID), files, rightW-2)
+			title = m.shortCode(n.courseID)
+		}
 	}
 
 	local := 0
@@ -596,11 +602,11 @@ func (m *App) materialsLines(w, budget int) []string {
 			local++
 		}
 	}
-	title := fmt.Sprintf("▾ materials (%d) · %d local", len(m.materials), local)
+	pane := fmt.Sprintf("▾ materials (%d) · %d local", len(m.materials), local)
 
 	return sideBySide(
-		panel(title, leftW, padRows(rows, contentH), true), leftW, true,
-		panel("detail", rightW, padRows(detail, contentH), false), rightW, false,
+		panel(pane, leftW, padRows(rows, contentH), true), leftW, true,
+		panel(title, rightW, padRows(detail, contentH), false), rightW, false,
 	)
 }
 
@@ -697,14 +703,13 @@ func (m *App) hintsLine(w int, where string) string {
 	var items []string
 	switch where {
 	case "materials":
-		items = []string{"↑↓ move", "space select", "d download", "1-3 tabs", "? help", "q quit"}
+		items = []string{"↑↓ move", "h/l fold", "space select", "d download", "1-3 tabs", "? help", "q quit"}
 	case "sync":
 		items = []string{"s sync", "b backup", "1-3 tabs", "? help", "q quit"}
 	case "wizard":
 		items = []string{"↑↓ move", "space toggle", "enter next", "esc back", "? help"}
 	default:
-		items = []string{"↑↓ move", "t track", "m missed", "i ignore", "u undecided",
-			"space select", "v view", "/ filter", "c commit", "? help"}
+		items = []string{"↑↓ move", "h/l fold", "t/m/i/u", "space select", "v view", "/ filter", "c commit", "? help"}
 	}
 	// Say so rather than leave the mouse silently dead: kamps never turns on
 	// mouse reporting, which is what keeps the terminal's own drag-to-select

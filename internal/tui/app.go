@@ -129,6 +129,10 @@ type App struct {
 	boardCol    int
 	boardCursor [4]int // per triage column
 
+	// expanded holds the fold state of the tree panes, keyed by courseKey /
+	// weekKey. A missing key means open — collapsing is the explicit act.
+	expanded map[string]bool
+
 	selected  map[string]bool // assignment id -> checked
 	selectedM map[string]bool // material id -> checked
 	pending   map[string]model.Triage
@@ -170,6 +174,7 @@ func New(src source.Source, cfg config.Config, version string) *App {
 		filter:       "all",
 		layout:       viewCycle[0],
 		returnLayout: LayList,
+		expanded:     map[string]bool{},
 		selected:     map[string]bool{},
 		selectedM:    map[string]bool{},
 		pending:      map[string]model.Triage{},
@@ -237,6 +242,7 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return a.Name < b.Name
 		})
+		m.clampCursor()
 		return m, nil
 
 	case errMsg:
@@ -285,14 +291,18 @@ func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.helpOn = true
 	case "tab":
 		m.tab = (m.tab + 1) % tabCount
+		m.clampCursor()
 	case "shift+tab":
 		m.tab = (m.tab + tabCount - 1) % tabCount
+		m.clampCursor()
 	case "1", "2", "3", "4":
 		if idx := int(msg.String()[0] - '1'); idx < int(tabCount) {
 			m.tab = Tab(idx)
+			m.clampCursor()
 		}
 	case "v":
 		m.layout = m.layout.next()
+		m.clampCursor()
 	case "up", "k":
 		m.move(-1)
 	case "down", "j":
@@ -340,36 +350,136 @@ func (m *App) move(delta int) {
 			return
 		}
 		n := len(m.focusedList())
+		if m.layout == LayList {
+			n = len(m.taskNodes())
+		}
 		m.taskCursor = clampInt(m.taskCursor+delta, 0, maxInt(0, n-1))
 	case TabMaterials:
-		m.matCursor = clampInt(m.matCursor+delta, 0, maxInt(0, len(m.materials)-1))
+		m.matCursor = clampInt(m.matCursor+delta, 0, maxInt(0, len(m.matNodes())-1))
 	}
 }
 
-func (m *App) moveX(delta int) {
-	if m.tab != TabTasks || m.layout != LayBoard {
-		return
+// clampCursor keeps the per-tab cursors inside whatever the current view draws.
+// Views with different row models — dashboard items, tree nodes — share the
+// same cursor, and a stale index must never point past the end.
+func (m *App) clampCursor() {
+	switch {
+	case m.tab == TabTasks && m.layout == LayList:
+		m.taskCursor = clampInt(m.taskCursor, 0, maxInt(0, len(m.taskNodes())-1))
+	case m.tab == TabMaterials:
+		m.matCursor = clampInt(m.matCursor, 0, maxInt(0, len(m.matNodes())-1))
+	case m.tab == TabTasks && m.layout != LayBoard:
+		m.taskCursor = clampInt(m.taskCursor, 0, maxInt(0, len(m.focusedList())-1))
 	}
-	m.boardCol = clampInt(m.boardCol+delta, 0, len(boardOrder)-1)
+}
+
+// moveX is horizontal: board columns on the Tasks board, folding everywhere the
+// trees are. `l` opens the cursor's container, `h` closes it.
+func (m *App) moveX(delta int) {
+	switch m.tab {
+	case TabTasks:
+		if m.layout == LayBoard {
+			m.boardCol = clampInt(m.boardCol+delta, 0, len(boardOrder)-1)
+			return
+		}
+		if m.layout != LayList {
+			return
+		}
+		nodes := m.taskNodes()
+		if m.taskCursor < 0 || m.taskCursor >= len(nodes) {
+			return
+		}
+		n := nodes[m.taskCursor]
+		if delta > 0 {
+			m.setOpen(courseKey(n.courseID), true)
+			return
+		}
+		if !m.isOpen(courseKey(n.courseID)) {
+			return
+		}
+		m.setOpen(courseKey(n.courseID), false)
+		// The row the cursor was on may be folded away; land on the course row.
+		nodes = m.taskNodes()
+		for i, nn := range nodes {
+			if nn.kind == nodeCourse && nn.courseID == n.courseID {
+				m.taskCursor = clampInt(i, 0, len(nodes)-1)
+				return
+			}
+		}
+	case TabMaterials:
+		nodes := m.matNodes()
+		if m.matCursor < 0 || m.matCursor >= len(nodes) {
+			return
+		}
+		n := nodes[m.matCursor]
+		var key string
+		switch n.kind {
+		case nodeCourse:
+			key = courseKey(n.courseID)
+		case nodeWeek, nodeFile:
+			key = weekKey(n.courseID, n.mat.Section)
+		}
+		if delta > 0 {
+			m.setOpen(key, true)
+			return
+		}
+		if !m.isOpen(key) {
+			return
+		}
+		m.setOpen(key, false)
+		nodes = m.matNodes()
+		for i, nn := range nodes {
+			if nn.kind == nodeWeek && nn.courseID == n.courseID && nn.mat.Section == n.mat.Section {
+				m.matCursor = clampInt(i, 0, len(nodes)-1)
+				return
+			}
+			if n.kind == nodeCourse && nn.kind == nodeCourse && nn.courseID == n.courseID {
+				m.matCursor = clampInt(i, 0, len(nodes)-1)
+				return
+			}
+		}
+	}
 }
 
 func (m *App) toggleSelect() {
-	id := m.cursorAssignmentID()
-	if id != "" {
-		m.selected[id] = !m.selected[id]
-		if !m.selected[id] {
-			delete(m.selected, id)
-		}
-		return
-	}
-	if m.tab == TabMaterials {
-		if i := m.matCursor; i >= 0 && i < len(m.materials) {
-			id := m.materials[i].ID
-			m.selectedM[id] = !m.selectedM[id]
-			if !m.selectedM[id] {
-				delete(m.selectedM, id)
+	switch m.tab {
+	case TabTasks:
+		if m.layout == LayList {
+			nodes := m.taskNodes()
+			if m.taskCursor < 0 || m.taskCursor >= len(nodes) {
+				return
 			}
+			n := nodes[m.taskCursor]
+			if n.kind == nodeTask {
+				toggleSet(m.selected, []string{n.task.ID})
+				return
+			}
+			ids := make([]string, 0, 8)
+			for _, a := range m.courseChildren(n.courseID) {
+				ids = append(ids, a.ID)
+			}
+			toggleSet(m.selected, ids)
+			return
 		}
+		if id := m.cursorAssignmentID(); id != "" {
+			toggleSet(m.selected, []string{id})
+		}
+	case TabMaterials:
+		nodes := m.matNodes()
+		if m.matCursor < 0 || m.matCursor >= len(nodes) {
+			return
+		}
+		n := nodes[m.matCursor]
+		ids := []string{}
+		switch n.kind {
+		case nodeFile:
+			ids = []string{n.mat.ID}
+		case nodeWeek:
+			ids = idsOf(m.sectionFiles(n.courseID, n.mat.Section))
+		case nodeCourse:
+			ids = idsOf(m.courseFiles(n.courseID))
+		}
+		toggleSet(m.selectedM, ids)
 	}
 }
 
@@ -530,13 +640,32 @@ func (m *App) focusedList() []model.Assignment {
 		return m.boardItems(m.boardCol)
 	case LayDashboard:
 		return m.dashShown()
+	case LayList:
+		var out []model.Assignment
+		for _, n := range m.taskNodes() {
+			if n.kind == nodeTask {
+				out = append(out, n.task)
+			}
+		}
+		return out
 	default:
 		return m.visible()
 	}
 }
 
-// cursorAssignmentID is the item the keyboard is pointing at, or "".
+// cursorAssignmentID is the item the keyboard is pointing at, or "". On the
+// tree, the cursor may rest on a course row — that is no single assignment.
 func (m *App) cursorAssignmentID() string {
+	if m.tab != TabTasks {
+		return ""
+	}
+	if m.layout == LayList {
+		nodes := m.taskNodes()
+		if m.taskCursor >= 0 && m.taskCursor < len(nodes) && nodes[m.taskCursor].kind == nodeTask {
+			return nodes[m.taskCursor].task.ID
+		}
+		return ""
+	}
 	items := m.focusedList()
 	cursor := m.taskCursor
 	if m.layout == LayBoard && m.tab == TabTasks {
@@ -549,6 +678,7 @@ func (m *App) cursorAssignmentID() string {
 }
 
 // targetIDs is what a triage key acts on: the selection, else the cursor item.
+// On the tree, a course row targets all its visible children.
 func (m *App) targetIDs() []string {
 	var ids []string
 	for _, a := range m.assignments {
@@ -556,10 +686,23 @@ func (m *App) targetIDs() []string {
 			ids = append(ids, a.ID)
 		}
 	}
-	if len(ids) == 0 {
+	if len(ids) > 0 {
+		return ids
+	}
+	if m.tab == TabTasks && m.layout == LayList {
 		if id := m.cursorAssignmentID(); id != "" {
-			ids = append(ids, id)
+			return []string{id}
 		}
+		nodes := m.taskNodes()
+		if m.taskCursor >= 0 && m.taskCursor < len(nodes) && nodes[m.taskCursor].kind == nodeCourse {
+			for _, a := range m.courseChildren(nodes[m.taskCursor].courseID) {
+				ids = append(ids, a.ID)
+			}
+		}
+		return ids
+	}
+	if id := m.cursorAssignmentID(); id != "" {
+		return []string{id}
 	}
 	return ids
 }
@@ -644,29 +787,49 @@ func (m *App) download() {
 		m.toastTicks = 20
 		return
 	}
-	n := 0
+	// The selection first; with nothing selected, the cursor does the work —
+	// on a course or week row, d fetches everything underneath it.
+	var targets []string
 	for _, mt := range m.materials {
-		if m.selectedM[mt.ID] && !mt.Downloaded {
-			n++
+		if m.selectedM[mt.ID] {
+			targets = append(targets, mt.ID)
 		}
 	}
-	if n == 0 {
-		if i := m.matCursor; i >= 0 && i < len(m.materials) && !m.materials[i].Downloaded {
-			n = 1
+	if len(targets) == 0 {
+		nodes := m.matNodes()
+		if m.matCursor >= 0 && m.matCursor < len(nodes) {
+			var files []model.Material
+			n := nodes[m.matCursor]
+			switch n.kind {
+			case nodeFile:
+				files = []model.Material{n.mat}
+			case nodeWeek:
+				files = m.sectionFiles(n.courseID, n.mat.Section)
+			case nodeCourse:
+				files = m.courseFiles(n.courseID)
+			}
+			for _, f := range files {
+				if !f.Downloaded {
+					targets = append(targets, f.ID)
+				}
+			}
 		}
 	}
-	if n == 0 {
+	if len(targets) == 0 {
 		m.toast = "nothing new to download"
 		m.toastTicks = 20
 		return
 	}
 	for i := range m.materials {
-		if m.selectedM[m.materials[i].ID] || (n == 1 && i == m.matCursor) {
-			m.materials[i].Downloaded = true
+		for _, id := range targets {
+			if m.materials[i].ID == id && !m.materials[i].Downloaded {
+				m.materials[i].Downloaded = true
+				break
+			}
 		}
 	}
 	m.selectedM = map[string]bool{}
-	m.toast = fmt.Sprintf("downloaded %d %s", n, plural(n, "file", "files"))
+	m.toast = fmt.Sprintf("downloaded %d %s", len(targets), plural(len(targets), "file", "files"))
 	m.toastTicks = 24
 }
 

@@ -31,8 +31,8 @@ func DefaultKeys() KeyMap {
 	return KeyMap{
 		Up:       key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
 		Down:     key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-		Left:     key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/h", "left")),
-		Right:    key.NewBinding(key.WithKeys("right", "l"), key.WithHelp("→/l", "right")),
+		Left:     key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/h", "left · fold")),
+		Right:    key.NewBinding(key.WithKeys("right", "l"), key.WithHelp("→/l", "right · open")),
 		NextTab:  key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next tab")),
 		PrevTab:  key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("⇧tab", "prev tab")),
 		Select:   key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "select")),

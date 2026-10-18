@@ -41,6 +41,7 @@ Handy keys:
 | key | action |
 |---|---|
 | `↑↓` / `jk` | move |
+| `hl` | fold / open (courses, weeks) |
 | `tab`, `1`–`3` | switch tabs |
 | `v` | cycle the Tasks view |
 | `space`, `a` | select item / select all |
