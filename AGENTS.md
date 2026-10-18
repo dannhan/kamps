@@ -25,7 +25,8 @@ go build -o kamps ./cmd/kamps
 When there is no TTY (CI, pipes), `kamps` prints a plain-text snapshot. Use
 `kamps | less` and `go run ./cmd/kamps version` to verify behaviour headlessly.
 `go test -run TestSnapshot -v ./internal/tui` renders every screen — that is how
-you eyeball layout changes without a terminal.
+you eyeball layout changes without a terminal. `go test -run TestViewAlignment`
+is the guard that every line is exactly `boxWidth()` wide.
 
 ## Architecture
 
@@ -45,8 +46,38 @@ Materials(ctx)   ([]model.Material, error)
   wrong; fix the abstraction instead.
 
 Other packages: `internal/model` (plain structs), `internal/tui` (`app.go` =
-Elm-style model/update, `views.go` = rendering, `theme.go` = colours/styles,
-`keys.go` = keybindings), `internal/config` (paths/settings).
+Elm-style model/update + key handling, `views.go` = the four screens,
+`frame.go` = hand-drawn boxes/chips/hints, `util.go` = pure helpers, `theme.go`
+= colours/styles, `keys.go` = keybindings, `plain.go` = no-TTY output),
+`internal/config` (paths/settings).
+
+## The task model
+
+`model.Triage` is the local, user-owned decision about an assignment, and it is
+**not** a todo status. The vocabulary is fixed:
+
+- `Undecided` (default) · `Tracked` · `Missed` · `Ignored`
+
+Do not reintroduce `todo/doing/done`. `Tracked` already covers "done",
+"a teammate submitted it" and "tracked elsewhere". Keys are `t`/`m`/`i`/`u`.
+
+`t`/`m`/`i` apply immediately and *also* queue the item in `App.pending`;
+`[c]` opens the wizard, which previews the exact `tasks.md` lines. **Writing is
+a dry-run** (`App.dryRun == true`): the wizard must not touch any file until a
+real, reviewed writer is added deliberately.
+
+## Rendering invariants
+
+The UI renders **inline** (no `tea.WithAltScreen()`), sized to
+`clampInt(width, 72, 100)` × `clampInt(height-1, 10, 30)`, so shell history
+stays visible and small terminals still get a usable box.
+
+Every line of `App.View()` must be exactly `boxWidth()` columns. Overflows are
+caught by `TestViewAlignment` at 100/80/72 columns across every tab and Tasks
+layout — if you add a row or a column, keep it inside its width budget or extend
+`assignRow`/`chips`/`hintsFit`, which already degrade (drop the id column, drop
+chips, drop hint items) rather than overflow. Never "fix" an overflow by
+widening the box past the terminal.
 
 ## Conventions
 
@@ -54,8 +85,13 @@ Elm-style model/update, `views.go` = rendering, `theme.go` = colours/styles,
   `View` is pure and returns a string. Never mutate state inside `View`.
 - **Style in one place.** Colours and text styles live in `internal/tui/theme.go`.
   Do not scatter `lipgloss.NewStyle()` calls through the views.
-- **Keys in one place.** Add bindings to `KeyMap` in `keys.go`; they feed both
-  the footer and the `?` overlay automatically.
+- **Keys in one place.** Add bindings to `KeyMap` in `keys.go`; they drive the
+  `?` overlay. The one-line footer hints are hand-built in `hintsLine`
+  (`views.go`) because `bubbles/help` truncates; keep them short — `hintsFit`
+  drops trailing items rather than overflow.
+- **One screen, one function.** Each tab (and each Tasks layout) renders in its
+  own `*Lines(w, budget int) []string` in `views.go`. Compose them from
+  `frame.go` (`panel`, `sideBySide`, `chips`, `spread`); do not hand-roll boxes.
 - **Data is dumb; behaviour is elsewhere.** `internal/model` types are plain
   structs with no I/O.
 - **Politeness and safety for any networking** (when it lands): ≥1 s between

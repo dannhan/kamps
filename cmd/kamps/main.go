@@ -10,7 +10,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -24,21 +23,29 @@ var version = "0.1.0-dev"
 
 func main() {
 	args := os.Args[1:]
-	if len(args) > 0 {
-		switch args[0] {
+	noAnim := false
+	var rest []string
+	for _, a := range args {
+		if a == "--no-anim" || a == "--noanim" {
+			noAnim = true
+			continue
+		}
+		rest = append(rest, a)
+	}
+
+	if len(rest) > 0 {
+		switch rest[0] {
 		case "version", "--version", "-v":
 			fmt.Printf("kamps %s\n", version)
 			return
 		case "help", "--help", "-h":
 			printHelp()
 			return
-		case "mockups":
-			printMockups(args[1:])
-			return
 		}
 	}
 
 	cfg := config.Default()
+	cfg.NoAnim = noAnim
 	src := source.NewDemo()
 
 	// Non-interactive fallback: piping `kamps | less` should still work.
@@ -47,7 +54,9 @@ func main() {
 		return
 	}
 
-	p := tea.NewProgram(tui.New(src, cfg, version), tea.WithAltScreen())
+	// No alt-screen: kamps renders inline and stays out of the way, so your
+	// shell history is still there above it.
+	p := tea.NewProgram(tui.New(src, cfg, version))
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "kamps:", err)
 		os.Exit(1)
@@ -62,24 +71,6 @@ func isTTY(f *os.File) bool {
 	return fi.Mode()&os.ModeCharDevice != 0
 }
 
-// printMockups renders the candidate screens. With no argument it prints all
-// of them; with a key (a/b/c/d) it prints just one. Colour is automatic
-// (respects NO_COLOR); pipe through `less -R` to scroll.
-func printMockups(args []string) {
-	want := ""
-	if len(args) > 0 {
-		want = strings.ToUpper(args[0])
-	}
-	for _, m := range tui.Mockups() {
-		if want != "" && m.Key != want {
-			continue
-		}
-		fmt.Printf("%s. %s\n\n", m.Key, m.Desc)
-		fmt.Println(m.Body())
-		fmt.Println()
-	}
-}
-
 func printHelp() {
 	fmt.Print(`kamps — college coursework, in your terminal
 
@@ -88,15 +79,21 @@ USAGE
   kamps version    print the version
   kamps help       print this help
 
-KEYS
-  ↑/k ↓/j    move            tab/shift+tab  switch section
-  space      select          d              download
-  x          toggle done     s              sync
-  ?          help            q              quit
+FLAGS
+  --no-anim        no spinner or progress motion
 
-MOCKUPS
-  kamps mockups        print every candidate UI
-  kamps mockups b      print one of them (a/b/c/d)
+SCREENS
+  1 Tasks       2 Materials       3 Today       4 Sync
+  v  cycle the Tasks view: list · board · wizard
+
+KEYS
+  ↑/k ↓/j    move            space   select
+  ←/h →/l    move (board)    a       select all
+  t          track           m       missed
+  i          ignore          u       undecided
+  c          review & commit /       filter
+  s          sync            d       download
+  ?          help            q       quit
 
 Demo data is bundled for now; the Moodle source is next.
 `)

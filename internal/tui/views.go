@@ -10,412 +10,362 @@ import (
 	"github.com/ruyam/kamps/internal/model"
 )
 
-// View renders the whole screen.
-func (m *App) View() string {
-	header := m.headerView()
-	tabs := m.tabBar()
-	rule := stRule.Render(strings.Repeat("─", m.width))
-
-	body := m.bodyView()
-	lines := []string{header, "", tabs, rule, body, rule, m.footerView()}
-	return strings.Join(lines, "\n")
-}
-
-// ---- chrome ----
-
-func (m *App) headerView() string {
-	left := stHeader.Render("◆ kamps") + "  " + stHeaderDim.Render(m.src.Label())
-	right := m.syncIndicator()
-	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
-	if gap < 1 {
-		gap = 1
-	}
-	return left + strings.Repeat(" ", gap) + right
-}
-
-func (m *App) syncIndicator() string {
-	term := m.term()
-	termBit := ""
-	if term != "" {
-		termBit = stHeaderDim.Render(term) + "  "
-	}
-	if m.syncing {
-		return termBit + m.spinner.View() + stSoon.Render(" syncing")
-	}
-	return termBit + stDone.Render("● ready")
-}
-
-func (m *App) term() string {
+// shortCode maps a course id to its short label ("ppl", "metnum", …).
+func (m *App) shortCode(courseID int) string {
 	for _, c := range m.courses {
-		if c.Term != "" {
-			return c.Term
-		}
-	}
-	return ""
-}
-
-func (m *App) tabBar() string {
-	parts := make([]string, 0, secCount)
-	for s := Section(0); s < secCount; s++ {
-		label := fmt.Sprintf("%s %d", s, m.len(s))
-		if s == m.section {
-			parts = append(parts, stTabActive.Render(label))
-		} else {
-			parts = append(parts, stTabIdle.Render(label))
-		}
-	}
-	return " " + strings.Join(parts, " ")
-}
-
-func (m *App) footerView() string {
-	if m.toast != "" {
-		return " " + stToast.Render(m.toast)
-	}
-	return " " + m.help.View(m.keys)
-}
-
-// ---- body ----
-
-func (m *App) bodyView() string {
-	if m.helpOn {
-		return m.helpBody()
-	}
-	if len(m.courses) == 0 && len(m.assignments) == 0 && len(m.materials) == 0 {
-		return m.padBody(stEmpty.Render("  Loading…"))
-	}
-	switch m.section {
-	case SecCourses:
-		return m.padBody(m.coursesView())
-	case SecAssignments:
-		return m.padBody(m.assignmentsView())
-	case SecMaterials:
-		return m.padBody(m.materialsView())
-	case SecDownloads:
-		return m.padBody(m.downloadsView())
-	}
-	return ""
-}
-
-func (m *App) helpBody() string {
-	title := stTitle.Render("kamps — keys")
-	full := m.help.FullHelpView(m.keys.FullHelp())
-	hint := stHelpBox.Render(title + "\n\n" + full + "\n\n" + stFooter.Render("press ? or esc to close"))
-	return m.padBody(hint)
-}
-
-func (m *App) padBody(s string) string {
-	have := lipgloss.Height(s)
-	want := m.bodyHeight()
-	if have < want {
-		s += strings.Repeat("\n", want-have)
-	}
-	return s
-}
-
-// ---- tables ----
-
-type cell struct {
-	text  string
-	width int
-	style lipgloss.Style
-	right bool
-}
-
-func (m *App) coursesView() string {
-	headers := []cell{
-		t("NAME", 28), t("CODE", 11), t("MATERI", 6), t("DUE", 4), t("NOTE", m.flex(28, 11, 6, 4)),
-	}
-	rows := make([][]cell, 0, len(m.courses))
-	for _, c := range m.courses {
-		mats := 0
-		for _, mt := range m.materials {
-			if mt.CourseID == c.ID {
-				mats++
+		if c.ID == courseID {
+			if c.Short != "" {
+				return c.Short
 			}
+			return c.Code
 		}
-		dues := 0
-		for _, a := range m.assignments {
-			if a.CourseID == c.ID && a.Status != model.Done && a.HasDue {
-				dues++
-			}
-		}
-		note := ""
-		style := stRow
-		if c.Source == "whatsapp" || c.Source == "manual" {
-			note = c.Source
-			style = stRowDim
-		} else if c.HasPraktikum {
-			note = "praktikum"
-			style = stRow
-		}
-		rows = append(rows, []cell{
-			{c.Name, 28, style, false},
-			{c.Code, 11, stCode, false},
-			{fmt.Sprintf("%d", mats), 6, stRowDim, true},
-			{fmt.Sprintf("%d", dues), 4, dueCountStyle(dues), true},
-			{note, m.flex(28, 11, 6, 4), stTag, false},
-		})
 	}
-	return m.tableView(headers, rows, m.cursors[SecCourses])
+	return "—"
 }
 
-func (m *App) assignmentsView() string {
-	flexW := m.flex(10, 11, 9)
-	headers := []cell{
-		t("DUE", 10), t("COURSE", 11), t("STATUS", 9), t("ASSIGNMENT", flexW),
+// assignRow renders one assignment line of exactly contentW columns, dropping
+// the id column and shrinking the course column when space is tight.
+func (m *App) assignRow(a model.Assignment, contentW int, cursor, withID bool) string {
+	mark := " "
+	if cursor {
+		mark = stCursorGutter.Render("▌")
 	}
+	shortW, idW := 7, 0
+	if contentW >= 40 {
+		shortW = 8 // room for the full short label ("strukdat")
+	}
+	if withID {
+		idW = 8
+	}
+	nameW := contentW - 12 - shortW - idW
+	if nameW < 6 && withID {
+		idW = 0
+		nameW = contentW - 10 - shortW
+	}
+	if nameW < 6 {
+		shortW = clampInt(contentW-16, 3, 7)
+		nameW = contentW - 10 - shortW
+	}
+	if nameW < 1 {
+		nameW = 1
+	}
+
+	nameStyle := stRow
+	if a.Triage != model.Undecided {
+		nameStyle = stRowDim
+	}
+
+	parts := []string{
+		mark + flagGlyph(a.Triage),
+		stCode.Render(pad(m.shortCode(a.CourseID), shortW, false)),
+		stRowDim.Render(listDate(a)),
+	}
+	if idW > 0 {
+		parts = append(parts, stRowDim.Render(pad(a.ID, idW, false)))
+	}
+	parts = append(parts, nameStyle.Render(truncate(a.Name, nameW)))
+	return strings.Join(parts, " ")
+}
+
+// ---- Tasks: list layout (two panes) ----
+
+func (m *App) listLines(w, budget int) []string {
+	cw := w - 4
+	leftW := cw * 54 / 100
+	rightW := cw - leftW - 1
+
+	listRows := maxInt(1, budget-7)
+	items := m.visible()
+	start, end := windowRange(len(items), m.taskCursor, listRows)
+
+	rows := make([]string, 0, end-start+1)
+	if len(items) == 0 {
+		rows = append(rows, stEmpty.Render("nothing matches this filter"))
+	}
+	for i := start; i < end; i++ {
+		rows = append(rows, m.assignRow(items[i], leftW-4, i == m.taskCursor, true))
+	}
+
+	var detail []string
+	if len(items) > 0 && m.taskCursor < len(items) {
+		detail = m.detailRows(items[m.taskCursor], rightW-4)
+	}
+
+	left := panel("list", leftW, rows)
+	right := panel(m.detailTitle(items), rightW, detail)
+
+	body := []string{
+		chips(m.filter, filterNames, m.layout.String()+" · course: all ▾", cw),
+		"",
+	}
+	body = append(body, sideBySide(left, leftW, right, rightW)...)
+	body = append(body, "", m.statusLine(cw))
+	body = append(body, m.hintsLine(cw, "tasks"))
+	return body
+}
+
+func (m *App) detailTitle(items []model.Assignment) string {
+	if len(items) > 0 && m.taskCursor < len(items) {
+		a := items[m.taskCursor]
+		return a.ID + " · " + m.shortCode(a.CourseID)
+	}
+	return "detail"
+}
+
+func (m *App) detailRows(a model.Assignment, width int) []string {
 	now := time.Now()
-	rows := make([][]cell, 0, len(m.assignments))
-	for _, a := range m.assignments {
-		dueStyle, dueText := dueCell(a, now)
-		stStyle := statusStyle(a.Status)
-		nameStyle := stRow
-		if a.Status == model.Done {
-			nameStyle = stRowDim
-		}
-		rows = append(rows, []cell{
-			{dueText, 10, dueStyle, false},
-			{a.CourseCode, 11, stCode, false},
-			{a.Status.Glyph() + " " + a.Status.String(), 9, stStyle, false},
-			{a.Name, flexW, nameStyle, false},
-		})
+	due, dueStyle := dueInfo(a, now)
+
+	rows := []string{
+		stRow.Bold(true).Render(truncate(a.Name, width)),
+		"",
+		kv("due", due, dueStyle),
+		kv("LMS", "submit: unknown", stRowDim),
+		kv("flag", a.Triage.String(), triageStyle(a.Triage)),
 	}
-	return m.tableView(headers, rows, m.cursors[SecAssignments])
+	if a.EstMinutes > 0 {
+		est := fmt.Sprintf("%d min", a.EstMinutes)
+		if a.Goal != "" {
+			est += " · " + a.Goal
+		}
+		rows = append(rows, kv("est", est, stRowDim))
+	}
+	rows = append(rows, "", stLabel.Render("would write to tasks.md:"))
+	for _, ln := range wrapCell(m.taskLine(a), width) {
+		rows = append(rows, stRowDim.Render(ln))
+	}
+	if a.Overdue(now) {
+		rows = append(rows, stOverdue.Render("  ! OVERDUE"))
+	}
+	if dup := m.similarManualTask(a); dup != "" {
+		rows = append(rows, stLabel.Render("similar manual task:"))
+		rows = append(rows, stRowDim.Render(truncate(`"`+dup+`" (duplicate?)`, width)))
+	}
+	return rows
 }
 
-func (m *App) materialsView() string {
-	flexW := m.flex(3, 8, 9, 8)
-	headers := []cell{
-		t("", 3), t("WEEK", 8), t("MATERIAL", flexW), t("SIZE", 9), t("STATE", 8),
+// similarManualTask is a demo stand-in for the future working/ cross-check.
+func (m *App) similarManualTask(a model.Assignment) string {
+	if a.Triage != model.Undecided || !strings.Contains(strings.ToLower(a.Name), "progress report 5") {
+		return ""
 	}
-	rows := make([][]cell, 0, len(m.materials))
-	for _, mt := range m.materials {
-		sel, selStyle := "[ ]", stRowDim
-		if m.selected[mt.ID] {
-			sel, selStyle = "[×]", stDone
+	return "Submit " + m.shortCode(a.CourseID) + " Report 5"
+}
+
+func (m *App) taskLine(a model.Assignment) string {
+	due := ""
+	if a.HasDue {
+		due = " due:" + a.Due.Format("2006-01-02")
+	}
+	return fmt.Sprintf("- [ ] [%s] %s (%s)%s", m.shortCode(a.CourseID), a.Name, a.ID, due)
+}
+
+// ---- Tasks: board layout (2x2 buckets) ----
+
+func (m *App) boardLines(w, budget int) []string {
+	cw := w - 4
+	colW := (cw - 1) / 2
+	colW2 := cw - 1 - colW
+
+	avail := maxInt(4, budget-4) // chips, blank, blank, hints
+	panelH := (avail - 1) / 2
+	listRows := maxInt(1, panelH-2)
+
+	col := func(idx, width int) []string {
+		items := m.boardItems(idx)
+		cursor := m.boardCursor[idx]
+		start, end := windowRange(len(items), cursor, listRows)
+		out := make([]string, 0, end-start+1)
+		if len(items) == 0 {
+			out = append(out, stEmpty.Render("—"))
+		}
+		for i := start; i < end; i++ {
+			out = append(out, m.assignRow(items[i], width-4, i == cursor && idx == m.boardCol, false))
+		}
+		return out
+	}
+	title := func(idx int) string {
+		return fmt.Sprintf("%s %d", boardOrder[idx].String(), len(m.boardItems(idx)))
+	}
+
+	row1 := sideBySide(panel(title(0), colW, col(0, colW)), colW, panel(title(1), colW2, col(1, colW2)), colW2)
+	row2 := sideBySide(panel(title(2), colW, col(2, colW)), colW, panel(title(3), colW2, col(3, colW2)), colW2)
+
+	body := []string{chips(m.filter, filterNames, m.layout.String()+" · course: all ▾", cw), ""}
+	body = append(body, row1...)
+	body = append(body, "")
+	body = append(body, row2...)
+	body = append(body, m.hintsLine(cw, "tasks"))
+	return body
+}
+
+// ---- Tasks: wizard layout ----
+
+func (m *App) wizardLines(w, budget int) []string {
+	cw := w - 4
+	body := []string{"", m.stepRail(m.wizStep), ""}
+
+	switch m.wizStep {
+	case 0:
+		body = append(body, m.wizStepAttempt(cw)...)
+		body = append(body, "   "+stKey.Render("↑↓")+stRowDim.Render(" move · ")+stKey.Render("space")+stRowDim.Render(" toggle · ")+stKey.Render("a")+stRowDim.Render(" all · ")+stKey.Render("enter")+stRowDim.Render(" confirm"))
+	case 1:
+		body = append(body, m.wizStepAction(cw)...)
+		body = append(body, "   "+stKey.Render("t")+stRowDim.Render(" track · ")+stKey.Render("m")+stRowDim.Render(" missed · ")+stKey.Render("i")+stRowDim.Render(" ignore · ")+stKey.Render("enter")+stRowDim.Render(" apply"))
+	case 2:
+		body = append(body, m.wizStepReview(cw)...)
+		body = append(body, "   "+stKey.Render("enter")+stRowDim.Render(" apply · ")+stKey.Render("esc")+stRowDim.Render(" back"))
+	default:
+		body = append(body, m.wizStepDone(cw)...)
+	}
+
+	body = append(body, "", m.statusLine(cw), m.hintsLine(cw, "wizard"))
+	return body
+}
+
+func (m *App) stepRail(step int) string {
+	labels := []string{"Preflight", "Select", "Action", "Review", "Done"}
+	parts := make([]string, len(labels))
+	for i, l := range labels {
+		switch {
+		case i == 0, i-1 < step:
+			parts[i] = stDone.Render("└ ") + stRowDim.Render(l)
+		case i-1 == step:
+			parts[i] = stSection.Render("◆ ") + stSection.Render(l)
+		default:
+			parts[i] = stStep.Render("◇ ") + stLabel.Render(l)
+		}
+	}
+	return "  " + strings.Join(parts, stRowDim.Render("   "))
+}
+
+func (m *App) wizStepAttempt(w int) []string {
+	out := []string{stStep.Render("◇ ") + stLabel.Bold(true).Render("Select assignments to decide"), ""}
+	items := m.visible()
+	start, end := windowRange(len(items), m.taskCursor, 6)
+	for i := start; i < end; i++ {
+		a := items[i]
+		box := stCheckOff.Render("◻")
+		if m.selected[a.ID] {
+			box = stCheckOn.Render("◼")
+		}
+		out = append(out, "  "+box+" "+m.assignRow(a, w-5, false, true))
+	}
+	return out
+}
+
+func (m *App) wizStepAction(w int) []string {
+	out := []string{stSection.Render("◆ ") + stSection.Render(fmt.Sprintf("Action for %d selected", len(m.selected))), ""}
+	for _, t := range []model.Triage{model.Tracked, model.Missed, model.Ignored} {
+		mark := "  "
+		if t == m.wizAction {
+			mark = stSection.Render("▸ ")
+		}
+		extra := ""
+		if t == model.Tracked {
+			extra = stRowDim.Render("   (est 60 · goal G-college)")
+		}
+		out = append(out, "   "+mark+triageStyle(t).Render(t.String())+extra)
+	}
+	return out
+}
+
+func (m *App) wizStepReview(w int) []string {
+	out := []string{stStep.Render("◇ ") + stLabel.Bold(true).Render("Review: lines to be written"), ""}
+	if len(m.pending) == 0 {
+		return append(out, "   "+stRowDim.Render("nothing queued"))
+	}
+	n := 0
+	for id := range m.pending {
+		a := m.byID(id)
+		if a == nil {
+			continue
+		}
+		out = append(out, "   "+stRowDim.Render(truncate(m.taskLine(*a), w-3)))
+		if a.Overdue(time.Now()) {
+			out = append(out, "     "+stOverdue.Render("! will show as OVERDUE"))
+		}
+		n++
+		if n >= 6 {
+			out = append(out, "   "+stRowDim.Render(fmt.Sprintf("… and %d more", len(m.pending)-n)))
+			break
+		}
+	}
+	return out
+}
+
+func (m *App) wizStepDone(w int) []string {
+	mode := "nothing written yet (dry-run)"
+	if !m.dryRun {
+		mode = "written"
+	}
+	return []string{
+		stStep.Render("◇ ") + stLabel.Bold(true).Render("Writing"),
+		"   " + stDone.Render("today.py before ✓") + stRowDim.Render(" · "+mode+" · ") + stDone.Render("today.py after ✓"),
+		"",
+		stDone.Render("└ ") + stValue.Render("Done.") + "  " + stRowDim.Render("Undo: git -C ~/docs/working restore tasks.md"),
+	}
+}
+
+// ---- Materials ----
+
+func (m *App) materialsLines(w, budget int) []string {
+	cw := w - 4
+	rowsBudget := maxInt(1, budget-6)
+
+	// fixed cells: sel(3)+week(8)+size(9)+state(8) + 4 separators = 32
+	flexW := maxInt(10, cw-2-32)
+	head := t("", 3) + " " + t("WEEK", 8) + " " + t("MATERIAL", flexW) + " " + t("SIZE", 9) + " " + t("STATE", 8)
+
+	start, end := windowRange(len(m.materials), m.matCursor, rowsBudget)
+	lines := []string{"  " + head}
+	if len(m.materials) == 0 {
+		lines = append(lines, stEmpty.Render("  nothing here"))
+	}
+	for i := start; i < end; i++ {
+		mt := m.materials[i]
+		sel := "[ ]"
+		if m.selectedM[mt.ID] {
+			sel = "[×]"
 		}
 		week := mt.Section
 		if week == "" {
 			week = "—"
 		}
-		state, stateStyle := materialState(mt, m.progress[mt.ID])
-		rows = append(rows, []cell{
-			{sel, 3, selStyle, false},
-			{week, 8, stRowDim, false},
-			{mt.Name, flexW, stRow, false},
-			{humanSize(mt.Size), 9, stRowDim, true},
-			{state, 8, stateStyle, false},
-		})
+		state, stateStyle := materialState(mt)
+
+		plain := pad(sel, 3, false) + " " + pad(week, 8, false) + " " +
+			pad(truncate(mt.Name, flexW), flexW, false) + " " +
+			pad(humanSize(mt.Size), 9, true) + " " + pad(state, 8, false)
+		styled := stRowDim.Render(pad(sel, 3, false)) + " " +
+			stRowDim.Render(pad(week, 8, false)) + " " +
+			stRow.Render(pad(truncate(mt.Name, flexW), flexW, false)) + " " +
+			stRowDim.Render(pad(humanSize(mt.Size), 9, true)) + " " +
+			stateStyle.Render(pad(state, 8, false))
+
+		if i == m.matCursor {
+			lines = append(lines, stCursorGutter.Render("▌")+" "+stRowCursor.Render(plain))
+			continue
+		}
+		lines = append(lines, "  "+styled)
 	}
-	return m.tableView(headers, rows, m.cursors[SecMaterials])
+	lines = append(lines, "", m.materialStatus(cw), m.hintsLine(cw, "materials"))
+	return lines
 }
 
-func (m *App) downloadsView() string {
-	if len(m.queue) == 0 {
-		done := 0
-		for _, mt := range m.materials {
-			if mt.Downloaded {
-				done++
-			}
-		}
-		msg := fmt.Sprintf("  No active downloads.\n\n  %d file(s) already local.\n  Press %s on the Materials tab to queue one.",
-			done, stCode.Render("d"))
-		return "\n" + msg + "\n"
-	}
-	var b strings.Builder
-	b.WriteString("\n")
-	for _, id := range m.queue {
-		name := id
-		for _, mt := range m.materials {
-			if mt.ID == id {
-				name = mt.Name
-				break
-			}
-		}
-		frac := m.progress[id]
-		b.WriteString(fmt.Sprintf("  %s\n", name))
-		b.WriteString("    " + renderBar(frac, m.flex(0)) + " " + stRowDim.Render(fmt.Sprintf("%3.0f%%", frac*100)) + "\n\n")
-	}
-	return b.String()
-}
-
-func (m *App) tableView(headers []cell, rows [][]cell, cursor int) string {
-	var b strings.Builder
-	b.WriteString("  " + renderCells(headers, true, true) + "\n")
-	start, end := windowRange(len(rows), cursor, m.bodyHeight()-1)
-	if len(rows) == 0 {
-		b.WriteString(stEmpty.Render("  nothing here") + "\n")
-		return b.String()
-	}
-	for i := start; i < end; i++ {
-		if i == cursor {
-			plain := renderCells(rows[i], true, false)
-			line := stCursorGutter.Render("▌") + " " + stRowCursor.Render(pad(plain, m.contentWidth(), false))
-			b.WriteString(line + "\n")
-		} else {
-			b.WriteString("  " + renderCells(rows[i], false, false) + "\n")
+func (m *App) materialStatus(w int) string {
+	local := 0
+	for _, mt := range m.materials {
+		if mt.Downloaded {
+			local++
 		}
 	}
-	return strings.TrimRight(b.String(), "\n")
+	left := stRowDim.Render(fmt.Sprintf("%d local · %d missing", local, len(m.materials)-local))
+	right := stKey.Render("[d]") + " " + stRowDim.Render("download")
+	return spread(left, right, w)
 }
 
-// ---- helpers ----
-
-func (m *App) contentWidth() int {
-	if m.width-2 < 20 {
-		return 20
-	}
-	return m.width - 2
-}
-
-func (m *App) bodyHeight() int {
-	h := m.height - 5 // header, tabs, rule, rule, footer
-	if h < 3 {
-		return 3
-	}
-	return h
-}
-
-// flex computes the width of the final, flexible column.
-func (m *App) flex(fixed ...int) int {
-	sum := 0
-	for _, w := range fixed {
-		sum += w
-	}
-	rest := m.contentWidth() - sum - len(fixed)
-	if rest < 8 {
-		rest = 8
-	}
-	return rest
-}
-
-func t(s string, w int) cell {
-	return cell{text: s, width: w, style: stHeaderDim.Bold(true)}
-}
-
-func renderCells(cells []cell, plain bool, head bool) string {
-	parts := make([]string, len(cells))
-	for i, c := range cells {
-		p := pad(c.text, c.width, c.right)
-		switch {
-		case plain && head:
-			parts[i] = stHeaderDim.Bold(true).Render(p)
-		case plain:
-			parts[i] = p
-		default:
-			parts[i] = c.style.Render(p)
-		}
-	}
-	return strings.Join(parts, " ")
-}
-
-func pad(s string, w int, right bool) string {
-	s = truncate(s, w)
-	n := w - lipgloss.Width(s)
-	if n <= 0 {
-		return s
-	}
-	if right {
-		return strings.Repeat(" ", n) + s
-	}
-	return s + strings.Repeat(" ", n)
-}
-
-func truncate(s string, w int) string {
-	if lipgloss.Width(s) <= w {
-		return s
-	}
-	r := []rune(s)
-	if w <= 1 {
-		return string(r[:w])
-	}
-	return string(r[:w-1]) + "…"
-}
-
-func windowRange(total, cursor, height int) (int, int) {
-	if height < 1 {
-		height = 1
-	}
-	if total <= height {
-		return 0, total
-	}
-	start := cursor - height/2
-	if start < 0 {
-		start = 0
-	}
-	if start+height > total {
-		start = total - height
-	}
-	return start, start + height
-}
-
-func renderBar(frac float64, width int) string {
-	if width < 4 {
-		width = 20
-	}
-	if frac < 0 {
-		frac = 0
-	}
-	if frac > 1 {
-		frac = 1
-	}
-	filled := int(frac * float64(width))
-	return stDone.Render(strings.Repeat("█", filled)) +
-		strings.Repeat("░", width-filled)
-}
-
-func humanSize(n int64) string {
-	if n <= 0 {
-		return "—"
-	}
-	const unit = 1024
-	if n < unit {
-		return fmt.Sprintf("%d B", n)
-	}
-	units := []string{"KB", "MB", "GB"}
-	f := float64(n)
-	i := -1
-	for f >= unit && i < len(units)-1 {
-		f /= unit
-		i++
-	}
-	return fmt.Sprintf("%.1f %s", f, units[i])
-}
-
-func dueCell(a model.Assignment, now time.Time) (lipgloss.Style, string) {
-	if !a.HasDue {
-		return stIgnored, "no due"
-	}
-	text := a.Due.Format("2006-01-02")
-	switch {
-	case a.Status == model.Done:
-		return stDone, text
-	case a.Due.Before(now):
-		return stOverdue, text
-	case a.Due.Sub(now) < 72*time.Hour:
-		return stSoon, text
-	default:
-		return stRowDim, text
-	}
-}
-
-func statusStyle(s model.Status) lipgloss.Style {
-	switch s {
-	case model.Done:
-		return stDone
-	case model.Doing:
-		return stDoing
-	case model.Ignored:
-		return stIgnored
-	default:
-		return stTodo
-	}
-}
-
-func materialState(mt model.Material, prog float64) (string, lipgloss.Style) {
-	if prog > 0 && prog < 1 {
-		return "↓ " + fmt.Sprintf("%d%%", int(prog*100)), stSoon
-	}
+func materialState(mt model.Material) (string, lipgloss.Style) {
 	if mt.Downloaded {
 		return "local", stDone
 	}
@@ -425,9 +375,188 @@ func materialState(mt model.Material, prog float64) (string, lipgloss.Style) {
 	return "new", stRowDim
 }
 
-func dueCountStyle(n int) lipgloss.Style {
-	if n == 0 {
-		return stRowDim
+// ---- Today (dashboard) ----
+
+func (m *App) todayLines(w, budget int) []string {
+	cw := w - 4
+	leftW := cw * 54 / 100
+	rightW := cw - leftW - 1
+
+	now := time.Now()
+	var overdue, today, soon []model.Assignment
+	for _, a := range m.assignments {
+		switch {
+		case a.Overdue(now):
+			overdue = append(overdue, a)
+		case a.HasDue && sameDay(a.Due, now):
+			today = append(today, a)
+		case a.HasDue && a.Due.After(now) && a.Due.Before(now.AddDate(0, 0, 4)):
+			soon = append(soon, a)
+		}
 	}
-	return stSoon
+	sortSlice(overdue)
+	sortSlice(today)
+	sortSlice(soon)
+
+	todayRows := []string{}
+	todayRows = append(todayRows, stOverdue.Render(fmt.Sprintf("OVERDUE  %d", len(overdue))))
+	todayRows = append(todayRows, m.dashItems(overdue, 3, leftW-4)...)
+	todayRows = append(todayRows, "", stSoon.Render(fmt.Sprintf("DUE TODAY  %d", len(today))))
+	todayRows = append(todayRows, m.dashItems(today, 2, leftW-4)...)
+	todayRows = append(todayRows, "", stRowDim.Render(fmt.Sprintf("NEXT 3 DAYS  %d", len(soon))))
+	todayRows = append(todayRows, m.dashItems(soon, 3, leftW-4)...)
+
+	und, tr, mi, ig := m.triageCounts()
+	triageRows := []string{
+		bar("tracked", tr, len(m.assignments), rightW-4),
+		bar("missed", mi, len(m.assignments), rightW-4),
+		bar("ignored", ig, len(m.assignments), rightW-4),
+		bar("undecided", und, len(m.assignments), rightW-4),
+		"",
+		stSoon.Render(fmt.Sprintf("%d past-due undecided", m.overdueCount())),
+		stRowDim.Render("→ ") + stKey.Render("[c]") + stRowDim.Render(" review & commit"),
+	}
+
+	syncRows := []string{
+		stRowDim.Render("backup ") + stDone.Render("0d") + stRowDim.Render(" · sync ") + stSoon.Render("1/2 today") + stRowDim.Render(" · cookie ") + stDone.Render("ok"),
+		stRowDim.Render("last sync 2026-10-18 07:12 · 4 courses · 2 new materials"),
+		stKey.Render("[s]") + stRowDim.Render(" sync now   ") + stKey.Render("[1]") + stRowDim.Render(" tasks   ") + stKey.Render("[c]") + stRowDim.Render(" review & commit"),
+	}
+
+	body := []string{chips("today", []string{"today", "courses", "materials", "sync"}, "smt11 ▾", cw), ""}
+	body = append(body, sideBySide(panel("today", leftW, todayRows), leftW, panel("triage", rightW, triageRows), rightW)...)
+	body = append(body, "")
+	body = append(body, panel("sync", cw, syncRows)...)
+	body = append(body, m.hintsLine(cw, "today"))
+	return body
+}
+
+func (m *App) dashItems(items []model.Assignment, limit, contentW int) []string {
+	out := []string{}
+	for i, a := range items {
+		if i >= limit {
+			out = append(out, stRowDim.Render(truncate(fmt.Sprintf("  … %d more", len(items)-limit), contentW)))
+			break
+		}
+		out = append(out, "  "+m.assignRow(a, contentW-2, false, false))
+	}
+	return out
+}
+
+// ---- Sync ----
+
+func (m *App) syncLines(w, budget int) []string {
+	cw := w - 4
+	und, tr, mi, ig := m.triageCounts()
+	rows := []string{
+		kv("state", "idle", stRowDim),
+		kv("today", "1/2 runs", stSoon),
+		kv("cookie", "ok (expires in ~6h)", stDone),
+		kv("backup", "0d old · ~/.local/share/kamps/backups", stRowDim),
+		"",
+		stLabel.Render("local library"),
+		stRowDim.Render("  ~/Documents/kamps/<course>/<week>/"),
+		"",
+		stLabel.Render("triaged"),
+		stRowDim.Render(fmt.Sprintf("  tracked %d · missed %d · ignored %d · undecided %d", tr, mi, ig, und)),
+		"",
+		stKey.Render("[s]") + stRowDim.Render(" run a sync   ") + stKey.Render("[b]") + stRowDim.Render(" back up state"),
+	}
+	body := []string{chips("sync", []string{"status", "runs", "library"}, m.src.Label(), cw), ""}
+	body = append(body, panel("sync", cw, rows)...)
+	body = append(body, m.hintsLine(cw, "sync"))
+	return body
+}
+
+// ---- small helpers ----
+
+func (m *App) hintsLine(w int, where string) string {
+	var items []string
+	switch where {
+	case "materials":
+		items = []string{"↑↓ move", "space select", "d download", "/ filter", "tab", "? help", "q quit"}
+	case "today":
+		items = []string{"1 tasks", "c review", "s sync", "? help", "q quit"}
+	case "sync":
+		items = []string{"s sync", "? help", "q quit"}
+	case "wizard":
+		items = []string{"↑↓ move", "space toggle", "enter confirm", "esc back", "? help"}
+	default:
+		items = []string{"↑↓ move", "space select", "t/m/i/u triage", "/ filter", "v view", "c commit", "? help"}
+	}
+	return hints(hintsFit(items, w))
+}
+
+func t(s string, w int) string {
+	return stHeaderDim.Bold(true).Render(pad(s, w, false))
+}
+
+func listDate(a model.Assignment) string {
+	if !a.HasDue {
+		return "  —  "
+	}
+	return a.Due.Format("01-02")
+}
+
+func dueInfo(a model.Assignment, now time.Time) (string, lipgloss.Style) {
+	if !a.HasDue {
+		return "no due date", stIgnored
+	}
+	date := a.Due.Format("2006-01-02")
+	switch {
+	case a.Overdue(now):
+		return fmt.Sprintf("%s (%dd overdue)", date, -daysBetween(now, a.Due)), stOverdue
+	case sameDay(a.Due, now):
+		return date + " (today)", stSoon
+	case a.Due.After(now) && a.Due.Before(now.AddDate(0, 0, 4)):
+		return fmt.Sprintf("%s (%dd)", date, daysBetween(now, a.Due)), stSoon
+	default:
+		return date, stRowDim
+	}
+}
+
+func daysBetween(from, to time.Time) int {
+	return int(to.Sub(from).Hours() / 24)
+}
+
+func sameDay(a, b time.Time) bool {
+	ay, am, ad := a.Date()
+	by, bm, bd := b.Date()
+	return ay == by && am == bm && ad == bd
+}
+
+// wrapCell soft-wraps plain text to width, on spaces where possible.
+func wrapCell(s string, w int) []string {
+	if w < 8 {
+		w = 8
+	}
+	var out []string
+	for len(s) > w {
+		cut := w
+		for cut > 0 && s[cut] != ' ' {
+			cut--
+		}
+		if cut <= 0 {
+			cut = w
+		}
+		out = append(out, s[:cut])
+		s = strings.TrimLeft(s[cut:], " ")
+	}
+	return append(out, s)
+}
+
+func stripANSI(s string) string {
+	var b strings.Builder
+	inEsc := false
+	for _, r := range s {
+		switch {
+		case r == 0x1b:
+			inEsc = true
+		case inEsc && r == 'm':
+			inEsc = false
+		case !inEsc:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }

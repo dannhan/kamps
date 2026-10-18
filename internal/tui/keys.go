@@ -2,20 +2,28 @@ package tui
 
 import "github.com/charmbracelet/bubbles/key"
 
-// KeyMap is the single source of truth for keybindings. It also feeds the
-// help footer and the "?" overlay via the bubbles/help package.
+// KeyMap is the single source of truth for keybindings. The footer hints are
+// built by hand (see hints in frame.go); this drives the "?" overlay.
 type KeyMap struct {
-	Up       key.Binding
-	Down     key.Binding
-	NextTab  key.Binding
-	PrevTab  key.Binding
-	Select   key.Binding
-	Toggle   key.Binding
-	Download key.Binding
-	Sync     key.Binding
-	Back     key.Binding
-	Help     key.Binding
-	Quit     key.Binding
+	Up, Down    key.Binding
+	Left, Right key.Binding
+	NextTab     key.Binding
+	PrevTab     key.Binding
+	Select      key.Binding
+	Track       key.Binding
+	Missed      key.Binding
+	Ignore      key.Binding
+	Undecide    key.Binding
+	All         key.Binding
+	Commit      key.Binding
+	Layout      key.Binding
+	Filter      key.Binding
+	Sync        key.Binding
+	Download    key.Binding
+	Confirm     key.Binding
+	Back        key.Binding
+	Help        key.Binding
+	Quit        key.Binding
 }
 
 // DefaultKeys returns the default bindings.
@@ -23,27 +31,39 @@ func DefaultKeys() KeyMap {
 	return KeyMap{
 		Up:       key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
 		Down:     key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-		NextTab:  key.NewBinding(key.WithKeys("tab", "l"), key.WithHelp("tab", "section")),
-		PrevTab:  key.NewBinding(key.WithKeys("shift+tab", "h"), key.WithHelp("⇧tab", "prev section")),
+		Left:     key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/h", "left")),
+		Right:    key.NewBinding(key.WithKeys("right", "l"), key.WithHelp("→/l", "right")),
+		NextTab:  key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next tab")),
+		PrevTab:  key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("⇧tab", "prev tab")),
 		Select:   key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "select")),
-		Toggle:   key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "done")),
-		Download: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "download")),
+		Track:    key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "track")),
+		Missed:   key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "missed")),
+		Ignore:   key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "ignore")),
+		Undecide: key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "undecided")),
+		All:      key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "select all")),
+		Commit:   key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "review & commit")),
+		Layout:   key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "switch view")),
+		Filter:   key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),
 		Sync:     key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sync")),
-		Back:     key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "clear/back")),
+		Download: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "download")),
+		Confirm:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "confirm")),
+		Back:     key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		Help:     key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		Quit:     key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
 	}
 }
 
-// ShortHelp satisfies help.KeyMap (footer).
+// ShortHelp satisfies help.KeyMap.
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.NextTab, k.Select, k.Toggle, k.Download, k.Sync, k.Help, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.NextTab, k.Select, k.Track, k.Missed, k.Ignore, k.Commit, k.Layout, k.Help, k.Quit}
 }
 
 // FullHelp satisfies help.KeyMap (the "?" overlay).
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Up, k.Down, k.NextTab, k.PrevTab, k.Back},
-		{k.Select, k.Toggle, k.Download, k.Sync, k.Help, k.Quit},
+		{k.Up, k.Down, k.Left, k.Right, k.NextTab, k.PrevTab, k.Layout},
+		{k.Select, k.All, k.Track, k.Missed, k.Ignore, k.Undecide},
+		{k.Commit, k.Filter, k.Sync, k.Download, k.Confirm, k.Back},
+		{k.Help, k.Quit},
 	}
 }

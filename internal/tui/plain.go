@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"sort"
 	"time"
 
 	"github.com/ruyam/kamps/internal/model"
@@ -19,36 +18,26 @@ func PrintPlain(w io.Writer, src source.Source) {
 	courses, _ := src.Courses(ctx)
 	assignments, _ := src.Assignments(ctx)
 	materials, _ := src.Materials(ctx)
-
-	sort.Slice(courses, func(i, j int) bool { return courses[i].Name < courses[j].Name })
-	sort.Slice(assignments, func(i, j int) bool { return lessAssignment(assignments[i], assignments[j]) })
+	sortSlice(assignments)
 
 	fmt.Fprintf(w, "kamps (plain mode) — source: %s\n", src.Label())
 	fmt.Fprintf(w, "%d courses · %d assignments · %d materials\n", len(courses), len(assignments), len(materials))
 
-	fmt.Fprintf(w, "\nCOURSES\n")
-	for _, c := range courses {
-		tag := ""
-		if c.HasPraktikum {
-			tag = "  [praktikum]"
-		}
-		if c.Source != "lms" {
-			tag = "  [" + c.Source + "]"
-		}
-		fmt.Fprintf(w, "  %-28s %-11s%s\n", c.Name, c.Code, tag)
-	}
-
-	now := time.Now()
 	fmt.Fprintf(w, "\nASSIGNMENTS\n")
+	now := time.Now()
 	for _, a := range assignments {
 		due := "no due"
 		if a.HasDue {
 			due = a.Due.Format("2006-01-02")
-			if a.Status != model.Done && a.Due.Before(now) {
+			if a.Overdue(now) {
 				due += " (overdue)"
 			}
 		}
-		fmt.Fprintf(w, "  %-16s %-10s %-8s %s\n", due, a.CourseCode, a.Status.String(), a.Name)
+		flag := a.Triage.Letter()
+		if flag == "" {
+			flag = "-"
+		}
+		fmt.Fprintf(w, "  [%s] %-16s %-10s %-9s %s\n", flag, due, shortOf(courses, a.CourseID), a.Triage.String(), a.Name)
 	}
 
 	fmt.Fprintf(w, "\nMATERIALS\n")
@@ -57,10 +46,25 @@ func PrintPlain(w io.Writer, src source.Source) {
 		if mt.Downloaded {
 			state = "local"
 		}
-		week := mt.Section
-		if week == "" {
-			week = "—"
-		}
-		fmt.Fprintf(w, "  %-8s %-6s %-40s %s\n", week, state, mt.Name, humanSize(mt.Size))
+		fmt.Fprintf(w, "  %-8s %-6s %-40s %s\n", sectionOr(mt.Section), state, mt.Name, humanSize(mt.Size))
 	}
+}
+
+func shortOf(courses []model.Course, id int) string {
+	for _, c := range courses {
+		if c.ID == id {
+			if c.Short != "" {
+				return c.Short
+			}
+			return c.Code
+		}
+	}
+	return "—"
+}
+
+func sectionOr(s string) string {
+	if s == "" {
+		return "—"
+	}
+	return s
 }
