@@ -37,7 +37,6 @@ type Tab int
 const (
 	TabTasks Tab = iota
 	TabMaterials
-	TabToday
 	TabSync
 	tabCount
 )
@@ -48,8 +47,6 @@ func (t Tab) String() string {
 		return "Tasks"
 	case TabMaterials:
 		return "Materials"
-	case TabToday:
-		return "Today"
 	case TabSync:
 		return "Sync"
 	}
@@ -80,6 +77,30 @@ func (l Layout) String() string {
 		return "wizard"
 	}
 	return "?"
+}
+
+// viewCycle is what `v` steps through. The board and the wizard are not in the
+// daily rotation: the wizard opens with `c`, the board is parked for now.
+var viewCycle = []Layout{LayDashboard, LayList}
+
+// nextLayout returns the view `v` should switch to from the current one.
+func (l Layout) next() Layout {
+	for i, cand := range viewCycle {
+		if cand == l {
+			return viewCycle[(i+1)%len(viewCycle)]
+		}
+	}
+	return viewCycle[0]
+}
+
+// inViewCycle reports whether a layout is reachable with `v`.
+func (l Layout) inViewCycle() bool {
+	for _, cand := range viewCycle {
+		if cand == l {
+			return true
+		}
+	}
+	return false
 }
 
 // filters, cycled with "/".
@@ -116,6 +137,9 @@ type App struct {
 	wizStep   int // 0 select, 1 action, 2 review, 3 done
 	wizAction model.Triage
 
+	// returnLayout is where `esc` goes back to when the wizard closes.
+	returnLayout Layout
+
 	spinner    spinner.Model
 	syncing    bool
 	syncTicks  int
@@ -138,21 +162,23 @@ func New(src source.Source, cfg config.Config, version string) *App {
 	h := help.New()
 
 	return &App{
-		src:       src,
-		cfg:       cfg,
-		ver:       version,
-		keys:      DefaultKeys(),
-		help:      h,
-		filter:    "all",
-		selected:  map[string]bool{},
-		selectedM: map[string]bool{},
-		pending:   map[string]model.Triage{},
-		spinner:   sp,
-		wizAction: model.Tracked,
-		width:     88,
-		height:    24,
-		dryRun:    true,
-		noAnim:    cfg.NoAnim,
+		src:          src,
+		cfg:          cfg,
+		ver:          version,
+		keys:         DefaultKeys(),
+		help:         h,
+		filter:       "all",
+		layout:       viewCycle[0],
+		returnLayout: LayList,
+		selected:     map[string]bool{},
+		selectedM:    map[string]bool{},
+		pending:      map[string]model.Triage{},
+		spinner:      sp,
+		wizAction:    model.Tracked,
+		width:        100,
+		height:       30,
+		dryRun:       true,
+		noAnim:       cfg.NoAnim,
 	}
 }
 
@@ -262,9 +288,11 @@ func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "shift+tab":
 		m.tab = (m.tab + tabCount - 1) % tabCount
 	case "1", "2", "3", "4":
-		m.tab = Tab(int(msg.String()[0] - '1'))
+		if idx := int(msg.String()[0] - '1'); idx < int(tabCount) {
+			m.tab = Tab(idx)
+		}
 	case "v":
-		m.layout = (m.layout + 1) % layCount
+		m.layout = m.layout.next()
 	case "up", "k":
 		m.move(-1)
 	case "down", "j":
@@ -421,17 +449,72 @@ func (m *App) boardItems(col int) []model.Assignment {
 	return out
 }
 
-// dashAssignments is the Dashboard's backlog: everything still undecided,
-// oldest deadline first. It deliberately ignores the chip filter — the
-// Dashboard always answers "what is piling up?".
-func (m *App) dashAssignments() []model.Assignment {
-	out := make([]model.Assignment, 0, 8)
-	for _, a := range m.assignments {
-		if a.Triage == model.Undecided {
-			out = append(out, a)
+// ---- dashboard (today) data ----
+
+// dashPanelHeight is the height of the dashboard's top row (the today and
+// triage panels). It is derived from the terminal so the panel sizes and the
+// keyboard cursor can never disagree.
+func (m *App) dashPanelHeight() int {
+	return clampInt(m.boxHeight()-13, 5, 40)
+}
+
+// dashAlloc decides how many items each today section shows. Every non-empty
+// section is guaranteed a row, then whatever is left goes to the most urgent
+// section first — so a pile of overdue work can never hide what is coming up.
+func (m *App) dashAlloc(overdue, dueToday, soon []model.Assignment) [3]int {
+	items := [3][]model.Assignment{overdue, dueToday, soon}
+
+	content := maxInt(3, m.dashPanelHeight()-2)
+	left := maxInt(3, content-5) // three section headers + two spacer lines
+
+	var alloc [3]int
+	for i := range items {
+		if len(items[i]) > 0 && left > 0 {
+			alloc[i] = 1
+			left--
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return lessAssignment(out[i], out[j]) })
+	for i := range items {
+		if grow := minInt(len(items[i])-alloc[i], left); grow > 0 {
+			alloc[i] += grow
+			left -= grow
+		}
+	}
+	return alloc
+}
+
+// todayBuckets classifies the still-undecided assignments the dashboard shows:
+// past due, due today, and the next three days. Decided items are deliberately
+// absent — the dashboard is about what still needs you.
+func (m *App) todayBuckets() (overdue, dueToday, soon []model.Assignment) {
+	now := time.Now()
+	for _, a := range m.assignments {
+		switch {
+		case a.Overdue(now):
+			overdue = append(overdue, a)
+		case a.Triage != model.Undecided:
+			// decided: not the dashboard's business
+		case a.HasDue && sameDay(a.Due, now):
+			dueToday = append(dueToday, a)
+		case a.HasDue && a.Due.After(now) && a.Due.Before(now.AddDate(0, 0, 4)):
+			soon = append(soon, a)
+		}
+	}
+	sortSlice(overdue)
+	sortSlice(dueToday)
+	sortSlice(soon)
+	return
+}
+
+// dashShown is the ordered list of items the dashboard cursor walks, matching
+// exactly what the today panel draws.
+func (m *App) dashShown() []model.Assignment {
+	overdue, dueToday, soon := m.todayBuckets()
+	alloc := m.dashAlloc(overdue, dueToday, soon)
+	out := []model.Assignment{}
+	for i, items := range [3][]model.Assignment{overdue, dueToday, soon} {
+		out = append(out, items[:shownCount(alloc[i], len(items))]...)
+	}
 	return out
 }
 
@@ -446,7 +529,7 @@ func (m *App) focusedList() []model.Assignment {
 	case LayBoard:
 		return m.boardItems(m.boardCol)
 	case LayDashboard:
-		return m.dashAssignments()
+		return m.dashShown()
 	default:
 		return m.visible()
 	}
@@ -595,6 +678,12 @@ func (m *App) openCommit() {
 		m.toastTicks = 20
 		return
 	}
+	if m.layout != LayWizard {
+		m.returnLayout = m.layout
+		if !m.returnLayout.inViewCycle() {
+			m.returnLayout = viewCycle[0]
+		}
+	}
 	m.layout = LayWizard
 	if len(m.pending) > 0 {
 		m.wizStep = 2
@@ -608,7 +697,7 @@ func (m *App) wizardKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case "esc":
 		switch m.wizStep {
 		case 0, 3:
-			m.layout = LayList
+			m.layout = m.returnLayout
 			m.wizStep = 0
 		default:
 			m.wizStep--
@@ -642,7 +731,7 @@ func (m *App) wizardKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			m.toastTicks = 30
 			m.wizStep = 3
 		default:
-			m.layout = LayList
+			m.layout = m.returnLayout
 			m.wizStep = 0
 		}
 		return nil, true
@@ -714,27 +803,20 @@ func (m *App) advance() {
 
 // ---- view ----
 
-const (
-	maxBoxW = 100
-	maxBoxH = 30
-	minBoxW = 72
-	minBoxH = 10
-)
-
 func (m *App) boxWidth() int {
 	w := m.width
 	if w <= 0 {
-		w = 88
+		w = 100
 	}
-	return clampInt(w, minBoxW, maxBoxW)
+	return clampInt(w, 40, 400)
 }
 
 func (m *App) boxHeight() int {
 	h := m.height
 	if h <= 0 {
-		h = 24
+		h = 30
 	}
-	return clampInt(h-1, minBoxH, maxBoxH)
+	return clampInt(h, 10, 200)
 }
 
 func (m *App) View() string {
@@ -777,7 +859,6 @@ func (m *App) headerLeft(maxW int) string {
 	items := []item{
 		{fmt.Sprintf("Tasks %d", len(m.assignments)), m.tab == TabTasks},
 		{fmt.Sprintf("Materials %d", len(m.materials)), m.tab == TabMaterials},
-		{"Today", m.tab == TabToday},
 		{"Sync", m.tab == TabSync},
 	}
 	head := stHeader.Render("kamps")
@@ -788,13 +869,13 @@ func (m *App) headerLeft(maxW int) string {
 		if it.active {
 			seg = stTabOn.Render(it.label)
 		}
-		if used+2+lipgloss.Width(seg) > maxW {
+		if used+1+lipgloss.Width(seg) > maxW {
 			break
 		}
-		used += 2 + lipgloss.Width(seg)
+		used += 1 + lipgloss.Width(seg)
 		parts = append(parts, seg)
 	}
-	return strings.Join(parts, "  ")
+	return strings.Join(parts, " ")
 }
 
 func (m *App) headerRight() string {
@@ -804,7 +885,7 @@ func (m *App) headerRight() string {
 		}
 		return m.spinner.View() + stSoon.Render(" syncing")
 	}
-	return stLabel.Render("backup 0d · cookie ok")
+	return stLabel.Render("backup 0d · sync 1/2 · cookie ok")
 }
 
 func (m *App) bodyLines(w, budget int) []string {
@@ -822,8 +903,6 @@ func (m *App) bodyLines(w, budget int) []string {
 		}
 	case TabMaterials:
 		return m.materialsLines(w, budget)
-	case TabToday:
-		return m.todayLines(w, budget)
 	case TabSync:
 		return m.syncLines(w, budget)
 	}

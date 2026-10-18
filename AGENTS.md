@@ -46,7 +46,7 @@ Materials(ctx)   ([]model.Material, error)
   wrong; fix the abstraction instead.
 
 Other packages: `internal/model` (plain structs), `internal/tui` (`app.go` =
-Elm-style model/update + key handling, `views.go` = the four screens,
+Elm-style model/update + key handling, `views.go` = the screens/layouts,
 `frame.go` = hand-drawn boxes/chips/hints, `util.go` = pure helpers, `theme.go`
 = colours/styles, `keys.go` = keybindings, `plain.go` = no-TTY output),
 `internal/config` (paths/settings).
@@ -68,19 +68,29 @@ real, reviewed writer is added deliberately.
 
 ## Rendering invariants
 
-The UI renders **inline** (no `tea.WithAltScreen()`), sized to
-`clampInt(width, 72, 100)` × `clampInt(height-1, 10, 30)`, so shell history
-stays visible and small terminals still get a usable box.
+The UI runs **full-screen** (`tea.WithAltScreen()`), sized to the terminal:
+`clampInt(width, 40, 400)` × `clampInt(height, 10, 200)`. An inline mode was
+tried and parked; if you bring it back, it needs its own sizing rules.
 
 Every line of `App.View()` must be exactly `boxWidth()` columns. Overflows are
 caught by `TestViewAlignment` at 100/80/72 columns across every tab and Tasks
-layout (list · dashboard · board · wizard) — if you add a row or a column, keep
+layout (dashboard · list · board · wizard) — if you add a row or a column, keep
 it inside its width budget or extend `assignRow`/`chips`/`hintsFit`/`barW`, which
 already degrade (drop the id column, drop chips, drop hint items) rather than
 overflow. Never "fix" an overflow by widening the box past the terminal.
 
 Tasks layouts must all expose their rows through `App.focusedList()` so the
-cursor and `t`/`m`/`i`/`u` behave identically in every view.
+cursor and `t`/`m`/`i`/`u` behave identically in every view. `v` only cycles the
+layouts in `viewCycle`; the board and wizard are deliberately outside it.
+
+The **cursor row is always drawn as a solid bar** (`stRowCursor`) and a
+space-selected row always carries the `▪` marker — a highlight the user can see
+is not optional. `assignRow` is the single place rows are built, and it returns
+styled text of at most `contentW` columns; callers pad.
+
+The dashboard's today panel draws exactly the items `App.dashShown()` returns,
+and `dashAlloc` is the only thing that decides how many fit. If you change one
+without the other, the highlight lands on the wrong row.
 
 ## Conventions
 
@@ -88,8 +98,9 @@ cursor and `t`/`m`/`i`/`u` behave identically in every view.
   `View` is pure and returns a string. Never mutate state inside `View`.
 - **Style in one place.** Colours and text styles live in `internal/tui/theme.go`.
   The palette is Charm's defaults: adaptive 256-colour greys for structure plus
-  purple/pink accents. Keep it adaptive (works on light and dark terminals) and
-  do not scatter `lipgloss.NewStyle()` calls through the views.
+  purple/pink accents. Keep it adaptive (works on light and dark terminals),
+  keep contrast high, and do not scatter `lipgloss.NewStyle()` calls through the
+  views.
 - **Keys in one place.** Add bindings to `KeyMap` in `keys.go`; they drive the
   `?` overlay. The one-line footer hints are hand-built in `hintsLine`
   (`views.go`) because `bubbles/help` truncates; keep them short — `hintsFit`

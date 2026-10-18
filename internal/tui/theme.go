@@ -2,20 +2,23 @@ package tui
 
 import "github.com/charmbracelet/lipgloss"
 
-// The default Charm palette.
+// The default Charm palette, tuned for contrast first.
 //
 // These are the colours the Bubble Tea / Lip Gloss / Bubbles examples ship with:
-// ANSI-256 greys for structure plus Charm's purple and pink for accents. They are
-// adaptive, so the whole app stays readable whether your terminal is light or
+// ANSI-256 greys for structure plus Charm's purple and pink for accents. They
+// are adaptive, so the app stays readable whether your terminal is light or
 // dark — nothing here is a bespoke brand colour.
 //
-//	greys    252 body · 249 secondary · 243 muted · 240 structure  (dark terminal)
+//	greys    253 body · 248 secondary · 245 muted · 240 structure
 //	accents  62 purple (frame) · 212 pink (cursor/keys) · 170 plum (codes)
 //	meaning  42 green (tracked) · 214 orange (due soon) · 203 red (missed)
+//
+// The ladder is deliberately bright-ish: on a dark terminal 245/248 still read
+// clearly, which is where the earlier low-contrast greys failed.
 var (
-	colFg      = lipgloss.AdaptiveColor{Light: "234", Dark: "252"} // body text
-	colDim     = lipgloss.AdaptiveColor{Light: "238", Dark: "248"} // secondary text
-	colMuted   = lipgloss.AdaptiveColor{Light: "243", Dark: "243"} // tertiary / structure
+	colFg      = lipgloss.AdaptiveColor{Light: "235", Dark: "253"} // body text
+	colDim     = lipgloss.AdaptiveColor{Light: "240", Dark: "248"} // secondary text
+	colMuted   = lipgloss.AdaptiveColor{Light: "243", Dark: "245"} // tertiary / structure
 	colBorder  = lipgloss.AdaptiveColor{Light: "250", Dark: "240"} // inner panel borders
 	colFrame   = lipgloss.AdaptiveColor{Light: "62", Dark: "62"}   // outer frame — Charm purple
 	colAccent  = lipgloss.AdaptiveColor{Light: "162", Dark: "212"} // pink — cursor, keys, emphasis
@@ -25,6 +28,7 @@ var (
 	colRed     = lipgloss.AdaptiveColor{Light: "160", Dark: "203"} // missed / overdue
 	colSurface = lipgloss.AdaptiveColor{Light: "254", Dark: "236"}
 	colBarBG   = lipgloss.AdaptiveColor{Light: "252", Dark: "235"}
+	colOnBar   = lipgloss.AdaptiveColor{Light: "232", Dark: "232"} // text on a highlighted bar
 )
 
 // All text styles live here. Views compose these; they never call
@@ -35,21 +39,23 @@ var (
 	stHeaderDim = lipgloss.NewStyle().Foreground(colMuted).Bold(true)
 	stEmpty     = lipgloss.NewStyle().Foreground(colMuted).Italic(true)
 	stTitle     = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
-	stToast     = lipgloss.NewStyle().Foreground(colBarBG).Background(colGreen).Bold(true).Padding(0, 1)
+	stToast     = lipgloss.NewStyle().Foreground(colOnBar).Background(colGreen).Bold(true).Padding(0, 1)
 	stHelpBox   = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(colFrame).
 			Padding(1, 2)
 
-	// tabs
-	stTabOn  = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
-	stTabOff = lipgloss.NewStyle().Foreground(colMuted)
+	// tabs — the active one is filled, so "where am I" is never ambiguous
+	stTabOn  = lipgloss.NewStyle().Foreground(colOnBar).Background(colAccent).Bold(true).Padding(0, 1)
+	stTabOff = lipgloss.NewStyle().Foreground(colMuted).Padding(0, 1)
 
-	// list rows
+	// list rows — the cursor row is a solid bar, the strongest highlight we have
 	stRow          = lipgloss.NewStyle().Foreground(colFg)
 	stRowDim       = lipgloss.NewStyle().Foreground(colMuted)
-	stRowCursor    = lipgloss.NewStyle().Foreground(colBarBG).Background(colAccent).Bold(true)
+	stRowCursor    = lipgloss.NewStyle().Foreground(colOnBar).Background(colAccent).Bold(true)
 	stCursorGutter = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
+	stSelMark      = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
+	stSelName      = lipgloss.NewStyle().Foreground(colAccent)
 
 	// meaning
 	stDone    = lipgloss.NewStyle().Foreground(colGreen)
@@ -59,16 +65,17 @@ var (
 	stCode    = lipgloss.NewStyle().Foreground(colAccent2)
 
 	// boxes / frames
-	stFrame   = lipgloss.NewStyle().Foreground(colFrame)  // outer frame
-	stBorder  = lipgloss.NewStyle().Foreground(colBorder) // inner panels
-	stBoxTtl  = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
-	stLabel   = lipgloss.NewStyle().Foreground(colMuted)
-	stValue   = lipgloss.NewStyle().Foreground(colFg)
-	stKey     = lipgloss.NewStyle().Foreground(colAccent)
-	stSection = lipgloss.NewStyle().Foreground(colAccent).Bold(true) // ◆ active step
-	stStep    = lipgloss.NewStyle().Foreground(colMuted)             // ◇ pending step
-	stChipOn  = lipgloss.NewStyle().Foreground(colBarBG).Background(colAccent).Bold(true).Padding(0, 1)
-	stChipOff = lipgloss.NewStyle().Foreground(colMuted)
+	stFrame    = lipgloss.NewStyle().Foreground(colFrame)  // outer frame
+	stBorder   = lipgloss.NewStyle().Foreground(colBorder) // inner panels
+	stBoxTtl   = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
+	stLabel    = lipgloss.NewStyle().Foreground(colMuted)
+	stValue    = lipgloss.NewStyle().Foreground(colFg)
+	stKey      = lipgloss.NewStyle().Foreground(colAccent)
+	stSection  = lipgloss.NewStyle().Foreground(colAccent).Bold(true) // ◆ active step
+	stStep     = lipgloss.NewStyle().Foreground(colMuted)             // ◇ pending step
+	stChipOn   = lipgloss.NewStyle().Foreground(colOnBar).Background(colAccent).Bold(true).Padding(0, 1)
+	stChipOff  = lipgloss.NewStyle().Foreground(colMuted)
+	stBarEmpty = lipgloss.NewStyle().Foreground(colBorder) // empty track of a bar
 
 	// triage flags
 	stFlagT = lipgloss.NewStyle().Foreground(colGreen).Bold(true) // track

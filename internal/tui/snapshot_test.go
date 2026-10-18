@@ -45,9 +45,6 @@ func TestSnapshot(t *testing.T) {
 	m.selectedM[m.materials[2].ID] = true
 	t.Logf("\n== Materials ==\n%s", m.View())
 
-	m.tab = TabToday
-	t.Logf("\n== Today ==\n%s", m.View())
-
 	m.tab = TabSync
 	t.Logf("\n== Sync ==\n%s", m.View())
 }

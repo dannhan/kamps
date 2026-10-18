@@ -24,13 +24,21 @@ func (m *App) shortCode(courseID int) string {
 	return "—"
 }
 
-// assignRow renders one assignment line of exactly contentW columns, dropping
-// the id column and shrinking the course column when space is tight.
-func (m *App) assignRow(a model.Assignment, contentW int, cursor, withID bool) string {
+// assignRow renders one assignment line, at most contentW columns, dropping the
+// id column and shrinking the course column when space is tight.
+//
+// The cursor row is drawn as a solid bar — the strongest "you are here" we have
+// — and a space-selected row carries a filled ▪ marker in the gutter.
+func (m *App) assignRow(a model.Assignment, contentW int, cursor, selected, withID bool) string {
 	mark := " "
 	if cursor {
 		mark = stCursorGutter.Render("▌")
 	}
+	pick := " "
+	if selected {
+		pick = stSelMark.Render("▪")
+	}
+
 	shortW, idW := 7, 0
 	if contentW >= 40 {
 		shortW = 8 // room for the full short label ("strukdat")
@@ -38,26 +46,29 @@ func (m *App) assignRow(a model.Assignment, contentW int, cursor, withID bool) s
 	if withID {
 		idW = 8
 	}
-	nameW := contentW - 12 - shortW - idW
+	nameW := contentW - 13 - shortW - idW
 	if nameW < 6 && withID {
 		idW = 0
-		nameW = contentW - 10 - shortW
+		nameW = contentW - 11 - shortW
 	}
 	if nameW < 6 {
-		shortW = clampInt(contentW-16, 3, 7)
-		nameW = contentW - 10 - shortW
+		shortW = clampInt(contentW-17, 3, 7)
+		nameW = contentW - 11 - shortW
 	}
 	if nameW < 1 {
 		nameW = 1
 	}
 
 	nameStyle := stRow
-	if a.Triage != model.Undecided {
+	switch {
+	case selected:
+		nameStyle = stSelName
+	case a.Triage != model.Undecided:
 		nameStyle = stRowDim
 	}
 
 	parts := []string{
-		mark + flagGlyph(a.Triage),
+		mark + pick + flagGlyph(a.Triage),
 		stCode.Render(pad(m.shortCode(a.CourseID), shortW, false)),
 		stRowDim.Render(listDate(a)),
 	}
@@ -65,7 +76,12 @@ func (m *App) assignRow(a model.Assignment, contentW int, cursor, withID bool) s
 		parts = append(parts, stRowDim.Render(pad(a.ID, idW, false)))
 	}
 	parts = append(parts, nameStyle.Render(truncate(a.Name, nameW)))
-	return strings.Join(parts, " ")
+	row := strings.Join(parts, " ")
+
+	if cursor {
+		return stRowCursor.Render(pad(stripANSI(row), contentW, false))
+	}
+	return row
 }
 
 // ---- Tasks: list layout (two panes) ----
@@ -84,7 +100,7 @@ func (m *App) listLines(w, budget int) []string {
 		rows = append(rows, stEmpty.Render("nothing matches this filter"))
 	}
 	for i := start; i < end; i++ {
-		rows = append(rows, m.assignRow(items[i], leftW-4, i == m.taskCursor, true))
+		rows = append(rows, m.assignRow(items[i], leftW-4, i == m.taskCursor, m.selected[items[i].ID], true))
 	}
 
 	var detail []string
@@ -163,7 +179,19 @@ func (m *App) taskLine(a model.Assignment) string {
 
 // ---- Tasks: dashboard layout ----
 
-// courseStat is one row of the Dashboard's per-course breakdown.
+// shownCount is how many items of a section actually get a row: a section that
+// has to be truncated spends its last row on the "… N more" line instead.
+func shownCount(cap, total int) int {
+	if cap <= 0 || total <= 0 {
+		return 0
+	}
+	if total > cap {
+		return cap - 1
+	}
+	return total
+}
+
+// courseStat is one line of the dashboard's per-course breakdown.
 type courseStat struct {
 	code      string
 	undecided int
@@ -199,73 +227,116 @@ func (m *App) courseStats() []courseStat {
 	return out
 }
 
-// dashboardLines answers "what is piling up?": how the backlog splits, where it
-// comes from, and the oldest undecided items you can act on right here.
+// dashboardLines is the overview screen: what is overdue, due today and coming
+// up on the left; how the whole backlog splits on the right; sync state below.
+// Every item in the today panel is live — ↑↓ walks it and t/m/i/u decide it.
 func (m *App) dashboardLines(w, budget int) []string {
 	cw := w - 4
 	leftW := cw * 54 / 100
 	rightW := cw - leftW - 1
 
-	// chips(1) + blank(1) + blank(1) + blank(1) + status(1) + hints(1)
-	const reserved = 6
-	topH := clampInt((budget-reserved)/2, 5, 9)
-	bottomH := maxInt(3, budget-reserved-topH)
+	panelH := m.dashPanelHeight()
+	contentH := maxInt(1, panelH-2)
 
-	dash := m.dashAssignments()
+	overdue, dueToday, soon := m.todayBuckets()
+	alloc := m.dashAlloc(overdue, dueToday, soon)
+
+	// The today panel. The cursor index counts only *items*, in the same order
+	// dashShown() returns them, so the highlight always matches the keyboard.
+	todayRows := []string{}
+	n := 0
+	section := func(label string, items []model.Assignment, cap int, style lipgloss.Style) {
+		if n > 0 {
+			todayRows = append(todayRows, "")
+		}
+		todayRows = append(todayRows, style.Bold(true).Render(fmt.Sprintf("%s  %d", label, len(items))))
+		shown := shownCount(cap, len(items))
+		for i := 0; i < shown; i++ {
+			a := items[i]
+			todayRows = append(todayRows, m.assignRow(a, leftW-4, n == m.taskCursor, m.selected[a.ID], false))
+			n++
+		}
+		if shown < len(items) {
+			todayRows = append(todayRows, stRowDim.Render(fmt.Sprintf("   … %d more", len(items)-shown)))
+		}
+	}
+	section("OVERDUE", overdue, alloc[0], stOverdue)
+	section("DUE TODAY", dueToday, alloc[1], stSoon)
+	section("NEXT 3 DAYS", soon, alloc[2], stRowDim)
+	if len(todayRows) > contentH {
+		todayRows = todayRows[:contentH]
+	}
+
 	und, tr, mi, ig := m.triageCounts()
 	total := maxInt(1, len(m.assignments))
-	contentH := maxInt(1, topH-2)
-
-	backlogRows := []string{
-		bar("undecided", und, total, leftW-4),
-		bar("tracked", tr, total, leftW-4),
-		bar("missed", mi, total, leftW-4),
-		bar("ignored", ig, total, leftW-4),
-		"",
-		stSoon.Render(fmt.Sprintf("%d past-due still undecided", m.overdueCount())),
+	triageRows := []string{
+		bar("track", tr, total, rightW-4),
+		bar("missed", mi, total, rightW-4),
+		bar("ignore", ig, total, rightW-4),
+		bar("undecided", und, total, rightW-4),
 	}
-	if len(backlogRows) > contentH {
-		backlogRows = backlogRows[:contentH]
+	if contentH >= 6 {
+		triageRows = append(triageRows, "", stSoon.Render(fmt.Sprintf("%d past-due undecided", m.overdueCount())))
 	}
-
-	// Per-course rows, trimmed to the panel height.
-	courseRows := []string{}
-	stats := m.courseStats()
-	for i, s := range stats {
-		if i >= contentH {
-			courseRows = append(courseRows, stRowDim.Render(fmt.Sprintf("… %d more", len(stats)-contentH)))
-			break
+	if contentH >= 7 {
+		triageRows = append(triageRows, stRowDim.Render("→ ")+stKey.Render("[c]")+stRowDim.Render(" review & commit"))
+	}
+	// Whatever room is left goes to a compact per-course breakdown, so the
+	// panel says where the backlog actually lives.
+	if contentH-len(triageRows) >= 3 {
+		triageRows = append(triageRows, "", stLabel.Render("by course"))
+		for _, s := range m.courseStats() {
+			if len(triageRows) >= contentH {
+				break
+			}
+			barW := maxInt(3, (rightW-4)-15)
+			triageRows = append(triageRows, stCode.Render(pad(s.code, 8, false))+" "+
+				stValue.Render(fmt.Sprintf("%2d", s.undecided))+stRowDim.Render(fmt.Sprintf("/%-2d", s.total))+" "+
+				barCells(s.undecided, s.total, barW, stSoon))
 		}
-		// code(8) + " " + "nn/mm"(5) + " " + bar
-		barWidth := maxInt(3, (rightW-4)-15)
-		courseRows = append(courseRows, stCode.Render(pad(s.code, 8, false))+" "+
-			stValue.Render(fmt.Sprintf("%2d", s.undecided))+stRowDim.Render(fmt.Sprintf("/%-2d", s.total))+" "+
-			barCells(s.undecided, s.total, barWidth, stSoon))
 	}
-	if len(courseRows) == 0 {
-		courseRows = append(courseRows, stEmpty.Render("no courses"))
+	if len(triageRows) > contentH {
+		triageRows = triageRows[:contentH]
 	}
 
-	// The actionable list: oldest undecided first.
-	listRows := maxInt(1, bottomH-2)
-	start, end := windowRange(len(dash), m.taskCursor, listRows)
-	rows := make([]string, 0, end-start+1)
-	if len(dash) == 0 {
-		rows = append(rows, stDone.Render("✓ nothing undecided — the backlog is clear"))
-	}
-	for i := start; i < end; i++ {
-		rows = append(rows, m.assignRow(dash[i], cw-4, i == m.taskCursor, true))
+	syncRows := []string{
+		stRowDim.Render("backup ") + stDone.Render("0d") + stRowDim.Render(" · sync ") + stSoon.Render("1/2 today") + stRowDim.Render(" · cookie ") + stDone.Render("ok"),
+		stRowDim.Render(m.lastSyncLine()),
+		stKey.Render("[s]") + stRowDim.Render(" sync now   ") + stKey.Render("[b]") + stRowDim.Render(" backup   ") + stKey.Render("[c]") + stRowDim.Render(" review & commit"),
 	}
 
-	body := []string{
-		chips("backlog", []string{"backlog"}, fmt.Sprintf("%d items · %d overdue", len(dash), m.overdueCount()), cw),
-		"",
-	}
-	body = append(body, sideBySide(panel("backlog", leftW, backlogRows), leftW, panel("by course", rightW, courseRows), rightW)...)
+	body := []string{chips("today", []string{"today", "courses", "materials", "sync"}, m.termLabel()+" ▾", cw), ""}
+	body = append(body, sideBySide(panel("today", leftW, todayRows), leftW, panel("triage", rightW, triageRows), rightW)...)
 	body = append(body, "")
-	body = append(body, panel("needs a decision · oldest first", cw, rows)...)
+	body = append(body, panel("sync", cw, syncRows)...)
 	body = append(body, "", m.statusLine(cw), m.hintsLine(cw, "tasks"))
 	return body
+}
+
+// lastSyncLine summarises the last sync for the dashboard's sync panel.
+func (m *App) lastSyncLine() string {
+	name := "—"
+	if len(m.courses) > 0 {
+		name = fmt.Sprintf("%d %s", m.courses[0].ID, m.courses[0].Name)
+	}
+	fresh := 0
+	for _, mt := range m.materials {
+		if !mt.Downloaded {
+			fresh++
+		}
+	}
+	stamp := time.Now().Add(-20 * time.Hour).Format("2006-01-02 15:04")
+	return fmt.Sprintf("last sync %s · %s (+%d materials)", stamp, name, fresh)
+}
+
+// termLabel is the term shown at the right of the dashboard's chip row.
+func (m *App) termLabel() string {
+	for _, c := range m.courses {
+		if c.Term != "" {
+			return c.Term
+		}
+	}
+	return "this term"
 }
 
 // ---- Tasks: board layout (2x2 buckets) ----
@@ -288,7 +359,7 @@ func (m *App) boardLines(w, budget int) []string {
 			out = append(out, stEmpty.Render("—"))
 		}
 		for i := start; i < end; i++ {
-			out = append(out, m.assignRow(items[i], width-4, i == cursor && idx == m.boardCol, false))
+			out = append(out, m.assignRow(items[i], width-4, i == cursor && idx == m.boardCol, m.selected[items[i].ID], false))
 		}
 		return out
 	}
@@ -353,11 +424,11 @@ func (m *App) wizStepAttempt(w int) []string {
 	start, end := windowRange(len(items), m.taskCursor, 6)
 	for i := start; i < end; i++ {
 		a := items[i]
-		box := stCheckOff.Render("◻")
-		if m.selected[a.ID] {
-			box = stCheckOn.Render("◼")
+		row := m.assignRow(a, w-4, i == m.taskCursor, m.selected[a.ID], true)
+		if i != m.taskCursor {
+			row = " " + row
 		}
-		out = append(out, "  "+box+" "+m.assignRow(a, w-5, false, true))
+		out = append(out, row)
 	}
 	return out
 }
@@ -483,74 +554,6 @@ func materialState(mt model.Material) (string, lipgloss.Style) {
 	return "new", stRowDim
 }
 
-// ---- Today (dashboard) ----
-
-func (m *App) todayLines(w, budget int) []string {
-	cw := w - 4
-	leftW := cw * 54 / 100
-	rightW := cw - leftW - 1
-
-	now := time.Now()
-	var overdue, today, soon []model.Assignment
-	for _, a := range m.assignments {
-		switch {
-		case a.Overdue(now):
-			overdue = append(overdue, a)
-		case a.HasDue && sameDay(a.Due, now):
-			today = append(today, a)
-		case a.HasDue && a.Due.After(now) && a.Due.Before(now.AddDate(0, 0, 4)):
-			soon = append(soon, a)
-		}
-	}
-	sortSlice(overdue)
-	sortSlice(today)
-	sortSlice(soon)
-
-	todayRows := []string{}
-	todayRows = append(todayRows, stOverdue.Render(fmt.Sprintf("OVERDUE  %d", len(overdue))))
-	todayRows = append(todayRows, m.dashItems(overdue, 3, leftW-4)...)
-	todayRows = append(todayRows, "", stSoon.Render(fmt.Sprintf("DUE TODAY  %d", len(today))))
-	todayRows = append(todayRows, m.dashItems(today, 2, leftW-4)...)
-	todayRows = append(todayRows, "", stRowDim.Render(fmt.Sprintf("NEXT 3 DAYS  %d", len(soon))))
-	todayRows = append(todayRows, m.dashItems(soon, 3, leftW-4)...)
-
-	und, tr, mi, ig := m.triageCounts()
-	triageRows := []string{
-		bar("tracked", tr, len(m.assignments), rightW-4),
-		bar("missed", mi, len(m.assignments), rightW-4),
-		bar("ignored", ig, len(m.assignments), rightW-4),
-		bar("undecided", und, len(m.assignments), rightW-4),
-		"",
-		stSoon.Render(fmt.Sprintf("%d past-due undecided", m.overdueCount())),
-		stRowDim.Render("→ ") + stKey.Render("[c]") + stRowDim.Render(" review & commit"),
-	}
-
-	syncRows := []string{
-		stRowDim.Render("backup ") + stDone.Render("0d") + stRowDim.Render(" · sync ") + stSoon.Render("1/2 today") + stRowDim.Render(" · cookie ") + stDone.Render("ok"),
-		stRowDim.Render("last sync 2026-10-18 07:12 · 4 courses · 2 new materials"),
-		stKey.Render("[s]") + stRowDim.Render(" sync now   ") + stKey.Render("[1]") + stRowDim.Render(" tasks   ") + stKey.Render("[c]") + stRowDim.Render(" review & commit"),
-	}
-
-	body := []string{chips("today", []string{"today", "courses", "materials", "sync"}, "smt11 ▾", cw), ""}
-	body = append(body, sideBySide(panel("today", leftW, todayRows), leftW, panel("triage", rightW, triageRows), rightW)...)
-	body = append(body, "")
-	body = append(body, panel("sync", cw, syncRows)...)
-	body = append(body, m.hintsLine(cw, "today"))
-	return body
-}
-
-func (m *App) dashItems(items []model.Assignment, limit, contentW int) []string {
-	out := []string{}
-	for i, a := range items {
-		if i >= limit {
-			out = append(out, stRowDim.Render(truncate(fmt.Sprintf("  … %d more", len(items)-limit), contentW)))
-			break
-		}
-		out = append(out, "  "+m.assignRow(a, contentW-2, false, false))
-	}
-	return out
-}
-
 // ---- Sync ----
 
 func (m *App) syncLines(w, budget int) []string {
@@ -583,8 +586,6 @@ func (m *App) hintsLine(w int, where string) string {
 	switch where {
 	case "materials":
 		items = []string{"↑↓ move", "space select", "d download", "/ filter", "tab", "? help", "q quit"}
-	case "today":
-		items = []string{"1 tasks", "c review", "s sync", "? help", "q quit"}
 	case "sync":
 		items = []string{"s sync", "? help", "q quit"}
 	case "wizard":

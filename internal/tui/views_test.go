@@ -39,7 +39,7 @@ func TestViewAlignment(t *testing.T) {
 		want := m.boxWidth()
 		wantH := m.boxHeight()
 
-		for _, tab := range []Tab{TabTasks, TabMaterials, TabToday, TabSync} {
+		for _, tab := range []Tab{TabTasks, TabMaterials, TabSync} {
 			for _, lay := range []Layout{LayList, LayDashboard, LayBoard, LayWizard} {
 				m.tab, m.layout = tab, lay
 				lines := strings.Split(m.View(), "\n")
@@ -136,10 +136,12 @@ func TestDashboardCursorIsActionable(t *testing.T) {
 
 	list := m.focusedList()
 	if len(list) == 0 {
-		t.Fatal("dashboard backlog is empty")
+		t.Fatal("dashboard today panel is empty")
 	}
-	if list[0].Triage != model.Undecided {
-		t.Fatalf("dashboard backlog should be undecided only, got %s", list[0].Triage)
+	for _, a := range list {
+		if a.Triage != model.Undecided {
+			t.Fatalf("dashboard shows a decided item: %s is %s", a.ID, a.Triage)
+		}
 	}
 	id := m.cursorAssignmentID()
 	if id == "" {
@@ -151,13 +153,49 @@ func TestDashboardCursorIsActionable(t *testing.T) {
 	if a := m.byID(id); a == nil || a.Triage != model.Tracked {
 		t.Fatalf("dashboard triage key did not track %s", id)
 	}
-	for _, a := range m.dashAssignments() {
+	for _, a := range m.dashShown() {
 		if a.ID == id {
-			t.Fatal("tracked item is still in the dashboard backlog")
+			t.Fatal("tracked item is still in the dashboard today panel")
 		}
 	}
 	if len(m.pending) != 1 {
 		t.Fatalf("pending = %d, want 1", len(m.pending))
+	}
+}
+
+func TestViewCycleSkipsBoardAndWizard(t *testing.T) {
+	m := newTestApp(t, 96, 30)
+	m.tab, m.layout = TabTasks, LayDashboard
+
+	seen := []Layout{}
+	for i := 0; i < 4; i++ {
+		seen = append(seen, m.layout)
+		press(m, runeKey('v'))
+	}
+	if seen[0] != LayDashboard || seen[1] != LayList || seen[2] != LayDashboard || seen[3] != LayList {
+		t.Fatalf("v cycle = %v, want dashboard/list alternating", seen)
+	}
+	for _, l := range seen {
+		if l == LayBoard || l == LayWizard {
+			t.Fatalf("v reached %v, which should not be in the cycle", l)
+		}
+	}
+}
+
+func TestCommitReturnsToPreviousView(t *testing.T) {
+	m := newTestApp(t, 96, 30)
+	m.tab, m.layout = TabTasks, LayDashboard
+	press(m, runeKey('t')) // queue a change
+
+	press(m, runeKey('c'))
+	if m.layout != LayWizard {
+		t.Fatalf("c did not open the wizard, layout=%v", m.layout)
+	}
+	for i := 0; i < 5 && m.layout == LayWizard; i++ {
+		press(m, tea.KeyMsg{Type: tea.KeyEsc})
+	}
+	if m.layout != LayDashboard {
+		t.Fatalf("esc returned to %v, want dashboard", m.layout)
 	}
 }
 

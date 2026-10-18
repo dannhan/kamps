@@ -161,32 +161,43 @@ func bar(label string, n, total, width int) string {
 func barW(label string, n, total, width, labelW int) string {
 	barWidth := clampInt(width-(labelW+5), 4, 24)
 	return stLabel.Render(pad(label, labelW, false)) + stValue.Render(fmt.Sprintf("%3d", n)) + "  " +
-		barCells(n, total, barWidth, triageStyle(triageForLabel(label)))
+		barCells(n, total, barWidth, barStyleFor(label))
 }
 
-// barCells renders just the filled/empty bar, width columns wide.
+// barStyleFor colour-codes the filled part of a bar by what it counts. The
+// undecided pile gets the loudest colour: it is the one that needs you.
+func barStyleFor(label string) lipgloss.Style {
+	switch label {
+	case "track", "tracked":
+		return stFlagT
+	case "missed":
+		return stFlagM
+	case "ignore", "ignored":
+		return stCode
+	}
+	return stSoon
+}
+
+// barCells renders just the filled/empty bar, width columns wide. The empty
+// track uses the border grey so a filled segment always stands out, even for
+// the muted "ignore" bar.
 func barCells(n, total, width int, style lipgloss.Style) string {
 	if width < 1 {
 		width = 1
 	}
 	filled := clampInt(n*width/maxInt(total, 1), 0, width)
-	return style.Render(strings.Repeat("█", filled)) + stRowDim.Render(strings.Repeat("░", width-filled))
-}
-
-func triageForLabel(label string) model.Triage {
-	switch label {
-	case "tracked":
-		return model.Tracked
-	case "missed":
-		return model.Missed
-	case "ignored":
-		return model.Ignored
-	}
-	return model.Undecided
+	return style.Render(strings.Repeat("█", filled)) + stBarEmpty.Render(strings.Repeat("░", width-filled))
 }
 
 func maxInt(a, b int) int {
 	if a > b {
+		return a
+	}
+	return b
+}
+
+func minInt(a, b int) int {
+	if a < b {
 		return a
 	}
 	return b

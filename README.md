@@ -11,24 +11,29 @@ It is written from scratch in Go: type-safe, compiled, single file, runs the
 same on Linux, macOS and Windows.
 
 ```
-╭─ kamps  Tasks 42  Materials 16  Today  Sync ────────── backup 0d · cookie ok ─╮
-│  all   undecided  overdue  tracked  missed  ignored      list · course: all ▾ │
-│ ╭─ list ─────────────────────────────╮ ╭─ K150001 · strukdat ──────────────╮ │
-│ │  t ppl      08-17 K150004  Repor…  │ │ Kuis Struktur Data awal           │ │
-│ │    ppl      08-19 K901000  Progr…  │ │                                   │ │
-│ │ ▌t strukdat 08-21 K150001  Kuis …  │ │ due    2026-08-21                 │ │
-│ │  i strukdat 08-22 K150006  Conto…  │ │ flag   tracked                    │ │
-│ │  m metnum   09-02 K152705  Tugas…  │ │ would write to tasks.md:          │ │
-│ ╰────────────────────────────────────╯ │ - [ ] [strukdat] Kuis Struktur …  │ │
-│                                        ╰───────────────────────────────────╯ │
-│ queue: nothing to commit                              [c] review & commit    │
-│ ↑↓ move · space select · t/m/i/u triage · / filter · v view · c commit        │
-╰───────────────────────────────────────────────────────────────────────────────╯
+╭─ kamps  Tasks 42   Materials 16   Sync  ────────────── backup 0d · sync 1/2 · cookie ok ─╮
+│  today   courses  materials  sync                                                   smt11 ▾ │
+│ ╭─ today ─────────────────────────────────────╮ ╭─ triage ───────────────────────────────╮ │
+│ │ OVERDUE  19                                 │ │ track      6  ███░░░░░░░░░░░░░░░░░░░░░ │ │
+│ │     ppl      08-19 Progress Report 1        │ │ missed     3  █░░░░░░░░░░░░░░░░░░░░░░░ │ │
+│ │ ▌   strukdat 08-24 Submission Praktikum 1   │ │ ignore     5  ██░░░░░░░░░░░░░░░░░░░░░░ │ │
+│ │     metnum   08-27 Tugas Kelompok I. Galat  │ │ undecided 28  ████████████████░░░░░░░░ │ │
+│ │    … 11 more                                │ │                                        │ │
+│ │                                             │ │ 19 past-due undecided                  │ │
+│ │ NEXT 3 DAYS  1                              │ │ → [c] review & commit                  │ │
+│ │     ppl      10-19 Progress report 9        │ │ by course                              │ │
+│ ╰─────────────────────────────────────────────╯ │ strukdat  8/11 █████████████████░░░░░░ │ │
+│                                                 │ metnum    7/12 ██████████████░░░░░░░░░ │ │
+│                                                 ╰────────────────────────────────────────╯ │
+│  queue: nothing to commit                                        [c] review & commit      │
+│  ↑↓ move · space select · t/m/i/u triage · / filter · v view · c commit · ? help           │
+╰────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-It renders **inline**, not full-screen: your shell history stays visible above
-it. The colours are Charm's defaults (purple frame, pink accents, 256-colour
-greys that adapt to a light or dark terminal).
+It runs **full-screen** and restores your shell exactly as it was when you quit.
+The cursor row is a solid bar, so you always know what `t`/`m`/`i` will hit. The
+colours are Charm's defaults: a purple frame, pink accents, and 256-colour greys
+that adapt to a light or dark terminal.
 
 ## What it is (and is not)
 
@@ -50,7 +55,9 @@ items to it (see *review & commit* below).
 
 **Early, and honest about it.** The whole UI is built and runs today against a
 bundled demo dataset. The real Moodle client lands behind the same interface, so
-the UI you see now is the UI you keep.
+the UI you see now is the UI you keep. The board view and the inline (non
+full-screen) mode were tried and are parked: the board is unreachable from the
+keyboard, and the app always uses the alternate screen.
 
 ## Build and run
 
@@ -75,21 +82,22 @@ kamps --no-anim        # plain motion-free session
 
 ## Screens
 
-Four tabs, switched with `1`–`4` or `tab`:
+Three tabs, switched with `1`–`3` or `tab`:
 
-- **Tasks** — your backlog, with four views, cycled with `v`:
-  - **list** — a two-pane list plus a detail panel (default)
-  - **dashboard** — how the backlog splits, where it comes from (per course),
-    and the oldest undecided items, actionable in place
-  - **board** — a 2×2 board bucketed by decision
-  - **wizard** — the guided *review & commit* flow
+- **Tasks** — your backlog, with two everyday views cycled by `v`:
+  - **dashboard** — overdue, due today and coming up, the triage split, where the
+    backlog lives per course, and sync state (the default)
+  - **list** — a two-pane list plus a detail panel showing what would be written
+    to `tasks.md`
 - **Materials** — course files, slides and lab Drive links; `d` downloads.
-- **Today** — what is overdue, due today, and coming up, plus your triage counts.
 - **Sync** — sync state, backup age and your local library path.
 
+The guided **review & commit** wizard opens with `c`, and a parked **board** view
+still exists in the code (§ *Status*).
+
 Every Tasks view drives the same cursor and the same keys: `↑↓` moves, `space`
-selects, `t`/`m`/`i`/`u` decide. Switch views freely — the decision you made in
-one shows up in all of them.
+selects, `t`/`m`/`i`/`u` decide — including inside the dashboard's today list.
+Switch views freely; a decision made in one shows up in all of them.
 
 ## Keys
 
@@ -98,9 +106,9 @@ one shows up in all of them.
 | `↑` / `k`, `↓` / `j` | move |
 | `←` / `h`, `→` / `l` | move between board columns |
 | `tab`, `shift+tab` | next / previous tab |
-| `1`–`4` | jump to a tab |
-| `v` | cycle the Tasks view (list · dashboard · board · wizard) |
-| `space` | select an item |
+| `1`–`3` | jump to a tab |
+| `v` | cycle the Tasks view (dashboard · list) |
+| `space` | select an item (shown with a `▪` marker) |
 | `a` | select all |
 | `t` / `m` / `i` / `u` | decide: track / missed / ignore / undecided |
 | `/` | cycle the filter |
@@ -152,8 +160,8 @@ docs/kulon2.md    verified notes on the Moodle/Kulon2 instance
 
 ## Roadmap
 
-1. **Now** — interactive UI over demo data: four tabs, four Tasks views,
-   triage decisions, review & commit (dry-run). ✅
+1. **Now** — interactive UI over demo data: three tabs, a dashboard and
+   two-pane Tasks view, triage decisions, review & commit (dry-run). ✅
 2. Real Moodle source: cookie auth, course list, HTML parsing for assignments
    and materials. See `docs/kulon2.md`.
 3. Local SQLite store so decisions and downloads survive restarts.
