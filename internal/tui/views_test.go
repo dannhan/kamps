@@ -40,7 +40,7 @@ func TestViewAlignment(t *testing.T) {
 		wantH := m.boxHeight()
 
 		for _, tab := range []Tab{TabTasks, TabMaterials, TabToday, TabSync} {
-			for _, lay := range []Layout{LayList, LayBoard, LayWizard} {
+			for _, lay := range []Layout{LayList, LayDashboard, LayBoard, LayWizard} {
 				m.tab, m.layout = tab, lay
 				lines := strings.Split(m.View(), "\n")
 				if len(lines) != wantH {
@@ -127,6 +127,37 @@ func TestDownloadMarksMaterials(t *testing.T) {
 
 	if !m.materials[idx].Downloaded {
 		t.Fatalf("material %s was not marked downloaded", m.materials[idx].ID)
+	}
+}
+
+func TestDashboardCursorIsActionable(t *testing.T) {
+	m := newTestApp(t, 96, 30)
+	m.tab, m.layout = TabTasks, LayDashboard
+
+	list := m.focusedList()
+	if len(list) == 0 {
+		t.Fatal("dashboard backlog is empty")
+	}
+	if list[0].Triage != model.Undecided {
+		t.Fatalf("dashboard backlog should be undecided only, got %s", list[0].Triage)
+	}
+	id := m.cursorAssignmentID()
+	if id == "" {
+		t.Fatal("dashboard has no cursor item")
+	}
+
+	press(m, runeKey('t'))
+
+	if a := m.byID(id); a == nil || a.Triage != model.Tracked {
+		t.Fatalf("dashboard triage key did not track %s", id)
+	}
+	for _, a := range m.dashAssignments() {
+		if a.ID == id {
+			t.Fatal("tracked item is still in the dashboard backlog")
+		}
+	}
+	if len(m.pending) != 1 {
+		t.Fatalf("pending = %d, want 1", len(m.pending))
 	}
 }
 

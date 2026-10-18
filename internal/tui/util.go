@@ -154,11 +154,23 @@ func kv(k, v string, style lipgloss.Style) string {
 // bar renders a labelled count bar within width columns, e.g.
 // "tracked   12  ██████░░░░░░░░".
 func bar(label string, n, total, width int) string {
-	barW := clampInt(width-14, 4, 20)
-	filled := clampInt(n*barW/maxInt(total, 1), 0, barW)
-	return stLabel.Render(pad(label, 9, false)) + stValue.Render(fmt.Sprintf("%3d", n)) + "  " +
-		triageStyle(triageForLabel(label)).Render(strings.Repeat("█", filled)) +
-		stRowDim.Render(strings.Repeat("░", barW-filled))
+	return barW(label, n, total, width, 9)
+}
+
+// barW is bar with an explicit label column width.
+func barW(label string, n, total, width, labelW int) string {
+	barWidth := clampInt(width-(labelW+5), 4, 24)
+	return stLabel.Render(pad(label, labelW, false)) + stValue.Render(fmt.Sprintf("%3d", n)) + "  " +
+		barCells(n, total, barWidth, triageStyle(triageForLabel(label)))
+}
+
+// barCells renders just the filled/empty bar, width columns wide.
+func barCells(n, total, width int, style lipgloss.Style) string {
+	if width < 1 {
+		width = 1
+	}
+	filled := clampInt(n*width/maxInt(total, 1), 0, width)
+	return style.Render(strings.Repeat("█", filled)) + stRowDim.Render(strings.Repeat("░", width-filled))
 }
 
 func triageForLabel(label string) model.Triage {

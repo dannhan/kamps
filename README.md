@@ -11,24 +11,24 @@ It is written from scratch in Go: type-safe, compiled, single file, runs the
 same on Linux, macOS and Windows.
 
 ```
-┌─ kamps  Tasks 42  Materials 16  Today  Sync ─────── backup 0d · cookie ok ─┐
-│  all   undecided  overdue  tracked  missed  ignored     list · course: all │
-│                                                                            │
-│ ┌─ list ────────────────────────┐ ┌─ K150001 · strukdat ─────────────────┐ │
-│ │  t ppl      08-17 K150004  R… │ │ Kuis Struktur Data awal             │ │
-│ │    ppl      08-19 K901000  P… │ │                                      │ │
-│ │ ▌t strukdat 08-21 K150001  K… │ │ due    2026-08-21                    │ │
-│ │  m metnum   09-02 K152705  T… │ │ flag   tracked                       │ │
-│ └───────────────────────────────┘ │ would write to tasks.md:             │ │
-│                                   │ - [ ] [strukdat] Kuis Struktur Data  │ │
-│                                   └──────────────────────────────────────┘ │
-│ queue: nothing to commit                              [c] review & commit │
-│ ↑↓ move · space select · t/m/i/u triage · / filter · v view · c commit     │
-└────────────────────────────────────────────────────────────────────────────┘
+╭─ kamps  Tasks 42  Materials 16  Today  Sync ────────── backup 0d · cookie ok ─╮
+│  all   undecided  overdue  tracked  missed  ignored      list · course: all ▾ │
+│ ╭─ list ─────────────────────────────╮ ╭─ K150001 · strukdat ──────────────╮ │
+│ │  t ppl      08-17 K150004  Repor…  │ │ Kuis Struktur Data awal           │ │
+│ │    ppl      08-19 K901000  Progr…  │ │                                   │ │
+│ │ ▌t strukdat 08-21 K150001  Kuis …  │ │ due    2026-08-21                 │ │
+│ │  i strukdat 08-22 K150006  Conto…  │ │ flag   tracked                    │ │
+│ │  m metnum   09-02 K152705  Tugas…  │ │ would write to tasks.md:          │ │
+│ ╰────────────────────────────────────╯ │ - [ ] [strukdat] Kuis Struktur …  │ │
+│                                        ╰───────────────────────────────────╯ │
+│ queue: nothing to commit                              [c] review & commit    │
+│ ↑↓ move · space select · t/m/i/u triage · / filter · v view · c commit        │
+╰───────────────────────────────────────────────────────────────────────────────╯
 ```
 
 It renders **inline**, not full-screen: your shell history stays visible above
-it.
+it. The colours are Charm's defaults (purple frame, pink accents, 256-colour
+greys that adapt to a light or dark terminal).
 
 ## What it is (and is not)
 
@@ -77,13 +77,19 @@ kamps --no-anim        # plain motion-free session
 
 Four tabs, switched with `1`–`4` or `tab`:
 
-- **Tasks** — your backlog, with three views, cycled with `v`:
+- **Tasks** — your backlog, with four views, cycled with `v`:
   - **list** — a two-pane list plus a detail panel (default)
+  - **dashboard** — how the backlog splits, where it comes from (per course),
+    and the oldest undecided items, actionable in place
   - **board** — a 2×2 board bucketed by decision
   - **wizard** — the guided *review & commit* flow
 - **Materials** — course files, slides and lab Drive links; `d` downloads.
 - **Today** — what is overdue, due today, and coming up, plus your triage counts.
 - **Sync** — sync state, backup age and your local library path.
+
+Every Tasks view drives the same cursor and the same keys: `↑↓` moves, `space`
+selects, `t`/`m`/`i`/`u` decide. Switch views freely — the decision you made in
+one shows up in all of them.
 
 ## Keys
 
@@ -93,7 +99,7 @@ Four tabs, switched with `1`–`4` or `tab`:
 | `←` / `h`, `→` / `l` | move between board columns |
 | `tab`, `shift+tab` | next / previous tab |
 | `1`–`4` | jump to a tab |
-| `v` | cycle the Tasks view (list · board · wizard) |
+| `v` | cycle the Tasks view (list · dashboard · board · wizard) |
 | `space` | select an item |
 | `a` | select all |
 | `t` / `m` / `i` / `u` | decide: track / missed / ignore / undecided |
@@ -146,7 +152,7 @@ docs/kulon2.md    verified notes on the Moodle/Kulon2 instance
 
 ## Roadmap
 
-1. **Now** — interactive UI over demo data: four tabs, three Tasks views,
+1. **Now** — interactive UI over demo data: four tabs, four Tasks views,
    triage decisions, review & commit (dry-run). ✅
 2. Real Moodle source: cookie auth, course list, HTML parsing for assignments
    and materials. See `docs/kulon2.md`.

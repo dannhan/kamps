@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -158,6 +159,113 @@ func (m *App) taskLine(a model.Assignment) string {
 		due = " due:" + a.Due.Format("2006-01-02")
 	}
 	return fmt.Sprintf("- [ ] [%s] %s (%s)%s", m.shortCode(a.CourseID), a.Name, a.ID, due)
+}
+
+// ---- Tasks: dashboard layout ----
+
+// courseStat is one row of the Dashboard's per-course breakdown.
+type courseStat struct {
+	code      string
+	undecided int
+	total     int
+}
+
+// courseStats groups the backlog per course, biggest undecided pile first.
+func (m *App) courseStats() []courseStat {
+	byID := map[int]*courseStat{}
+	var order []int
+	for _, a := range m.assignments {
+		st, ok := byID[a.CourseID]
+		if !ok {
+			st = &courseStat{code: m.shortCode(a.CourseID)}
+			byID[a.CourseID] = st
+			order = append(order, a.CourseID)
+		}
+		st.total++
+		if a.Triage == model.Undecided {
+			st.undecided++
+		}
+	}
+	out := make([]courseStat, 0, len(order))
+	for _, id := range order {
+		out = append(out, *byID[id])
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].undecided != out[j].undecided {
+			return out[i].undecided > out[j].undecided
+		}
+		return out[i].total > out[j].total
+	})
+	return out
+}
+
+// dashboardLines answers "what is piling up?": how the backlog splits, where it
+// comes from, and the oldest undecided items you can act on right here.
+func (m *App) dashboardLines(w, budget int) []string {
+	cw := w - 4
+	leftW := cw * 54 / 100
+	rightW := cw - leftW - 1
+
+	// chips(1) + blank(1) + blank(1) + blank(1) + status(1) + hints(1)
+	const reserved = 6
+	topH := clampInt((budget-reserved)/2, 5, 9)
+	bottomH := maxInt(3, budget-reserved-topH)
+
+	dash := m.dashAssignments()
+	und, tr, mi, ig := m.triageCounts()
+	total := maxInt(1, len(m.assignments))
+	contentH := maxInt(1, topH-2)
+
+	backlogRows := []string{
+		bar("undecided", und, total, leftW-4),
+		bar("tracked", tr, total, leftW-4),
+		bar("missed", mi, total, leftW-4),
+		bar("ignored", ig, total, leftW-4),
+		"",
+		stSoon.Render(fmt.Sprintf("%d past-due still undecided", m.overdueCount())),
+	}
+	if len(backlogRows) > contentH {
+		backlogRows = backlogRows[:contentH]
+	}
+
+	// Per-course rows, trimmed to the panel height.
+	courseRows := []string{}
+	stats := m.courseStats()
+	for i, s := range stats {
+		if i >= contentH {
+			courseRows = append(courseRows, stRowDim.Render(fmt.Sprintf("… %d more", len(stats)-contentH)))
+			break
+		}
+		// code(8) + " " + "nn/mm"(5) + " " + bar
+		barWidth := maxInt(3, (rightW-4)-15)
+		courseRows = append(courseRows, stCode.Render(pad(s.code, 8, false))+" "+
+			stValue.Render(fmt.Sprintf("%2d", s.undecided))+stRowDim.Render(fmt.Sprintf("/%-2d", s.total))+" "+
+			barCells(s.undecided, s.total, barWidth, stSoon))
+	}
+	if len(courseRows) == 0 {
+		courseRows = append(courseRows, stEmpty.Render("no courses"))
+	}
+
+	// The actionable list: oldest undecided first.
+	listRows := maxInt(1, bottomH-2)
+	start, end := windowRange(len(dash), m.taskCursor, listRows)
+	rows := make([]string, 0, end-start+1)
+	if len(dash) == 0 {
+		rows = append(rows, stDone.Render("✓ nothing undecided — the backlog is clear"))
+	}
+	for i := start; i < end; i++ {
+		rows = append(rows, m.assignRow(dash[i], cw-4, i == m.taskCursor, true))
+	}
+
+	body := []string{
+		chips("backlog", []string{"backlog"}, fmt.Sprintf("%d items · %d overdue", len(dash), m.overdueCount()), cw),
+		"",
+	}
+	body = append(body, sideBySide(panel("backlog", leftW, backlogRows), leftW, panel("by course", rightW, courseRows), rightW)...)
+	body = append(body, "")
+	body = append(body, panel("needs a decision · oldest first", cw, rows)...)
+	body = append(body, "", m.statusLine(cw), m.hintsLine(cw, "tasks"))
+	return body
 }
 
 // ---- Tasks: board layout (2x2 buckets) ----

@@ -15,6 +15,10 @@ func TestSnapshot(t *testing.T) {
 	m.taskCursor = 2
 	t.Logf("\n== Tasks · list ==\n%s", m.View())
 
+	m.tab, m.layout = TabTasks, LayDashboard
+	m.taskCursor = 1
+	t.Logf("\n== Tasks · dashboard ==\n%s", m.View())
+
 	m.tab, m.layout = TabTasks, LayBoard
 	m.boardCol = 0
 	t.Logf("\n== Tasks · board ==\n%s", m.View())

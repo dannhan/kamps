@@ -61,9 +61,10 @@ func (t Tab) String() string {
 type Layout int
 
 const (
-	LayList   Layout = iota // two-pane: list + detail
-	LayBoard                // 2x2 buckets
-	LayWizard               // guided review & commit
+	LayList      Layout = iota // two-pane: list + detail (the default)
+	LayDashboard               // backlog overview: counts, per-course, oldest first
+	LayBoard                   // 2x2 buckets by decision
+	LayWizard                  // guided review & commit
 	layCount
 )
 
@@ -71,6 +72,8 @@ func (l Layout) String() string {
 	switch l {
 	case LayList:
 		return "list"
+	case LayDashboard:
+		return "dashboard"
 	case LayBoard:
 		return "board"
 	case LayWizard:
@@ -308,7 +311,7 @@ func (m *App) move(delta int) {
 			m.boardCursor[m.boardCol] = clampInt(m.boardCursor[m.boardCol]+delta, 0, maxInt(0, len(items)-1))
 			return
 		}
-		n := len(m.visible())
+		n := len(m.focusedList())
 		m.taskCursor = clampInt(m.taskCursor+delta, 0, maxInt(0, n-1))
 	case TabMaterials:
 		m.matCursor = clampInt(m.matCursor+delta, 0, maxInt(0, len(m.materials)-1))
@@ -345,7 +348,7 @@ func (m *App) toggleSelect() {
 func (m *App) selectAll() {
 	switch m.tab {
 	case TabTasks:
-		for _, a := range m.visible() {
+		for _, a := range m.focusedList() {
 			m.selected[a.ID] = true
 		}
 	case TabMaterials:
@@ -418,19 +421,46 @@ func (m *App) boardItems(col int) []model.Assignment {
 	return out
 }
 
+// dashAssignments is the Dashboard's backlog: everything still undecided,
+// oldest deadline first. It deliberately ignores the chip filter — the
+// Dashboard always answers "what is piling up?".
+func (m *App) dashAssignments() []model.Assignment {
+	out := make([]model.Assignment, 0, 8)
+	for _, a := range m.assignments {
+		if a.Triage == model.Undecided {
+			out = append(out, a)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return lessAssignment(out[i], out[j]) })
+	return out
+}
+
+// focusedList is the assignment list the keyboard is currently driving. Every
+// Tasks layout exposes its rows through this, so Up/Down, space and t/m/i/u
+// behave the same everywhere.
+func (m *App) focusedList() []model.Assignment {
+	if m.tab != TabTasks {
+		return nil
+	}
+	switch m.layout {
+	case LayBoard:
+		return m.boardItems(m.boardCol)
+	case LayDashboard:
+		return m.dashAssignments()
+	default:
+		return m.visible()
+	}
+}
+
 // cursorAssignmentID is the item the keyboard is pointing at, or "".
 func (m *App) cursorAssignmentID() string {
-	switch {
-	case m.tab == TabTasks && m.layout == LayBoard:
-		items := m.boardItems(m.boardCol)
-		if c := m.boardCursor[m.boardCol]; c >= 0 && c < len(items) {
-			return items[c].ID
-		}
-	case m.tab == TabTasks:
-		items := m.visible()
-		if m.taskCursor >= 0 && m.taskCursor < len(items) {
-			return items[m.taskCursor].ID
-		}
+	items := m.focusedList()
+	cursor := m.taskCursor
+	if m.layout == LayBoard && m.tab == TabTasks {
+		cursor = m.boardCursor[m.boardCol]
+	}
+	if cursor >= 0 && cursor < len(items) {
+		return items[cursor].ID
 	}
 	return ""
 }
@@ -438,7 +468,7 @@ func (m *App) cursorAssignmentID() string {
 // targetIDs is what a triage key acts on: the selection, else the cursor item.
 func (m *App) targetIDs() []string {
 	var ids []string
-	for _, a := range m.visible() {
+	for _, a := range m.assignments {
 		if m.selected[a.ID] {
 			ids = append(ids, a.ID)
 		}
@@ -781,6 +811,8 @@ func (m *App) bodyLines(w, budget int) []string {
 	switch m.tab {
 	case TabTasks:
 		switch m.layout {
+		case LayDashboard:
+			return m.dashboardLines(w, budget)
 		case LayBoard:
 			return m.boardLines(w, budget)
 		case LayWizard:

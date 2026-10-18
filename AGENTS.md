@@ -74,17 +74,22 @@ stays visible and small terminals still get a usable box.
 
 Every line of `App.View()` must be exactly `boxWidth()` columns. Overflows are
 caught by `TestViewAlignment` at 100/80/72 columns across every tab and Tasks
-layout — if you add a row or a column, keep it inside its width budget or extend
-`assignRow`/`chips`/`hintsFit`, which already degrade (drop the id column, drop
-chips, drop hint items) rather than overflow. Never "fix" an overflow by
-widening the box past the terminal.
+layout (list · dashboard · board · wizard) — if you add a row or a column, keep
+it inside its width budget or extend `assignRow`/`chips`/`hintsFit`/`barW`, which
+already degrade (drop the id column, drop chips, drop hint items) rather than
+overflow. Never "fix" an overflow by widening the box past the terminal.
+
+Tasks layouts must all expose their rows through `App.focusedList()` so the
+cursor and `t`/`m`/`i`/`u` behave identically in every view.
 
 ## Conventions
 
 - **Elm architecture.** `Init` starts async work; `Update` handles messages;
   `View` is pure and returns a string. Never mutate state inside `View`.
 - **Style in one place.** Colours and text styles live in `internal/tui/theme.go`.
-  Do not scatter `lipgloss.NewStyle()` calls through the views.
+  The palette is Charm's defaults: adaptive 256-colour greys for structure plus
+  purple/pink accents. Keep it adaptive (works on light and dark terminals) and
+  do not scatter `lipgloss.NewStyle()` calls through the views.
 - **Keys in one place.** Add bindings to `KeyMap` in `keys.go`; they drive the
   `?` overlay. The one-line footer hints are hand-built in `hintsLine`
   (`views.go`) because `bubbles/help` truncates; keep them short — `hintsFit`

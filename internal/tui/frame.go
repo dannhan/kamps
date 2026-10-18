@@ -7,16 +7,19 @@ import (
 )
 
 // Hand-drawn boxes. lipgloss.Border cannot embed a title in the border, and we
-// want titles like "┌─ list ────┐", so we build the lines ourselves. Every
+// want titles like "╭─ list ────╮", so we build the lines ourselves. Every
 // helper returns a string of *exactly* w visible columns (see the alignment
 // tests) so nested boxes line up.
+//
+// The outer frame is drawn in Charm purple (stFrame); nested panels use the
+// muted grey stBorder, so the shell reads at a glance.
 
 func frameTop(left, right string, w int) string {
 	f := w - lipgloss.Width(left) - lipgloss.Width(right) - 8
 	if f < 1 {
 		f = 1
 	}
-	return stBorder.Render("┌─ ") + left + stBorder.Render(" "+strings.Repeat("─", f)+" ") + right + stBorder.Render(" ─┐")
+	return stFrame.Render("╭─ ") + left + stFrame.Render(" "+strings.Repeat("─", f)+" ") + right + stFrame.Render(" ─╮")
 }
 
 func frameLine(content string, w int) string {
@@ -24,11 +27,11 @@ func frameLine(content string, w int) string {
 	if gap < 0 {
 		gap = 0
 	}
-	return stBorder.Render("│") + " " + content + strings.Repeat(" ", gap) + " " + stBorder.Render("│")
+	return stFrame.Render("│") + " " + content + strings.Repeat(" ", gap) + " " + stFrame.Render("│")
 }
 
 func frameBottom(w int) string {
-	return stBorder.Render("└" + strings.Repeat("─", w-2) + "┘")
+	return stFrame.Render("╰" + strings.Repeat("─", w-2) + "╯")
 }
 
 func panelTop(title string, w int) string {
@@ -36,7 +39,7 @@ func panelTop(title string, w int) string {
 	if f < 1 {
 		f = 1
 	}
-	return stBorder.Render("┌─ ") + stBoxTtl.Render(title) + stBorder.Render(" "+strings.Repeat("─", f)+"┐")
+	return stBorder.Render("╭─ ") + stBoxTtl.Render(title) + stBorder.Render(" "+strings.Repeat("─", f)+"╮")
 }
 
 func panelLine(content string, w int) string {
@@ -48,7 +51,7 @@ func panelLine(content string, w int) string {
 }
 
 func panelBottom(w int) string {
-	return stBorder.Render("└" + strings.Repeat("─", w-2) + "┘")
+	return stBorder.Render("╰" + strings.Repeat("─", w-2) + "╯")
 }
 
 // panel wraps rows in a titled box of width w.
