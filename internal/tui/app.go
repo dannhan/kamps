@@ -82,7 +82,7 @@ type App struct {
 func New(src source.Source, cfg config.Config, version string) *App {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(colPink)
+	sp.Style = lipgloss.NewStyle().Foreground(colAccent)
 
 	h := help.New()
 

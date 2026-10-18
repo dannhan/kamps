@@ -10,6 +10,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -30,6 +31,9 @@ func main() {
 			return
 		case "help", "--help", "-h":
 			printHelp()
+			return
+		case "mockups":
+			printMockups(args[1:])
 			return
 		}
 	}
@@ -58,6 +62,24 @@ func isTTY(f *os.File) bool {
 	return fi.Mode()&os.ModeCharDevice != 0
 }
 
+// printMockups renders the candidate screens. With no argument it prints all
+// of them; with a key (a/b/c/d) it prints just one. Colour is automatic
+// (respects NO_COLOR); pipe through `less -R` to scroll.
+func printMockups(args []string) {
+	want := ""
+	if len(args) > 0 {
+		want = strings.ToUpper(args[0])
+	}
+	for _, m := range tui.Mockups() {
+		if want != "" && m.Key != want {
+			continue
+		}
+		fmt.Printf("%s. %s\n\n", m.Key, m.Desc)
+		fmt.Println(m.Body())
+		fmt.Println()
+	}
+}
+
 func printHelp() {
 	fmt.Print(`kamps — college coursework, in your terminal
 
@@ -72,6 +94,10 @@ KEYS
   x          toggle done     s              sync
   ?          help            q              quit
 
-Demodata is bundled for now; the Moodle source is next.
+MOCKUPS
+  kamps mockups        print every candidate UI
+  kamps mockups b      print one of them (a/b/c/d)
+
+Demo data is bundled for now; the Moodle source is next.
 `)
 }
