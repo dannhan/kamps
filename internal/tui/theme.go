@@ -12,6 +12,7 @@ import (
 type themeColors struct {
 	Bg       lipgloss.AdaptiveColor
 	Surface  lipgloss.AdaptiveColor
+	Marked   lipgloss.AdaptiveColor
 	Overlay  lipgloss.AdaptiveColor
 	Border   lipgloss.AdaptiveColor
 	Bright   lipgloss.AdaptiveColor
@@ -31,6 +32,7 @@ type themeColors struct {
 var themeTokens = themeColors{
 	Bg:      lipgloss.AdaptiveColor{Light: "#FFFFFF", Dark: "#1B1B26"},
 	Surface: lipgloss.AdaptiveColor{Light: "#E4E4E4", Dark: "#333355"},
+	Marked:  lipgloss.AdaptiveColor{Light: "#E2E2F4", Dark: "#413A66"},
 	Overlay: lipgloss.AdaptiveColor{Light: "#F2F2F2", Dark: "#292940"},
 	Border:  lipgloss.AdaptiveColor{Light: "#C8C8D0", Dark: "#3B3E5E"},
 	Bright:  lipgloss.AdaptiveColor{Light: "#1B1B26", Dark: "#EDEDED"},

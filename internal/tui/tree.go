@@ -388,6 +388,37 @@ func materialBucketKey(courseID int, bucket string) string {
 	return fmt.Sprintf("mb:%d:%s", courseID, bucket)
 }
 
+// materialNodeIDs lists the material IDs a row stands for: the file itself,
+// every file in a state bucket, or every file in a course/week.
+func (m *App) materialNodeIDs(n node) []string {
+	switch n.kind {
+	case nodeFile:
+		return []string{n.mat.ID}
+	case nodeMaterialBucket:
+		ids := []string{}
+		for _, material := range m.courseFiles(n.courseID) {
+			if n.bucket == "downloaded" && material.Downloaded || n.bucket == "new" && !material.Downloaded {
+				ids = append(ids, material.ID)
+			}
+		}
+		return ids
+	case nodeWeek:
+		return idsOf(m.sectionFiles(n.courseID, n.mat.Section))
+	case nodeCourse:
+		return idsOf(m.courseFiles(n.courseID))
+	}
+	return nil
+}
+
+// materialNodeSelected reports whether every material behind a row is marked,
+// so group rows show the same mark state as their file rows.
+func (m *App) materialNodeSelected(n node) bool {
+	if n.kind == nodeFile {
+		return m.selectedM[n.mat.ID]
+	}
+	return allSelected(m.selectedM, m.materialNodeIDs(n))
+}
+
 func materialKey(id string) string { return "material:" + id }
 
 func (m *App) assignmentForMaterial(material model.Material) *model.Assignment {
@@ -462,21 +493,15 @@ func treeGuides(nodes []node, index int) string {
 
 func (m *App) taskTreeRow(nodes []node, index, width int) string {
 	n := nodes[index]
-	cursor := index == m.taskCursor
 	selected := false
 	if n.kind == nodeTask {
 		selected = m.selected[n.task.ID]
 	} else if m.isTaskGroup(n) {
 		selected = allSelected(m.selected, m.taskGroupIDs(n))
 	}
-	band := cursor || selected
-	background := func(style lipgloss.Style) lipgloss.Style {
-		if band {
-			return style.Background(themeTokens.Surface)
-		}
-		return style
-	}
-	prefix := background(stFaint).Render(treeGuides(nodes, index))
+	h := rowHighlight{cursor: index == m.taskCursor, mark: selected}
+	background := h.style
+	prefix := h.gutter() + background(stFaint).Render(treeGuides(nodes, index))
 	available := maxInt(1, width-lipgloss.Width(prefix))
 	content := ""
 	counts := m.taskNodeCounts(n)
@@ -493,10 +518,7 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 		content = background(stRow).Render(fmt.Sprintf("%s (%d)", n.bucket, len(m.taskGroupIDs(n))))
 	case nodeTask:
 		glyph := background(triageStyle(n.task.Triage)).Render(flagChar(n.task.Triage))
-		marker := background(stFaint).Render("⁝")
-		if selected {
-			marker = background(stSelMark).Render("▪")
-		}
+		marker := h.markCell(selected)
 		stateLabel := n.task.Triage.String()
 		if n.task.Triage == model.Undecided {
 			stateLabel = "new"
@@ -549,7 +571,7 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 	}
 	row := prefix + content
 	padding := strings.Repeat(" ", maxInt(0, width-lipgloss.Width(row)))
-	if band {
+	if h.band() {
 		padding = background(stRow).Render(padding)
 	}
 	return row + padding
@@ -846,14 +868,9 @@ func (m *App) courseNextDue(kids []model.Assignment) (string, lipgloss.Style) {
 
 func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 	n := nodes[index]
-	band := index == m.matCursor || selected
-	background := func(style lipgloss.Style) lipgloss.Style {
-		if band {
-			return style.Background(themeTokens.Surface)
-		}
-		return style
-	}
-	prefix := background(stFaint).Render(treeGuides(nodes, index))
+	h := rowHighlight{cursor: index == m.matCursor, mark: selected}
+	background := h.style
+	prefix := h.gutter() + background(stFaint).Render(treeGuides(nodes, index))
 	content := ""
 	switch n.kind {
 	case nodeCourse:
@@ -876,7 +893,11 @@ func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 		if glyph == "downloaded" {
 			state = "●"
 		}
-		content = background(stateStyle).Render(state) + background(stFaint).Render(" ⁝ ") + background(stRow).Render(ansi.Truncate(n.mat.Name, maxInt(1, width-lipgloss.Width(prefix)-12), "…")) + background(stateStyle).Render(" "+glyph)
+		nameWidth := maxInt(1, width-lipgloss.Width(prefix)-12)
+		content = background(stateStyle).Render(state) +
+			background(stRow).Render(" ") + h.markCell(selected) + background(stRow).Render(" ") +
+			background(stRow).Render(ansi.Truncate(n.mat.Name, nameWidth, "…")) +
+			background(stateStyle).Render(" "+glyph)
 	case nodeWeek:
 		content = background(stCode.Bold(true)).Render(sectionLabel(n.mat.Section))
 	case nodeMaterialAssignment:

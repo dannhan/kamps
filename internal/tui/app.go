@@ -1362,8 +1362,7 @@ func (m *App) materialBody(width, height int) []string {
 	rows := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
 		n := nodes[i]
-		selected := n.kind == nodeFile && m.selectedM[n.mat.ID]
-		rows = append(rows, m.matTreeRow(nodes, i, width, selected))
+		rows = append(rows, m.matTreeRow(nodes, i, width, m.materialNodeSelected(n)))
 	}
 	if len(rows) == 0 {
 		rows = append(rows, stEmpty.Render("no materials"))

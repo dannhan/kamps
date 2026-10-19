@@ -563,16 +563,7 @@ func (m *App) materialsLines(w, budget int) []string {
 	}
 	for i := start; i < end; i++ {
 		n := nodes[i]
-		selected := false
-		switch n.kind {
-		case nodeFile:
-			selected = m.selectedM[n.mat.ID]
-		case nodeCourse:
-			selected = allSelected(m.selectedM, idsOf(m.courseFiles(n.courseID)))
-		case nodeWeek:
-			selected = allSelected(m.selectedM, idsOf(m.sectionFiles(n.courseID, n.mat.Section)))
-		}
-		rows = append(rows, m.matRow(n, leftInner, i == m.matCursor, selected))
+		rows = append(rows, m.matRow(n, leftInner, i == m.matCursor, m.materialNodeSelected(n)))
 	}
 
 	var detail []string

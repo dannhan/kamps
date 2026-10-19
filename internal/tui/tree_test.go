@@ -401,6 +401,61 @@ func TestFoldOnAlreadyFoldedGroupMovesCursorToParent(t *testing.T) {
 	}
 }
 
+func TestCursorAndMarksAreVisuallyDistinct(t *testing.T) {
+	app := demoApp(t)
+	app.layout = LayList
+	app.tab = TabTasks
+
+	nodes := app.taskNodes()
+	marked := findTaskNode(nodes, nodeTask, "K901000")
+	unmarked := findTaskNode(nodes, nodeTask, "K901001")
+	if marked < 0 || unmarked < 0 {
+		t.Fatal("demo assignments missing from the default tree")
+	}
+	app.selected["K901000"] = true
+	app.taskCursor = unmarked
+
+	markedRow := stripANSI(app.taskTreeRow(nodes, marked, 98))
+	unmarkedRow := stripANSI(app.taskTreeRow(nodes, unmarked, 98))
+	if !strings.Contains(markedRow, markFull) || strings.Contains(markedRow, markEmpty) {
+		t.Fatalf("marked row should show %q only: %q", markFull, markedRow)
+	}
+	if !strings.Contains(unmarkedRow, markEmpty) || strings.Contains(unmarkedRow, markFull) {
+		t.Fatalf("unmarked row should show %q only: %q", markEmpty, unmarkedRow)
+	}
+	if !strings.Contains(unmarkedRow, "▌") {
+		t.Fatalf("cursor row lacks its accent gutter: %q", unmarkedRow)
+	}
+	if strings.Contains(markedRow, "▌") {
+		t.Fatalf("a marked-only row must not look like the cursor: %q", markedRow)
+	}
+	if themeTokens.Surface.Light == themeTokens.Marked.Light || themeTokens.Surface.Dark == themeTokens.Marked.Dark {
+		t.Fatal("cursor and marked rows share the same band colour")
+	}
+}
+
+func TestMaterialRowsShowMarkState(t *testing.T) {
+	app := demoApp(t)
+	app.tab = TabMaterials
+
+	nodes := app.matNodes()
+	file := -1
+	for i, n := range nodes {
+		if n.kind == nodeFile {
+			file = i
+			break
+		}
+	}
+	if file < 0 {
+		t.Fatal("demo materials tree has no file rows")
+	}
+	markedRow := stripANSI(app.matTreeRow(nodes, file, 98, true))
+	unmarkedRow := stripANSI(app.matTreeRow(nodes, file, 98, false))
+	if !strings.Contains(markedRow, markFull) || !strings.Contains(unmarkedRow, markEmpty) {
+		t.Fatalf("material mark glyphs = %q / %q", markedRow, unmarkedRow)
+	}
+}
+
 func TestDueAgeUsesCalendarDays(t *testing.T) {
 	now := time.Date(2026, 10, 18, 23, 30, 0, 0, time.UTC)
 	if got := dueAge(model.Assignment{HasDue: true, Due: time.Date(2026, 10, 17, 23, 55, 0, 0, time.UTC)}, now); got != "−1d" {
