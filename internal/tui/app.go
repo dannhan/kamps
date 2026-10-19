@@ -445,9 +445,13 @@ func (m *App) moveX(delta int) {
 		}
 		return
 	}
-	if n.key != "" && (m.isTaskGroup(n) || m.materialHasChildren(n)) {
+	// h/left: fold the cursor's container while it actually shows children,
+	// keeping the highlight on it; on leaves and already-folded containers,
+	// walk up to the parent row instead.
+	if n.key != "" && (m.isTaskGroup(n) || m.materialHasChildren(n)) && hasVisibleChildren(nodes, n.key) {
 		m.expanded[n.key] = false
 		m.tabExpanded[m.tab] = m.expanded
+		return
 	}
 	if len(n.parents) == 0 {
 		return
@@ -459,6 +463,20 @@ func (m *App) moveX(delta int) {
 			return
 		}
 	}
+}
+
+// hasVisibleChildren reports whether the flat node list currently renders any
+// child rows for the node with the given key, i.e. whether folding it would
+// hide anything at all right now.
+func hasVisibleChildren(nodes []node, key string) bool {
+	for _, n := range nodes {
+		for _, parent := range n.parents {
+			if parent == key {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (m *App) toggleSelect() {

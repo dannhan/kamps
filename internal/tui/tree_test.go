@@ -344,6 +344,63 @@ func TestTabSwitchRestoresPerTabCursorAndFilter(t *testing.T) {
 	}
 }
 
+func TestFoldingOpenGroupKeepsCursorOnIt(t *testing.T) {
+	app := demoApp(t)
+	app.layout = LayList
+	app.tab = TabTasks
+
+	nodes := app.taskNodes()
+	tracked := findTaskNode(nodes, nodeBucket, "tracked")
+	if tracked < 0 {
+		t.Fatal("tracked bucket missing from the demo tree")
+	}
+	app.taskCursor = tracked
+	app.moveX(-1)
+	if app.taskCursor != tracked {
+		t.Fatalf("folding an open bucket moved the cursor: got %d, want %d", app.taskCursor, tracked)
+	}
+	if findTaskNode(app.taskNodes(), nodeBucket, "tracked") < 0 {
+		t.Fatal("the bucket the cursor stayed on vanished from the tree")
+	}
+}
+
+func TestFoldOnLeafMovesCursorToParent(t *testing.T) {
+	app := demoApp(t)
+	app.layout = LayList
+	app.tab = TabTasks
+
+	nodes := app.taskNodes()
+	task := findTaskNode(nodes, nodeTask, "K901000")
+	if task < 0 {
+		t.Fatal("assignment K901000 missing from the default tree")
+	}
+	expected := findTaskNode(nodes, nodeBucket, "needs decision")
+	app.taskCursor = task
+	app.moveX(-1)
+	if app.taskCursor != expected {
+		t.Fatalf("h on a leaf moved the cursor to %d, want parent bucket at %d", app.taskCursor, expected)
+	}
+}
+
+func TestFoldOnAlreadyFoldedGroupMovesCursorToParent(t *testing.T) {
+	app := demoApp(t)
+	app.layout = LayList
+	app.tab = TabTasks
+
+	app.expanded[courseKey(18515)] = false
+	nodes := app.taskNodes()
+	course := findTaskNode(nodes, nodeCourse, "")
+	expected := findTaskNode(nodes, nodeTerm, "smt11")
+	if course < 0 || expected != 0 {
+		t.Fatalf("unexpected folded tree: course=%d term=%d", course, expected)
+	}
+	app.taskCursor = course
+	app.moveX(-1)
+	if app.taskCursor != expected {
+		t.Fatalf("h on an already-folded course moved the cursor to %d, want term at %d", app.taskCursor, expected)
+	}
+}
+
 func TestDueAgeUsesCalendarDays(t *testing.T) {
 	now := time.Date(2026, 10, 18, 23, 30, 0, 0, time.UTC)
 	if got := dueAge(model.Assignment{HasDue: true, Due: time.Date(2026, 10, 17, 23, 55, 0, 0, time.UTC)}, now); got != "−1d" {
