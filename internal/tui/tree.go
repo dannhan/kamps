@@ -503,22 +503,28 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 	background := h.style
 	prefix := h.gutter() + background(stFaint).Render(treeGuides(nodes, index))
 	available := maxInt(1, width-lipgloss.Width(prefix))
+	group := m.isTaskGroup(n)
+	open := group && m.taskIsOpen(n.key, taskNodeDefaultOpen(n))
 	content := ""
 	counts := m.taskNodeCounts(n)
 	switch n.kind {
 	case nodeTerm:
-		content = background(stCode.Bold(true)).Render(n.term)
+		content = h.containerLead(open, selected) + background(stCode.Bold(true)).Render(n.term)
 	case nodeCourse:
 		name := m.shortCode(n.courseID)
 		if course, ok := m.courseByID(n.courseID); ok && course.Short != "" {
 			name = course.Short
 		}
-		content = background(stCode.Bold(true)).Render(name)
+		content = h.containerLead(open, selected) + background(stCode.Bold(true)).Render(name)
 	case nodeBucket:
-		content = background(stRow).Render(fmt.Sprintf("%s (%d)", n.bucket, len(m.taskGroupIDs(n))))
+		content = h.containerLead(open, selected) + background(stRow).Render(fmt.Sprintf("%s (%d)", n.bucket, len(m.taskGroupIDs(n))))
 	case nodeTask:
 		glyph := background(triageStyle(n.task.Triage)).Render(flagChar(n.task.Triage))
 		marker := h.markCell(selected)
+		caret := ""
+		if group {
+			caret = background(stFaint).Render(caretGlyph(open)) + background(stRow).Render(" ")
+		}
 		stateLabel := n.task.Triage.String()
 		if n.task.Triage == model.Undecided {
 			stateLabel = "new"
@@ -531,11 +537,11 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 			ageStyle = stOverdue
 		}
 		metadata := background(stRowDim).Render(" · "+n.task.ID+" · ") + background(ageStyle).Render(age)
-		fixed := lipgloss.Width(glyph) + 1 + lipgloss.Width(marker) + 1 + lipgloss.Width(state) + lipgloss.Width(metadata)
+		fixed := lipgloss.Width(glyph) + 1 + lipgloss.Width(marker) + 1 + lipgloss.Width(caret) + lipgloss.Width(state) + lipgloss.Width(metadata)
 		nameWidth := maxInt(1, available-fixed-1)
 		name := background(stRow).Render(ansi.Truncate(n.task.Name, nameWidth, "…"))
 		space := background(stRow).Render(" ")
-		content = glyph + space + marker + space + name + space + state + metadata
+		content = glyph + space + marker + space + caret + name + space + state + metadata
 	case nodeTaskMaterial:
 		state, style := materialTreeState(n.mat)
 		glyph := "○"
@@ -547,8 +553,7 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 		content = background(style).Render(glyph) + space + background(stFaint).Render("⁝") + space + background(stRow).Render(label) + space + background(style).Render(state)
 	}
 
-	if m.isTaskGroup(n) {
-		open := m.taskIsOpen(n.key, taskNodeDefaultOpen(n))
+	if group {
 		meta := ""
 		if n.kind == nodeCourse {
 			meta = formatTaskCounts(counts)
@@ -871,6 +876,12 @@ func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 	h := rowHighlight{cursor: index == m.matCursor, mark: selected}
 	background := h.style
 	prefix := h.gutter() + background(stFaint).Render(treeGuides(nodes, index))
+	parent := m.materialHasChildren(n)
+	open := n.key != "" && m.isOpen(n.key)
+	lead := ""
+	if parent {
+		lead = h.containerLead(open, selected)
+	}
 	content := ""
 	switch n.kind {
 	case nodeCourse:
@@ -878,7 +889,7 @@ func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 		if course, ok := m.courseByID(n.courseID); ok && course.Name != "" {
 			name = course.Name
 		}
-		content = background(stCode.Bold(true)).Render(name)
+		content = lead + background(stCode.Bold(true)).Render(name)
 	case nodeMaterialBucket:
 		count := 0
 		for _, material := range m.courseFiles(n.courseID) {
@@ -886,25 +897,28 @@ func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 				count++
 			}
 		}
-		content = background(stRow).Render(fmt.Sprintf("%s (%d)", n.bucket, count))
+		content = lead + background(stRow).Render(fmt.Sprintf("%s (%d)", n.bucket, count))
 	case nodeFile:
 		glyph, stateStyle := materialTreeState(n.mat)
 		state := "○"
 		if glyph == "downloaded" {
 			state = "●"
 		}
-		nameWidth := maxInt(1, width-lipgloss.Width(prefix)-12)
+		caret := ""
+		if parent {
+			caret = h.style(stFaint).Render(caretGlyph(open)) + h.style(stRow).Render(" ")
+		}
+		nameWidth := maxInt(1, width-lipgloss.Width(prefix)-12-lipgloss.Width(caret))
 		content = background(stateStyle).Render(state) +
-			background(stRow).Render(" ") + h.markCell(selected) + background(stRow).Render(" ") +
+			background(stRow).Render(" ") + h.markCell(selected) + background(stRow).Render(" ") + caret +
 			background(stRow).Render(ansi.Truncate(n.mat.Name, nameWidth, "…")) +
 			background(stateStyle).Render(" "+glyph)
 	case nodeWeek:
-		content = background(stCode.Bold(true)).Render(sectionLabel(n.mat.Section))
+		content = lead + background(stCode.Bold(true)).Render(sectionLabel(n.mat.Section))
 	case nodeMaterialAssignment:
 		content = background(triageStyle(n.task.Triage)).Render(flagChar(n.task.Triage)) + background(stFaint).Render(" ⁝ ") + background(stRow).Render("assignment: "+n.task.Name) + background(stRowDim).Render(" · "+n.task.ID)
 	}
-	open := n.key != "" && m.isOpen(n.key)
-	if (n.kind == nodeCourse || n.kind == nodeMaterialBucket || n.kind == nodeFile) && !open && m.materialHasChildren(n) {
+	if (n.kind == nodeCourse || n.kind == nodeMaterialBucket || n.kind == nodeFile) && !open && parent {
 		content += background(stRowDim).Render("  ⋯")
 	}
 	row := prefix + content

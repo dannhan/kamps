@@ -456,6 +456,91 @@ func TestMaterialRowsShowMarkState(t *testing.T) {
 	}
 }
 
+func TestParentRowsShowCaretAndMark(t *testing.T) {
+	app := demoApp(t)
+	app.layout = LayList
+	app.tab = TabTasks
+
+	nodes := app.taskNodes()
+	app.taskCursor = findTaskNode(nodes, nodeTask, "K901000")
+
+	// Open term: guide, then caret, mark column, name.
+	term := findTaskNode(nodes, nodeTerm, "smt11")
+	if row := stripANSI(app.taskTreeRow(nodes, term, 98)); !strings.Contains(row, "▾ "+markEmpty+" smt11") {
+		t.Fatalf("open term should show a down caret and hollow mark: %q", row)
+	}
+
+	// The demo tree's "closed" bucket starts folded.
+	closed := findTaskNode(nodes, nodeBucket, "closed")
+	row := stripANSI(app.taskTreeRow(nodes, closed, 98))
+	if !strings.Contains(row, "▸ "+markEmpty+" closed") {
+		t.Fatalf("folded bucket should show a right caret: %q", row)
+	}
+
+	// Marking every child turns the parent's mark on; a partial mark keeps it off.
+	tracked := findTaskNode(nodes, nodeBucket, "tracked")
+	ids := app.taskGroupIDs(nodes[tracked])
+	for _, id := range ids {
+		app.selected[id] = true
+	}
+	row = stripANSI(app.taskTreeRow(nodes, tracked, 98))
+	if !strings.Contains(row, "▾ "+markFull+" tracked") {
+		t.Fatalf("fully marked parent should show %q: %q", markFull, row)
+	}
+	delete(app.selected, ids[0])
+	row = stripANSI(app.taskTreeRow(nodes, tracked, 98))
+	if !strings.Contains(row, "▾ "+markEmpty+" tracked") {
+		t.Fatalf("partially marked parent should show %q: %q", markEmpty, row)
+	}
+}
+
+func TestMaterialParentRowsShowCaretAndMark(t *testing.T) {
+	app := demoApp(t)
+	app.tab = TabMaterials
+
+	nodes := app.matNodes()
+	if len(nodes) == 0 {
+		t.Fatal("demo materials tree is empty")
+	}
+	courseIndex := -1
+	fileIndex := -1
+	for i, n := range nodes {
+		if courseIndex < 0 && n.kind == nodeCourse {
+			courseIndex = i
+		}
+		if fileIndex < 0 && n.kind == nodeFile && app.materialHasChildren(n) {
+			fileIndex = i
+		}
+	}
+	if courseIndex < 0 || fileIndex < 0 {
+		t.Fatal("demo materials tree lacks a course or expandable file")
+	}
+
+	row := stripANSI(app.matTreeRow(nodes, courseIndex, 98, app.materialNodeSelected(nodes[courseIndex])))
+	if !strings.Contains(row, "▾ "+markEmpty) {
+		t.Fatalf("open course should show a down caret and hollow mark: %q", row)
+	}
+	for _, id := range app.materialNodeIDs(nodes[courseIndex]) {
+		app.selectedM[id] = true
+	}
+	row = stripANSI(app.matTreeRow(nodes, courseIndex, 98, app.materialNodeSelected(nodes[courseIndex])))
+	if !strings.Contains(row, "▾ "+markFull) {
+		t.Fatalf("fully marked course should show %q: %q", markFull, row)
+	}
+
+	fileKey := nodes[fileIndex].key
+	app.expanded[fileKey] = true
+	row = stripANSI(app.matTreeRow(nodes, fileIndex, 98, false))
+	if !strings.Contains(row, markEmpty+" ▾ ") {
+		t.Fatalf("expandable file should show a down caret before its name: %q", row)
+	}
+	app.expanded[fileKey] = false
+	row = stripANSI(app.matTreeRow(nodes, fileIndex, 98, false))
+	if !strings.Contains(row, markEmpty+" ▸ ") {
+		t.Fatalf("folded file should show a right caret before its name: %q", row)
+	}
+}
+
 func TestDueAgeUsesCalendarDays(t *testing.T) {
 	now := time.Date(2026, 10, 18, 23, 30, 0, 0, time.UTC)
 	if got := dueAge(model.Assignment{HasDue: true, Due: time.Date(2026, 10, 17, 23, 55, 0, 0, time.UTC)}, now); got != "−1d" {

@@ -44,6 +44,23 @@ const (
 	markFull  = "▪"
 )
 
+// caretGlyph is the expand/collapse indicator drawn before a parent row's
+// name. Open containers show a down caret, folded ones a right caret.
+func caretGlyph(open bool) string {
+	if open {
+		return "▾"
+	}
+	return "▸"
+}
+
+// containerLead renders the shared first columns of a parent row: the caret
+// that says whether the container is open, then the mark column. It lives in
+// the same slot as a task's triage glyph and mark, so child names line up.
+func (h rowHighlight) containerLead(open, marked bool) string {
+	return h.style(stFaint).Render(caretGlyph(open)) + h.style(stRow).Render(" ") +
+		h.markCell(marked) + h.style(stRow).Render(" ")
+}
+
 // markCell renders the mark column: a hollow square for an unmarked row and a
 // filled accent square for a marked one.
 func (h rowHighlight) markCell(marked bool) string {
