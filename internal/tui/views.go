@@ -68,7 +68,7 @@ func colsFor(w int, withID bool, lead int) (shortW, idW, nameW int) {
 // selected line rather than a coloured marker next to unhighlighted text.
 func tint(s lipgloss.Style, band bool) lipgloss.Style {
 	if band {
-		return s.Background(colSelBg)
+		return s.Background(themeTokens.Surface)
 	}
 	return s
 }
@@ -146,49 +146,18 @@ func (m *App) assignRow(a model.Assignment, contentW int, cursor, selected, with
 
 // ---- Tasks: list layout (the tree) ----
 
-// listLines is the Tasks tree: courses as parents, their assignments as
-// children, both panes filling the screen with the selected row's detail on
-// the right. The node list treeNodes() returns is exactly what is drawn here
-// and exactly what the keyboard walks.
 func (m *App) listLines(w, budget int) []string {
-	leftW := w * 42 / 100
-	rightW := w - leftW - 1
-	contentH := maxInt(3, budget-4)
-
+	contentH := maxInt(1, budget-4)
 	nodes := m.taskNodes()
-	leftInner := leftW - 2            // the pane's interior: the whole span between borders
-	listRows := maxInt(1, contentH-1) // one row goes to the column header
-	start, end := windowRange(len(nodes), m.taskCursor, listRows)
-
-	tasks := 0
-	for _, n := range nodes {
-		if n.kind == nodeTask {
-			tasks++
-		}
-	}
-
-	rows := []string{treeAssignHeader(leftInner, true)}
+	start, end := windowRange(len(nodes), m.taskCursor, contentH)
+	rows := make([]string, 0, contentH)
 	if len(nodes) == 0 {
-		rows = append(rows, stEmpty.Render("nothing matches this filter"))
+		rows = append(rows, " "+stEmpty.Render("nothing matches this filter"))
 	}
 	for i := start; i < end; i++ {
-		n := nodes[i]
-		cursor := i == m.taskCursor
-		var row string
-		if n.kind == nodeCourse {
-			row = m.courseRow(n, len(m.courseChildren(n.courseID)), len(m.courseAll(n.courseID)), leftInner, cursor)
-		} else {
-			row = m.taskRow(n.task, leftInner, cursor, m.selected[n.task.ID], true)
-		}
-		rows = append(rows, row)
+		rows = append(rows, m.taskTreeRow(nodes, i, w-2))
 	}
-
-	detail, dtitle := m.treeDetail(nodes, rightW-2)
-	title := fmt.Sprintf("▾ %s (%d)", m.filter, tasks)
-	return sideBySide(
-		panel(title, leftW, padRows(rows, contentH), true), leftW, true,
-		panel(dtitle, rightW, padRows(detail, contentH), false), rightW, false,
-	)
+	return panel(fmt.Sprintf("courses · %s · %d assignments", m.filter, len(m.visible())), w, padRows(rows, contentH), true)
 }
 
 // treeDetail fills the right pane for whatever row the cursor is on: an
@@ -198,12 +167,15 @@ func (m *App) treeDetail(nodes []node, width int) ([]string, string) {
 		return nil, "detail"
 	}
 	n := nodes[m.taskCursor]
-	if n.kind == nodeTask {
+	if n.kind == nodeTask || n.kind == nodeTaskMaterial {
 		return m.detailRows(n.task, width), n.task.ID + " · " + m.shortCode(n.courseID)
 	}
-	title := m.shortCode(n.courseID)
-	if c, ok := m.courseByID(n.courseID); ok && c.Name != "" {
-		title = c.Name
+	title := n.term
+	if n.kind != nodeTerm {
+		title = m.shortCode(n.courseID)
+		if course, ok := m.courseByID(n.courseID); ok && course.Name != "" {
+			title = course.Name
+		}
 	}
 	return m.courseDetail(n.courseID, width), title
 }
@@ -714,6 +686,17 @@ func (m *App) hintsLine(w int, where string) string {
 	// Say so rather than leave the mouse silently dead: kamps never turns on
 	// mouse reporting, which is what keeps the terminal's own drag-to-select
 	// working. Last in the list, so a narrow terminal drops it first.
+	if where == "tasks" {
+		legend := "○new ◐tracked ●done ◆ignored ×missed"
+		legendWidth := lipgloss.Width(legend)
+		available := maxInt(0, w-legendWidth-3)
+		items = hintsFit(append(items, "mouse off"), available)
+		left := hints(items)
+		if left == "" {
+			return stHelpTxt.Render(legend)
+		}
+		return left + stHelpSep.Render(" · ") + stHelpTxt.Render(legend)
+	}
 	return hints(hintsFit(append(items, "mouse off"), w))
 }
 

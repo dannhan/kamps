@@ -161,7 +161,7 @@ type App struct {
 func New(src source.Source, cfg config.Config, version string) *App {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(colAccent)
+	sp.Style = lipgloss.NewStyle().Foreground(themeTokens.Accent)
 
 	h := help.New()
 
@@ -390,19 +390,28 @@ func (m *App) moveX(delta int) {
 			return
 		}
 		n := nodes[m.taskCursor]
+		if !m.isTaskGroup(n) {
+			return
+		}
+		open := m.taskIsOpen(n.key, taskNodeDefaultOpen(n))
 		if delta > 0 {
-			m.setOpen(courseKey(n.courseID), true)
+			if !open {
+				m.expanded[n.key] = true
+			}
 			return
 		}
-		if !m.isOpen(courseKey(n.courseID)) {
+		if !open {
 			return
 		}
-		m.setOpen(courseKey(n.courseID), false)
-		// The row the cursor was on may be folded away; land on the course row.
+		m.expanded[n.key] = false
 		nodes = m.taskNodes()
-		for i, nn := range nodes {
-			if nn.kind == nodeCourse && nn.courseID == n.courseID {
-				m.taskCursor = clampInt(i, 0, len(nodes)-1)
+		parentKey := ""
+		if len(n.parents) > 0 {
+			parentKey = n.parents[len(n.parents)-1]
+		}
+		for i, candidate := range nodes {
+			if candidate.key == parentKey {
+				m.taskCursor = i
 				return
 			}
 		}
@@ -450,15 +459,14 @@ func (m *App) toggleSelect() {
 				return
 			}
 			n := nodes[m.taskCursor]
+			if n.kind == nodeTaskMaterial {
+				return
+			}
 			if n.kind == nodeTask {
 				toggleSet(m.selected, []string{n.task.ID})
 				return
 			}
-			ids := make([]string, 0, 8)
-			for _, a := range m.courseChildren(n.courseID) {
-				ids = append(ids, a.ID)
-			}
-			toggleSet(m.selected, ids)
+			toggleSet(m.selected, m.taskGroupIDs(n))
 			return
 		}
 		if id := m.cursorAssignmentID(); id != "" {
@@ -694,12 +702,10 @@ func (m *App) targetIDs() []string {
 			return []string{id}
 		}
 		nodes := m.taskNodes()
-		if m.taskCursor >= 0 && m.taskCursor < len(nodes) && nodes[m.taskCursor].kind == nodeCourse {
-			for _, a := range m.courseChildren(nodes[m.taskCursor].courseID) {
-				ids = append(ids, a.ID)
-			}
+		if m.taskCursor >= 0 && m.taskCursor < len(nodes) && m.isTaskGroup(nodes[m.taskCursor]) {
+			return m.taskGroupIDs(nodes[m.taskCursor])
 		}
-		return ids
+		return nil
 	}
 	if id := m.cursorAssignmentID(); id != "" {
 		return []string{id}

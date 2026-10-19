@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/ruyam/kamps/internal/model"
 )
@@ -53,17 +54,10 @@ func fitLine(s string, w int) string {
 }
 
 func truncate(s string, w int) string {
-	if lipgloss.Width(s) <= w {
-		return s
+	if w <= 0 {
+		return ""
 	}
-	r := []rune(s)
-	if w <= 1 {
-		if w <= 0 {
-			return ""
-		}
-		return string(r[:w])
-	}
-	return string(r[:w-1]) + "…"
+	return ansi.Truncate(s, w, "…")
 }
 
 func windowRange(total, cursor, height int) (int, int) {
@@ -137,13 +131,13 @@ func sortSlice(s []model.Assignment) {
 func flagChar(t model.Triage) string {
 	switch t {
 	case model.Tracked:
-		return "t"
+		return "◐"
 	case model.Missed:
-		return "m"
+		return "×"
 	case model.Ignored:
-		return "i"
+		return "◆"
 	}
-	return " "
+	return "○"
 }
 
 func triageStyle(t model.Triage) lipgloss.Style {
@@ -155,7 +149,7 @@ func triageStyle(t model.Triage) lipgloss.Style {
 	case model.Ignored:
 		return stFlagI
 	}
-	return stRowDim
+	return stFlagNew
 }
 
 func kv(k, v string, style lipgloss.Style) string {
@@ -185,9 +179,13 @@ func barStyleFor(label string) lipgloss.Style {
 	case "missed":
 		return stFlagM
 	case "ignore", "ignored":
-		return stCode
+		return stFlagI
+	case "done":
+		return stDone
+	case "new", "undecided":
+		return stFlagNew
 	}
-	return stSoon
+	return stFlagNew
 }
 
 // barCells renders just the filled/empty bar, width columns wide. The empty
