@@ -175,21 +175,6 @@ func TestTaskFooterKeepsPriorityAndMoreHint(t *testing.T) {
 	}
 }
 
-func TestTaskTitleLegendFallback(t *testing.T) {
-	full := stripANSI(taskTitleLine("courses · all · 42 assignments", 100))
-	if !strings.Contains(full, "○ new") || !strings.Contains(full, "× missed") {
-		t.Fatalf("full title legend missing: %q", full)
-	}
-	glyphs := stripANSI(taskTitleLine("courses · all · 42 assignments", 45))
-	if !strings.Contains(glyphs, "○  ◐  ●  ◆  ×") || strings.Contains(glyphs, "new") {
-		t.Fatalf("glyph-only title legend not selected: %q", glyphs)
-	}
-	hidden := stripANSI(taskTitleLine("courses · all · 42 assignments", 10))
-	if strings.ContainsAny(hidden, "○◐●◆×") {
-		t.Fatalf("title legend should be hidden: %q", hidden)
-	}
-}
-
 func TestTaskFooterKeepsQueueAtRightEdge(t *testing.T) {
 	app := demoApp(t)
 	app.width = 100
