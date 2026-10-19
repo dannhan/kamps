@@ -157,7 +157,32 @@ func (m *App) listLines(w, budget int) []string {
 	for i := start; i < end; i++ {
 		rows = append(rows, m.taskTreeRow(nodes, i, w-2))
 	}
-	return panel(fmt.Sprintf("courses · %s · %d assignments", m.filter, len(m.visible())), w, padRows(rows, contentH), true)
+	title := fmt.Sprintf("courses · %s · %d assignments", m.filter, len(m.visible()))
+	return panelWithTitle(title, func(inner int) string {
+		return taskTitleLine(title, inner)
+	}, w, padRows(rows, contentH), true)
+}
+
+func taskTitleLine(title string, width int) string {
+	states := []struct {
+		glyph string
+		name  string
+		style lipgloss.Style
+	}{{"○", "new", stFlagNew}, {"◐", "tracked", stFlagT}, {"●", "done", stDone}, {"◆", "ignored", stFlagI}, {"×", "missed", stFlagM}}
+	var full, glyphs []string
+	for _, state := range states {
+		full = append(full, state.style.Render(state.glyph)+" "+stDim.Render(state.name))
+		glyphs = append(glyphs, state.style.Render(state.glyph))
+	}
+	for _, legend := range []string{strings.Join(full, "  "), strings.Join(glyphs, "  ")} {
+		leftWidth := maxInt(1, width-lipgloss.Width(legend)-2)
+		left := " " + stPaneTitle.Render(truncate(title, leftWidth-1))
+		remaining := width - lipgloss.Width(left)
+		if lipgloss.Width(legend)+2 <= remaining {
+			return left + strings.Repeat(" ", remaining-lipgloss.Width(legend)) + legend
+		}
+	}
+	return " " + stPaneTitle.Render(truncate(title, width-1))
 }
 
 // treeDetail fills the right pane for whatever row the cursor is on: an

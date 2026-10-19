@@ -126,20 +126,95 @@ func TestTaskTreeConnectorsAndRowWidth(t *testing.T) {
 	}
 }
 
-func TestCoursesTreeViewAt100Columns(t *testing.T) {
-	app := demoApp(t)
-	app.width = 100
-	app.height = 40
-	app.layout = LayList
-	app.taskCursor = 0
-	view := app.View()
-	for i, line := range strings.Split(view, "\n") {
-		if got := lipgloss.Width(line); got != 100 {
-			t.Fatalf("view line %d has width %d, want 100: %q", i+1, got, stripANSI(line))
+func TestCoursesTreeViewsAt100And80Columns(t *testing.T) {
+	for _, width := range []int{100, 80} {
+		app := demoApp(t)
+		app.width = width
+		app.height = 40
+		app.layout = LayList
+		app.taskCursor = 0
+		view := app.View()
+		for i, line := range strings.Split(view, "\n") {
+			if got := lipgloss.Width(line); got != width {
+				t.Fatalf("width %d line %d has width %d: %q", width, i+1, got, stripANSI(line))
+			}
+		}
+		if !strings.Contains(view, "courses · all") || !strings.Contains(view, "smt11") || !strings.Contains(stripANSI(view), "queue empty") {
+			t.Fatalf("%d-column view is missing expected content:\n%s", width, stripANSI(view))
 		}
 	}
-	if !strings.Contains(view, "courses · all") || !strings.Contains(view, "○new") || !strings.Contains(view, "smt11") {
-		t.Fatalf("100-column view is missing expected tree content:\n%s", stripANSI(view))
+}
+
+func TestQuietTreeLineColorTracksForegroundAndBackground(t *testing.T) {
+	for _, pair := range [][2]string{{"#1B1B26", "#E4E4E4"}, {"#EDEDED", "#333355"}} {
+		got := quietHex(pair[0], pair[1])
+		if got == pair[0] || got == pair[1] || len(got) != 7 {
+			t.Fatalf("quietHex(%q, %q) = %q", pair[0], pair[1], got)
+		}
+	}
+	if got := quietHex("bad", "#000000"); got != "#8A8A8A" {
+		t.Fatalf("invalid colors fallback = %q", got)
+	}
+}
+
+func TestTaskFooterKeepsPriorityAndMoreHint(t *testing.T) {
+	full := taskFooterHints(200)
+	want := "↑↓ move · h/l fold · space select · t/m/i decide · c commit · / filter · ? more"
+	if got := stripANSI(full); got != want {
+		t.Fatalf("full footer = %q, want %q", got, want)
+	}
+	short := taskFooterHints(12)
+	if got := stripANSI(short); got != "? more" {
+		t.Fatalf("short footer = %q, want ? more", got)
+	}
+	medium := stripANSI(taskFooterHints(40))
+	if !strings.HasSuffix(medium, "? more") || strings.Contains(medium, "/ filter") {
+		t.Fatalf("short footer did not drop hints from the right: %q", medium)
+	}
+}
+
+func TestTaskTitleLegendFallback(t *testing.T) {
+	full := stripANSI(taskTitleLine("courses · all · 42 assignments", 100))
+	if !strings.Contains(full, "○ new") || !strings.Contains(full, "× missed") {
+		t.Fatalf("full title legend missing: %q", full)
+	}
+	glyphs := stripANSI(taskTitleLine("courses · all · 42 assignments", 45))
+	if !strings.Contains(glyphs, "○  ◐  ●  ◆  ×") || strings.Contains(glyphs, "new") {
+		t.Fatalf("glyph-only title legend not selected: %q", glyphs)
+	}
+	hidden := stripANSI(taskTitleLine("courses · all · 42 assignments", 10))
+	if strings.ContainsAny(hidden, "○◐●◆×") {
+		t.Fatalf("title legend should be hidden: %q", hidden)
+	}
+}
+
+func TestTaskFooterKeepsQueueAtRightEdge(t *testing.T) {
+	app := demoApp(t)
+	app.width = 100
+	line := stripANSI(app.taskFooter(99))
+	if !strings.HasPrefix(line, "↑↓ move") || !strings.HasSuffix(line, "queue empty") {
+		t.Fatalf("footer alignment = %q", line)
+	}
+	if strings.Contains(line, "[") || strings.Contains(line, "v view") || strings.Contains(line, "mouse") {
+		t.Fatalf("footer contains secondary controls or brackets: %q", line)
+	}
+	app.pending["tracked"] = model.Tracked
+	line = stripANSI(app.taskFooter(99))
+	if !strings.HasSuffix(line, "queue: 1 track") {
+		t.Fatalf("populated queue is not right aligned: %q", line)
+	}
+}
+
+func TestTaskQueueLabels(t *testing.T) {
+	app := demoApp(t)
+	if got := stripANSI(app.taskQueueLabel()); got != "queue empty" {
+		t.Fatalf("empty queue label = %q", got)
+	}
+	app.pending["a"] = model.Tracked
+	app.pending["b"] = model.Tracked
+	app.pending["c"] = model.Missed
+	if got := stripANSI(app.taskQueueLabel()); got != "queue: 2 track · 1 missed" {
+		t.Fatalf("populated queue label = %q", got)
 	}
 }
 

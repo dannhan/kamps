@@ -461,7 +461,7 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 		}
 		return style
 	}
-	prefix := background(stFaint).Render(treeGuides(nodes, index))
+	prefix := background(stTreeLine).Render(treeGuides(nodes, index))
 	available := maxInt(1, width-lipgloss.Width(prefix))
 	content := ""
 	counts := m.taskNodeCounts(n)
@@ -478,7 +478,7 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 		content = background(stRow).Render(fmt.Sprintf("%s (%d)", n.bucket, len(m.taskGroupIDs(n))))
 	case nodeTask:
 		glyph := background(triageStyle(n.task.Triage)).Render(flagChar(n.task.Triage))
-		marker := background(stFaint).Render("⁝")
+		marker := background(stTreeLine).Render("⁝")
 		if selected {
 			marker = background(stSelMark).Render("▪")
 		}
@@ -486,14 +486,14 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 		if n.task.Triage == model.Undecided {
 			stateLabel = "new"
 		}
-		state := background(triageStyle(n.task.Triage)).Render(stateLabel)
+		state := background(stDim).Render(stateLabel)
 		now := time.Now()
 		age := dueAge(n.task, now)
-		ageStyle := stRowDim
+		ageStyle := stDim
 		if n.task.HasDue && n.task.Due.Before(now) {
 			ageStyle = stOverdue
 		}
-		metadata := background(stRowDim).Render(" · "+n.task.ID+" · ") + background(ageStyle).Render(age)
+		metadata := background(stDim).Render(" · "+n.task.ID+" · ") + background(ageStyle).Render(age)
 		fixed := lipgloss.Width(glyph) + 1 + lipgloss.Width(marker) + 1 + lipgloss.Width(state) + lipgloss.Width(metadata)
 		nameWidth := maxInt(1, available-fixed-1)
 		name := background(stRow).Render(ansi.Truncate(n.task.Name, nameWidth, "…"))
@@ -507,22 +507,24 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 		}
 		label := ansi.Truncate(n.mat.Name, maxInt(1, available-lipgloss.Width(state)-5), "…")
 		space := background(stRow).Render(" ")
-		content = background(style).Render(glyph) + space + background(stFaint).Render("⁝") + space + background(stRow).Render(label) + space + background(style).Render(state)
+		content = background(style).Render(glyph) + space + background(stTreeLine).Render("⁝") + space + background(stRow).Render(label) + space + background(stDim).Render(state)
 	}
 
 	if m.isTaskGroup(n) {
 		open := m.taskIsOpen(n.key, taskNodeDefaultOpen(n))
 		meta := ""
 		if n.kind == nodeCourse {
-			meta = formatTaskCounts(counts)
+			meta = formatTaskCounts(counts, band)
 		}
 		if !open {
 			if meta != "" {
-				meta += "  "
+				meta += background(stTreeLine).Render("  ")
 			}
-			meta += "⋯"
+			meta += background(stTreeLine).Render("⋯")
 		}
-		meta = background(stRowDim).Render(meta)
+		if n.kind != nodeCourse && open {
+			meta = background(stDim).Render(meta)
+		}
 		metaWidth := lipgloss.Width(meta)
 		contentWidth := maxInt(1, available-metaWidth-1)
 		content = ansiTruncate(content, contentWidth)
@@ -565,7 +567,7 @@ func (m *App) taskNodeCounts(group node) [5]int {
 	return counts
 }
 
-func formatTaskCounts(counts [5]int) string {
+func formatTaskCounts(counts [5]int, band bool) string {
 	states := []struct {
 		count int
 		glyph string
@@ -573,11 +575,22 @@ func formatTaskCounts(counts [5]int) string {
 	}{{counts[0], "○", stFlagNew}, {counts[1], "◐", stFlagT}, {counts[2], "●", stDone}, {counts[3], "◆", stFlagI}, {counts[4], "×", stFlagM}}
 	var parts []string
 	for _, state := range states {
-		if state.count > 0 {
-			parts = append(parts, state.style.Render(fmt.Sprintf("%s %d", state.glyph, state.count)))
+		if state.count == 0 {
+			continue
 		}
+		glyphStyle := state.style
+		dimStyle := stDim
+		if band {
+			glyphStyle = glyphStyle.Background(themeTokens.Surface)
+			dimStyle = dimStyle.Background(themeTokens.Surface)
+		}
+		parts = append(parts, glyphStyle.Render(state.glyph)+" "+dimStyle.Render(fmt.Sprint(state.count)))
 	}
-	return strings.Join(parts, "  ")
+	separator := stTreeLine.Render("  ")
+	if band {
+		separator = stTreeLine.Background(themeTokens.Surface).Render("  ")
+	}
+	return strings.Join(parts, separator)
 }
 
 func dueAge(assignment model.Assignment, now time.Time) string {

@@ -1,23 +1,31 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"fmt"
+	"math"
+	"strconv"
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 type themeColors struct {
-	Bg      lipgloss.AdaptiveColor
-	Surface lipgloss.AdaptiveColor
-	Overlay lipgloss.AdaptiveColor
-	Border  lipgloss.AdaptiveColor
-	Bright  lipgloss.AdaptiveColor
-	Text    lipgloss.AdaptiveColor
-	Dim     lipgloss.AdaptiveColor
-	Subtle  lipgloss.AdaptiveColor
-	Accent  lipgloss.AdaptiveColor
-	Accent2 lipgloss.AdaptiveColor
-	New     lipgloss.AdaptiveColor
-	Tracked lipgloss.AdaptiveColor
-	Done    lipgloss.AdaptiveColor
-	Ignored lipgloss.AdaptiveColor
-	Missed  lipgloss.AdaptiveColor
+	Bg       lipgloss.AdaptiveColor
+	Surface  lipgloss.AdaptiveColor
+	Overlay  lipgloss.AdaptiveColor
+	Border   lipgloss.AdaptiveColor
+	Bright   lipgloss.AdaptiveColor
+	Primary  lipgloss.AdaptiveColor
+	Dim      lipgloss.AdaptiveColor
+	Subtle   lipgloss.AdaptiveColor
+	TreeLine lipgloss.AdaptiveColor
+	Accent   lipgloss.AdaptiveColor
+	Accent2  lipgloss.AdaptiveColor
+	New      lipgloss.AdaptiveColor
+	Tracked  lipgloss.AdaptiveColor
+	Done     lipgloss.AdaptiveColor
+	Ignored  lipgloss.AdaptiveColor
+	Missed   lipgloss.AdaptiveColor
 }
 
 var themeTokens = themeColors{
@@ -26,9 +34,13 @@ var themeTokens = themeColors{
 	Overlay: lipgloss.AdaptiveColor{Light: "#F2F2F2", Dark: "#292940"},
 	Border:  lipgloss.AdaptiveColor{Light: "#C8C8D0", Dark: "#3B3E5E"},
 	Bright:  lipgloss.AdaptiveColor{Light: "#1B1B26", Dark: "#EDEDED"},
-	Text:    lipgloss.AdaptiveColor{Light: "#1B1B26", Dark: "#EDEDED"},
+	Primary: lipgloss.AdaptiveColor{Light: "#1B1B26", Dark: "#EDEDED"},
 	Dim:     lipgloss.AdaptiveColor{Light: "#5C5C5C", Dark: "#C6C6C6"},
 	Subtle:  lipgloss.AdaptiveColor{Light: "#8A8A8A", Dark: "#8A8A8A"},
+	TreeLine: lipgloss.AdaptiveColor{
+		Light: quietHex("#1B1B26", "#E4E4E4"),
+		Dark:  quietHex("#EDEDED", "#333355"),
+	},
 	Accent:  lipgloss.AdaptiveColor{Light: "#4B4FA0", Dark: "#8288B8"},
 	Accent2: lipgloss.AdaptiveColor{Light: "#4B4FA0", Dark: "#8288B8"},
 	New:     lipgloss.AdaptiveColor{Light: "#8A8A8A", Dark: "#8A8A8A"},
@@ -38,11 +50,56 @@ var themeTokens = themeColors{
 	Missed:  lipgloss.AdaptiveColor{Light: "#C0392B", Dark: "#F7768E"},
 }
 
+func quietHex(foreground, background string) string {
+	parse := func(value string) ([3]float64, bool) {
+		var rgb [3]float64
+		value = strings.TrimPrefix(value, "#")
+		if len(value) != 6 {
+			return rgb, false
+		}
+		for i := range rgb {
+			component, err := strconv.ParseUint(value[i*2:i*2+2], 16, 8)
+			if err != nil {
+				return rgb, false
+			}
+			v := float64(component) / 255
+			if v <= 0.04045 {
+				rgb[i] = v / 12.92
+			} else {
+				rgb[i] = math.Pow((v+0.055)/1.055, 2.4)
+			}
+		}
+		return rgb, true
+	}
+	fg, okFG := parse(foreground)
+	bg, okBG := parse(background)
+	if !okFG || !okBG {
+		return "#8A8A8A"
+	}
+	var value strings.Builder
+	value.WriteByte('#')
+	for i := range fg {
+		linear := bg[i] + (fg[i]-bg[i])*0.45
+		var srgb float64
+		if linear <= 0.0031308 {
+			srgb = linear * 12.92
+		} else {
+			srgb = 1.055*math.Pow(linear, 1/2.4) - 0.055
+		}
+		component := int(srgb*255 + 0.5)
+		value.WriteString(fmt.Sprintf("%02X", component))
+	}
+	return value.String()
+}
+
 var (
-	stFaint   = lipgloss.NewStyle().Foreground(themeTokens.Subtle)
-	stTitle   = lipgloss.NewStyle().Foreground(themeTokens.Bright).Bold(true)
-	stEmpty   = lipgloss.NewStyle().Foreground(themeTokens.Subtle).Italic(true)
-	stHelpBox = lipgloss.NewStyle().
+	stPrimary  = lipgloss.NewStyle().Foreground(themeTokens.Primary)
+	stDim      = lipgloss.NewStyle().Foreground(themeTokens.Dim)
+	stTreeLine = lipgloss.NewStyle().Foreground(themeTokens.TreeLine)
+	stFaint    = lipgloss.NewStyle().Foreground(themeTokens.Subtle)
+	stTitle    = lipgloss.NewStyle().Foreground(themeTokens.Bright).Bold(true)
+	stEmpty    = lipgloss.NewStyle().Foreground(themeTokens.Subtle).Italic(true)
+	stHelpBox  = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(themeTokens.Border).
 			Padding(1, 2)
@@ -54,7 +111,7 @@ var (
 	stHelpTxt = lipgloss.NewStyle().Foreground(themeTokens.Subtle)
 	stHelpSep = lipgloss.NewStyle().Foreground(themeTokens.Border)
 
-	stRow     = lipgloss.NewStyle().Foreground(themeTokens.Text)
+	stRow     = stPrimary
 	stRowDim  = lipgloss.NewStyle().Foreground(themeTokens.Subtle)
 	stCursor  = lipgloss.NewStyle().Foreground(themeTokens.Accent)
 	stSelMark = lipgloss.NewStyle().Foreground(themeTokens.Accent)
@@ -70,7 +127,7 @@ var (
 	stPaneTitle = lipgloss.NewStyle().Foreground(themeTokens.Bright)
 	stRule      = lipgloss.NewStyle().Foreground(themeTokens.Border)
 	stLabel     = lipgloss.NewStyle().Foreground(themeTokens.Dim)
-	stValue     = lipgloss.NewStyle().Foreground(themeTokens.Text)
+	stValue     = stPrimary
 	stKey       = lipgloss.NewStyle().Foreground(themeTokens.Accent)
 	stSection   = lipgloss.NewStyle().Foreground(themeTokens.Bright)
 	stStep      = lipgloss.NewStyle().Foreground(themeTokens.Subtle)

@@ -1042,11 +1042,44 @@ func (m *App) tabBar(w int) string {
 // commit queue — or whatever the app just did — on the right.
 func (m *App) helpBar(w int) string {
 	inner := w - 1
+	if m.tab == TabTasks && m.layout == LayList {
+		return " " + m.taskFooter(inner)
+	}
 	right := m.queueLabel()
 	if f := m.footer(); f != "" {
 		right = f
 	}
 	return " " + barLine(m.hintsLine(inner, m.helpWhere()), right, inner)
+}
+
+func (m *App) taskFooter(width int) string {
+	queue := m.taskQueueLabel()
+	queueWidth := lipgloss.Width(queue)
+	if queueWidth >= width {
+		return fitLine(queue, width)
+	}
+	hintWidth := maxInt(0, width-queueWidth-2)
+	hints := taskFooterHints(hintWidth)
+	gap := maxInt(1, width-lipgloss.Width(hints)-queueWidth)
+	return fitLine(hints+strings.Repeat(" ", gap)+queue, width)
+}
+
+func (m *App) taskQueueLabel() string {
+	tracked, missed, ignored := m.pendingCounts()
+	if tracked+missed+ignored == 0 {
+		return stDim.Render("queue empty")
+	}
+	var parts []string
+	if tracked > 0 {
+		parts = append(parts, fmt.Sprintf("%d track", tracked))
+	}
+	if missed > 0 {
+		parts = append(parts, fmt.Sprintf("%d missed", missed))
+	}
+	if ignored > 0 {
+		parts = append(parts, fmt.Sprintf("%d ignore", ignored))
+	}
+	return stKey.Render("queue: " + strings.Join(parts, " · "))
 }
 
 // barLine lays a left and a right segment on one line of exactly w columns,
@@ -1126,10 +1159,13 @@ func (m *App) bodyLines(w, budget int) []string {
 
 func (m *App) helpLines(w int) []string {
 	full := m.help.FullHelpView(m.keys.FullHelp())
-	// kamps never captures the mouse: that is what keeps the terminal's own
-	// drag-to-select working, and it is why clicking a row does nothing.
-	note := "note  mouse off: drag to select text"
-	box := stHelpBox.Render(stTitle.Render("kamps — keys") + "\n\n" + full + "\n" + stFaint.Render(note))
+	legend := stFlagNew.Render("○") + " " + stDim.Render("new") + "  " +
+		stFlagT.Render("◐") + " " + stDim.Render("tracked") + "  " +
+		stDone.Render("●") + " " + stDim.Render("done") + "  " +
+		stFlagI.Render("◆") + " " + stDim.Render("ignored") + "  " +
+		stFlagM.Render("×") + " " + stDim.Render("missed")
+	note := "mouse off: drag to select text"
+	box := stHelpBox.Render(stTitle.Render("kamps — keys") + "\n\n" + full + "\n\n" + legend + "\n" + stFaint.Render(note))
 	return strings.Split(box, "\n")
 }
 

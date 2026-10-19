@@ -55,10 +55,18 @@ func paneLine(content string, w int, focused bool) string {
 // The height follows the content, so pair panels with sideBySide, which pads
 // the shorter one.
 func panel(title string, w int, rows []string, focused bool) []string {
+	return panelWithTitle(title, nil, w, rows, focused)
+}
+
+func panelWithTitle(title string, titleRight func(int) string, w int, rows []string, focused bool) []string {
 	inner := maxInt(1, w-2)
 	content := make([]string, 0, len(rows)+2)
 	if title != "" {
-		content = append(content, " "+stPaneTitle.Render(truncate(title, inner-1)), rule(inner))
+		line := " " + stPaneTitle.Render(truncate(title, inner-1))
+		if titleRight != nil {
+			line = titleRight(inner)
+		}
+		content = append(content, line, rule(inner))
 	}
 	content = append(content, rows...)
 
@@ -107,6 +115,26 @@ func hintsFit(items []string, w int) []string {
 }
 
 // hints renders "key label · key label …" for the help bar.
+func taskFooterHints(width int) string {
+	items := []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", "c commit", "/ filter", "? more"}
+	kept := []string{"? more"}
+	used := lipgloss.Width(kept[0])
+	for _, item := range items[:len(items)-1] {
+		candidateWidth := lipgloss.Width(item) + 3 + used
+		if candidateWidth > width {
+			break
+		}
+		kept = append(kept[:len(kept)-1], append([]string{item}, kept[len(kept)-1])...)
+		used = candidateWidth
+	}
+	parts := make([]string, len(kept))
+	for i, item := range kept {
+		key, label, _ := strings.Cut(item, " ")
+		parts[i] = stHelpKey.Render(key) + " " + stDim.Render(label)
+	}
+	return strings.Join(parts, stTreeLine.Render(" · "))
+}
+
 func hints(items []string) string {
 	parts := make([]string, len(items))
 	for i, it := range items {
