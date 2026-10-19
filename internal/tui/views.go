@@ -111,17 +111,11 @@ func blanks(band bool, n int) string {
 // the full interior, so the cursor line is one continuous bar with no unstyled
 // column anywhere inside it.
 func (m *App) assignRow(a model.Assignment, contentW int, cursor, selected, withID bool) string {
-	band := cursor || selected
+	h := rowHighlight{cursor: cursor, mark: selected}
 
-	margin := gap(band)
-	gutter := gap(band)
-	if cursor {
-		gutter = tint(stCursor, band).Render("▌")
-	}
-	pick := gap(band)
-	if selected {
-		pick = tint(stSelMark, band).Render("▪")
-	}
+	margin := h.gap()
+	gutter := h.gutter()
+	pick := h.markCell(selected)
 
 	shortW, idW, nameW := rowCols(contentW, withID)
 
@@ -131,17 +125,17 @@ func (m *App) assignRow(a model.Assignment, contentW int, cursor, selected, with
 	}
 
 	parts := []string{
-		margin + gutter + pick + tint(triageStyle(a.Triage), band).Render(flagChar(a.Triage)),
-		tint(stCode, band).Render(pad(m.shortCode(a.CourseID), shortW, false)),
-		tint(stRowDim, band).Render(listDate(a)),
+		margin + gutter + pick + h.style(triageStyle(a.Triage)).Render(flagChar(a.Triage)),
+		h.style(stCode).Render(pad(m.shortCode(a.CourseID), shortW, false)),
+		h.style(stRowDim).Render(listDate(a)),
 	}
 	if idW > 0 {
-		parts = append(parts, tint(stRowDim, band).Render(pad(a.ID, idW, false)))
+		parts = append(parts, h.style(stRowDim).Render(pad(a.ID, idW, false)))
 	}
-	parts = append(parts, tint(nameStyle, band).Render(truncate(a.Name, nameW)))
-	row := strings.Join(parts, gap(band))
+	parts = append(parts, h.style(nameStyle).Render(truncate(a.Name, nameW)))
+	row := strings.Join(parts, h.gap())
 
-	return row + blanks(band, contentW-lipgloss.Width(row))
+	return row + h.blanks(contentW-lipgloss.Width(row))
 }
 
 // ---- Tasks: list layout (the tree) ----

@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 // rowHighlight holds the two independent decorations a list row can carry: the
 // cursor (where the keyboard is) and the mark (what space has selected).
@@ -37,6 +41,18 @@ func (h rowHighlight) gutter() string {
 		return h.style(stCursor).Render("▌")
 	}
 	return h.style(stRow).Render(" ")
+}
+
+// gap is one banded column between two cells, and blanks is n banded columns
+// at the end of a row. Every separator has to carry the band, otherwise plain
+// spaces punch uncoloured holes through the highlight.
+func (h rowHighlight) gap() string { return h.style(stRow).Render(" ") }
+
+func (h rowHighlight) blanks(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return h.style(stRow).Render(strings.Repeat(" ", n))
 }
 
 const (
