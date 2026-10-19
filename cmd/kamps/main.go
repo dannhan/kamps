@@ -83,9 +83,9 @@ FLAGS
   --no-anim        no spinner or progress motion
 
 SCREENS
-  1 Tasks       2 Materials       3 Sync
-  v  cycle the Tasks view: dashboard · list
-  c  review & commit what you have decided
+  1 Tasks       2 Materials       3 Sync       4 Commit
+  c  open the full-screen commit preview
+  tab / shift+tab  switch tabs
 
 KEYS
   ↑/k ↓/j    move            space   select

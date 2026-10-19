@@ -242,7 +242,7 @@ func (m *App) detailRows(a model.Assignment, width int) []string {
 
 // similarManualTask is a demo stand-in for the future working/ cross-check.
 func (m *App) similarManualTask(a model.Assignment) string {
-	if a.Triage != model.Undecided || !strings.Contains(strings.ToLower(a.Name), "progress report 5") {
+	if !strings.Contains(strings.ToLower(a.Name), "progress report 5") {
 		return ""
 	}
 	return "Submit " + m.shortCode(a.CourseID) + " Report 5"
@@ -697,32 +697,11 @@ func (m *App) syncLines(w, budget int) []string {
 // ---- small helpers ----
 
 func (m *App) hintsLine(w int, where string) string {
-	var items []string
-	switch where {
-	case "materials":
-		items = []string{"↑↓ move", "h/l fold", "space select", "d download", "1-3 tabs", "? help", "q quit"}
-	case "sync":
-		items = []string{"s sync", "b backup", "1-3 tabs", "? help", "q quit"}
-	case "wizard":
-		items = []string{"↑↓ move", "space toggle", "enter next", "esc back", "? help"}
-	default:
-		items = []string{"↑↓ move", "h/l fold", "t/m/i/u", "space select", "v view", "/ filter", "c commit", "? help"}
+	_, _, items, _ := m.tabContent(w, maxInt(1, m.height-5))
+	if where == "help" {
+		items = []string{"↑↓ move", "tab switch", "? more"}
 	}
-	// Say so rather than leave the mouse silently dead: kamps never turns on
-	// mouse reporting, which is what keeps the terminal's own drag-to-select
-	// working. Last in the list, so a narrow terminal drops it first.
-	if where == "tasks" {
-		legend := "○new ◐tracked ●done ◆ignored ×missed"
-		legendWidth := lipgloss.Width(legend)
-		available := maxInt(0, w-legendWidth-3)
-		items = hintsFit(append(items, "mouse off"), available)
-		left := hints(items)
-		if left == "" {
-			return stHelpTxt.Render(legend)
-		}
-		return left + stHelpSep.Render(" · ") + stHelpTxt.Render(legend)
-	}
-	return hints(hintsFit(append(items, "mouse off"), w))
+	return hints(hintsFit(append(items, "? more"), w))
 }
 
 // padRows pads a pane's content out to n rows, so panes fill the screen even

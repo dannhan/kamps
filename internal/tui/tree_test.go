@@ -2,6 +2,7 @@ package tui
 
 import (
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +22,7 @@ func demoApp(t *testing.T) *App {
 	if !ok {
 		t.Fatalf("Init() returned %T, want loadedMsg", msg)
 	}
+	app.loaded = true
 	app.courses = loaded.courses
 	app.assignments = loaded.assignments
 	app.materials = loaded.materials
@@ -205,6 +207,15 @@ func TestTaskFooterKeepsQueueAtRightEdge(t *testing.T) {
 	}
 }
 
+func TestSharedFooterKeepsQueueWhenHintsDoNotFit(t *testing.T) {
+	app := demoApp(t)
+	app.tab = TabTasks
+	line := stripANSI(app.sharedFooter(24, []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", "c commit", "/ filter"}))
+	if !strings.HasSuffix(line, "queue empty") {
+		t.Fatalf("shared footer dropped queue: %q", line)
+	}
+}
+
 func TestTaskQueueLabels(t *testing.T) {
 	app := demoApp(t)
 	if got := stripANSI(app.taskQueueLabel()); got != "queue empty" {
@@ -215,6 +226,121 @@ func TestTaskQueueLabels(t *testing.T) {
 	app.pending["c"] = model.Missed
 	if got := stripANSI(app.taskQueueLabel()); got != "queue: 2 track · 1 missed" {
 		t.Fatalf("populated queue label = %q", got)
+	}
+}
+
+func TestSharedShellAllTabsAtRequestedSizes(t *testing.T) {
+	for _, size := range [][2]int{{100, 30}, {80, 24}} {
+		var reference []int
+		for active := TabTasks; active < tabCount; active++ {
+			app := demoApp(t)
+			app.width, app.height = size[0], size[1]
+			app.tab = active
+			if active == TabCommit {
+				app.pending = map[string]model.Triage{"K901000": model.Tracked}
+			}
+			view := stripANSI(app.View())
+			lines := strings.Split(view, "\n")
+			if len(lines) != size[1] {
+				t.Fatalf("%dx%d tab %s has %d rows", size[0], size[1], active, len(lines))
+			}
+			for i, line := range lines {
+				if got := lipgloss.Width(line); got != size[0] {
+					t.Fatalf("%dx%d tab %s line %d width %d", size[0], size[1], active, i+1, got)
+				}
+			}
+			if strings.TrimSpace(lines[1]) == "" {
+				t.Fatalf("%dx%d tab %s title row is empty", size[0], size[1], active)
+			}
+			positions := make([]int, tabCount)
+			for tab, label := range []string{"Tasks", "Materials", "Sync", "Commit"} {
+				positions[tab] = strings.Index(lines[0], label)
+			}
+			if active == TabTasks {
+				reference = positions
+			} else if !reflect.DeepEqual(reference, positions) {
+				t.Fatalf("tab cell starts differ at %dx%d with active %s: got %v want %v", size[0], size[1], active, positions, reference)
+			}
+		}
+	}
+}
+
+func TestSharedShellShowsSmallTerminalMessage(t *testing.T) {
+	app := demoApp(t)
+	app.width, app.height = 79, 23
+	if got := stripANSI(app.View()); !strings.Contains(got, "terminal too small") {
+		t.Fatalf("small-terminal message missing: %q", got)
+	}
+}
+
+func TestCommitPreviewContainsGroupedExactLinesAndMarkers(t *testing.T) {
+	app := demoApp(t)
+	app.width, app.height = 100, 30
+	app.tab = TabCommit
+	app.pending = map[string]model.Triage{
+		"K901000": model.Tracked,
+		"K901001": model.Missed,
+		"K901002": model.Ignored,
+		"K163827": model.Tracked,
+	}
+	view := stripANSI(app.View())
+	for _, want := range []string{"done (track)", "missed", "ignore", "K901000 · ppl · Progress Report 1", "- [ ] [ppl] Progress Report 1 (K901000)", "will show as OVERDUE", `similar manual task: "Submit ppl Report 5"`} {
+		if !strings.Contains(view, want) {
+			t.Errorf("commit preview missing %q:\n%s", want, view)
+		}
+	}
+}
+
+func TestMaterialsTreeHasStateBucketsAndAttachedAssignments(t *testing.T) {
+	app := demoApp(t)
+	app.tab = TabMaterials
+	nodes := app.matNodes()
+	foundBucket, foundAssignment := false, false
+	for _, n := range nodes {
+		foundBucket = foundBucket || n.kind == nodeMaterialBucket
+		foundAssignment = foundAssignment || n.kind == nodeMaterialAssignment && n.task.ID == "K165483"
+	}
+	if !foundBucket || !foundAssignment {
+		t.Fatalf("Materials tree lacks state bucket or attached assignment: bucket=%v assignment=%v", foundBucket, foundAssignment)
+	}
+	app.filter = "downloaded"
+	for _, n := range app.matNodes() {
+		if n.kind == nodeFile && !n.mat.Downloaded {
+			t.Fatalf("downloaded filter included new material %q", n.mat.Name)
+		}
+	}
+}
+
+func TestHistoricalTreeLabelsRemainStateColored(t *testing.T) {
+	if got := formatTaskCounts([5]int{6, 1, 0, 1, 1}); stripANSI(got) != "○ 6  ◐ 1  ◆ 1  × 1" {
+		t.Fatalf("task counters = %q", stripANSI(got))
+	}
+	if got := taskTreeRowForTest(t); !strings.Contains(stripANSI(got), "new · K901013 ·") {
+		t.Fatalf("assignment metadata missing: %q", stripANSI(got))
+	}
+}
+
+func taskTreeRowForTest(t *testing.T) string {
+	t.Helper()
+	app := demoApp(t)
+	app.taskCursor = findTaskNode(app.taskNodes(), nodeTask, "K901013")
+	return app.taskTreeRow(app.taskNodes(), app.taskCursor, 98)
+}
+
+func TestTabSwitchRestoresPerTabCursorAndFilter(t *testing.T) {
+	app := demoApp(t)
+	app.taskCursor = 7
+	app.filter = "tracked"
+	app.tabFilters[TabTasks] = "tracked"
+	app.switchTab(TabMaterials)
+	app.matCursor = 4
+	app.switchTab(TabTasks)
+	if app.taskCursor != 7 || app.filter != "tracked" {
+		t.Fatalf("Tasks state not restored: cursor=%d filter=%q", app.taskCursor, app.filter)
+	}
+	app.switchTab(TabMaterials)
+	if app.matCursor != 4 {
+		t.Fatalf("Materials cursor not restored: %d", app.matCursor)
 	}
 }
 

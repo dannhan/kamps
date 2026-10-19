@@ -18,6 +18,60 @@ import (
 // alignment tests check.
 
 // rule is a horizontal line of exactly w columns.
+func titleLine(title, right string, width int) string {
+	inner := maxInt(0, width-2)
+	rightWidth := lipgloss.Width(right)
+	leftWidth := maxInt(0, inner-rightWidth-1)
+	left := stPaneTitle.Render(truncate(title, maxInt(0, leftWidth-1)))
+	gap := maxInt(1, inner-lipgloss.Width(left)-rightWidth)
+	return fitLine(" "+left+strings.Repeat(" ", gap)+right+" ", width)
+}
+
+func bodyFrame(rows []string, width, height int) []string {
+	if height <= 0 {
+		return nil
+	}
+	innerWidth := maxInt(0, width-2)
+	contentHeight := maxInt(0, height-2)
+	out := make([]string, 0, height)
+	if width >= 2 {
+		out = append(out, paneTop(width, true))
+	} else {
+		out = append(out, fitLine("", width))
+	}
+	for i := 0; i < contentHeight; i++ {
+		content := ""
+		if i < len(rows) {
+			content = rows[i]
+		}
+		content = ansiTruncate(content, maxInt(0, innerWidth-2))
+		line := " " + content + strings.Repeat(" ", maxInt(0, innerWidth-lipgloss.Width(content)-2)) + " "
+		if width >= 2 {
+			out = append(out, paneBorder(true).Render("│")+fitLine(line, innerWidth)+paneBorder(true).Render("│"))
+		} else {
+			out = append(out, fitLine(content, width))
+		}
+	}
+	if width >= 2 {
+		out = append(out, paneBottom(width, true))
+	} else {
+		out = append(out, fitLine("", width))
+	}
+	for len(out) < height {
+		out = append(out, fitLine("", width))
+	}
+	return out[:height]
+}
+
+func fixedTabCell(label string, active bool, width int) string {
+	text := " " + pad(truncate(label, maxInt(0, width-2)), maxInt(0, width-2), false) + " "
+	cell := lipgloss.NewStyle().Foreground(themeTokens.Subtle).Background(themeTokens.Bg)
+	if active {
+		cell = lipgloss.NewStyle().Foreground(themeTokens.Bright).Background(themeTokens.Surface)
+	}
+	return cell.Render(text)
+}
+
 func rule(w int) string {
 	if w < 1 {
 		return ""

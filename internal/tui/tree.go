@@ -32,6 +32,8 @@ const (
 	nodeTerm
 	nodeBucket
 	nodeTaskMaterial
+	nodeMaterialBucket
+	nodeMaterialAssignment
 )
 
 type node struct {
@@ -50,7 +52,7 @@ func (n node) depth() int {
 		return len(n.parents)
 	}
 	switch n.kind {
-	case nodeTask, nodeWeek:
+	case nodeTask, nodeWeek, nodeMaterialBucket:
 		return 1
 	case nodeFile:
 		return 2
@@ -327,60 +329,73 @@ func (m *App) courseChildren(courseID int) []model.Assignment {
 // matNodes is the Materials pane: course ▸ week (or "general") ▸ file. Weeks
 // keep the source's own label; an empty section shows as "general".
 func (m *App) matNodes() []node {
-	out := []node{}
-	seenCourse := map[int]bool{}
-	for _, c := range m.courses {
-		files := m.courseFiles(c.ID)
-		if len(files) == 0 {
-			continue
-		}
-		seenCourse[c.ID] = true
-		out = append(out, node{kind: nodeCourse, courseID: c.ID})
-		if m.isOpen(courseKey(c.ID)) {
-			out = append(out, m.weekNodes(c.ID, files)...)
-		}
-	}
-	var extra []int
-	rest := map[int][]model.Material{}
-	for _, mt := range m.materials {
-		if !seenCourse[mt.CourseID] {
-			if len(rest[mt.CourseID]) == 0 {
-				extra = append(extra, mt.CourseID)
+	byCourse := map[int][]model.Material{}
+	for _, material := range m.materials {
+		if m.tab == TabMaterials && m.filter != "all" {
+			matches := m.filter == "new" && !material.Downloaded || m.filter == "downloaded" && material.Downloaded || m.filter == "link" && material.Kind == "url"
+			if !matches {
+				continue
 			}
-			rest[mt.CourseID] = append(rest[mt.CourseID], mt)
 		}
+		byCourse[material.CourseID] = append(byCourse[material.CourseID], material)
 	}
-	sort.Ints(extra)
-	for _, id := range extra {
-		files := rest[id]
-		out = append(out, node{kind: nodeCourse, courseID: id})
-		if m.isOpen(courseKey(id)) {
-			out = append(out, m.weekNodes(id, files)...)
-		}
+	courseIDs := make([]int, 0, len(byCourse))
+	for id := range byCourse {
+		courseIDs = append(courseIDs, id)
 	}
-	return out
-}
-
-// weekNodes builds one week row per distinct section (in the order the
-// materials arrive, section-sorted) and the files under it when open.
-func (m *App) weekNodes(courseID int, files []model.Material) []node {
+	sort.Ints(courseIDs)
 	out := []node{}
-	seen := map[string]bool{}
-	for _, mt := range files {
-		if seen[mt.Section] {
+	for _, courseID := range courseIDs {
+		course := node{kind: nodeCourse, courseID: courseID, key: courseKey(courseID)}
+		out = append(out, course)
+		if !m.isOpen(course.key) {
 			continue
 		}
-		seen[mt.Section] = true
-		out = append(out, node{kind: nodeWeek, courseID: courseID, mat: model.Material{Section: mt.Section}})
-		if m.isOpen(weekKey(courseID, mt.Section)) {
-			for _, f := range files {
-				if f.Section == mt.Section {
-					out = append(out, node{kind: nodeFile, courseID: courseID, mat: f})
+		buckets := []struct {
+			label string
+			keep  func(model.Material) bool
+		}{{"downloaded", func(mt model.Material) bool { return mt.Downloaded }}, {"new", func(mt model.Material) bool { return !mt.Downloaded }}}
+		for _, bucket := range buckets {
+			var files []model.Material
+			for _, material := range byCourse[courseID] {
+				if bucket.keep(material) {
+					files = append(files, material)
+				}
+			}
+			if len(files) == 0 {
+				continue
+			}
+			key := materialBucketKey(courseID, bucket.label)
+			parents := []string{course.key}
+			out = append(out, node{kind: nodeMaterialBucket, courseID: courseID, bucket: bucket.label, key: key, parents: parents})
+			if !m.isOpen(key) {
+				continue
+			}
+			sort.Slice(files, func(i, j int) bool { return files[i].Name < files[j].Name })
+			for _, file := range files {
+				fileNode := node{kind: nodeFile, courseID: courseID, mat: file, key: materialKey(file.ID), parents: []string{course.key, key}}
+				out = append(out, fileNode)
+				if assignment := m.assignmentForMaterial(file); assignment != nil && m.isOpen(fileNode.key) {
+					out = append(out, node{kind: nodeMaterialAssignment, courseID: courseID, task: *assignment, key: "ma:" + assignment.ID + ":" + file.ID, parents: []string{course.key, key, fileNode.key}})
 				}
 			}
 		}
 	}
 	return out
+}
+
+func materialBucketKey(courseID int, bucket string) string {
+	return fmt.Sprintf("mb:%d:%s", courseID, bucket)
+}
+
+func materialKey(id string) string { return "material:" + id }
+
+func (m *App) assignmentForMaterial(material model.Material) *model.Assignment {
+	if material.Kind != "attachment" || !strings.HasPrefix(material.ID, "M") {
+		return nil
+	}
+	id := strings.TrimPrefix(strings.SplitN(material.ID, ":", 2)[0], "M")
+	return m.byID("K" + id)
 }
 
 func (m *App) courseFiles(courseID int) []model.Material {
@@ -461,7 +476,7 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 		}
 		return style
 	}
-	prefix := background(stTreeLine).Render(treeGuides(nodes, index))
+	prefix := background(stFaint).Render(treeGuides(nodes, index))
 	available := maxInt(1, width-lipgloss.Width(prefix))
 	content := ""
 	counts := m.taskNodeCounts(n)
@@ -478,7 +493,7 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 		content = background(stRow).Render(fmt.Sprintf("%s (%d)", n.bucket, len(m.taskGroupIDs(n))))
 	case nodeTask:
 		glyph := background(triageStyle(n.task.Triage)).Render(flagChar(n.task.Triage))
-		marker := background(stTreeLine).Render("⁝")
+		marker := background(stFaint).Render("⁝")
 		if selected {
 			marker = background(stSelMark).Render("▪")
 		}
@@ -486,14 +501,14 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 		if n.task.Triage == model.Undecided {
 			stateLabel = "new"
 		}
-		state := background(stDim).Render(stateLabel)
+		state := background(triageStyle(n.task.Triage)).Render(stateLabel)
 		now := time.Now()
 		age := dueAge(n.task, now)
-		ageStyle := stDim
+		ageStyle := stRowDim
 		if n.task.HasDue && n.task.Due.Before(now) {
 			ageStyle = stOverdue
 		}
-		metadata := background(stDim).Render(" · "+n.task.ID+" · ") + background(ageStyle).Render(age)
+		metadata := background(stRowDim).Render(" · "+n.task.ID+" · ") + background(ageStyle).Render(age)
 		fixed := lipgloss.Width(glyph) + 1 + lipgloss.Width(marker) + 1 + lipgloss.Width(state) + lipgloss.Width(metadata)
 		nameWidth := maxInt(1, available-fixed-1)
 		name := background(stRow).Render(ansi.Truncate(n.task.Name, nameWidth, "…"))
@@ -507,24 +522,22 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 		}
 		label := ansi.Truncate(n.mat.Name, maxInt(1, available-lipgloss.Width(state)-5), "…")
 		space := background(stRow).Render(" ")
-		content = background(style).Render(glyph) + space + background(stTreeLine).Render("⁝") + space + background(stRow).Render(label) + space + background(stDim).Render(state)
+		content = background(style).Render(glyph) + space + background(stFaint).Render("⁝") + space + background(stRow).Render(label) + space + background(style).Render(state)
 	}
 
 	if m.isTaskGroup(n) {
 		open := m.taskIsOpen(n.key, taskNodeDefaultOpen(n))
 		meta := ""
 		if n.kind == nodeCourse {
-			meta = formatTaskCounts(counts, band)
+			meta = formatTaskCounts(counts)
 		}
 		if !open {
 			if meta != "" {
-				meta += background(stTreeLine).Render("  ")
+				meta += "  "
 			}
-			meta += background(stTreeLine).Render("⋯")
+			meta += "⋯"
 		}
-		if n.kind != nodeCourse && open {
-			meta = background(stDim).Render(meta)
-		}
+		meta = background(stRowDim).Render(meta)
 		metaWidth := lipgloss.Width(meta)
 		contentWidth := maxInt(1, available-metaWidth-1)
 		content = ansiTruncate(content, contentWidth)
@@ -567,7 +580,7 @@ func (m *App) taskNodeCounts(group node) [5]int {
 	return counts
 }
 
-func formatTaskCounts(counts [5]int, band bool) string {
+func formatTaskCounts(counts [5]int) string {
 	states := []struct {
 		count int
 		glyph string
@@ -575,22 +588,11 @@ func formatTaskCounts(counts [5]int, band bool) string {
 	}{{counts[0], "○", stFlagNew}, {counts[1], "◐", stFlagT}, {counts[2], "●", stDone}, {counts[3], "◆", stFlagI}, {counts[4], "×", stFlagM}}
 	var parts []string
 	for _, state := range states {
-		if state.count == 0 {
-			continue
+		if state.count > 0 {
+			parts = append(parts, state.style.Render(fmt.Sprintf("%s %d", state.glyph, state.count)))
 		}
-		glyphStyle := state.style
-		dimStyle := stDim
-		if band {
-			glyphStyle = glyphStyle.Background(themeTokens.Surface)
-			dimStyle = dimStyle.Background(themeTokens.Surface)
-		}
-		parts = append(parts, glyphStyle.Render(state.glyph)+" "+dimStyle.Render(fmt.Sprint(state.count)))
 	}
-	separator := stTreeLine.Render("  ")
-	if band {
-		separator = stTreeLine.Background(themeTokens.Surface).Render("  ")
-	}
-	return strings.Join(parts, separator)
+	return strings.Join(parts, "  ")
 }
 
 func dueAge(assignment model.Assignment, now time.Time) string {
@@ -840,6 +842,69 @@ func (m *App) courseNextDue(kids []model.Assignment) (string, lipgloss.Style) {
 		return "—", stRowDim
 	}
 	return dueInfo(best, now)
+}
+
+func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
+	n := nodes[index]
+	band := index == m.matCursor || selected
+	background := func(style lipgloss.Style) lipgloss.Style {
+		if band {
+			return style.Background(themeTokens.Surface)
+		}
+		return style
+	}
+	prefix := background(stFaint).Render(treeGuides(nodes, index))
+	content := ""
+	switch n.kind {
+	case nodeCourse:
+		name := m.shortCode(n.courseID)
+		if course, ok := m.courseByID(n.courseID); ok && course.Name != "" {
+			name = course.Name
+		}
+		content = background(stCode.Bold(true)).Render(name)
+	case nodeMaterialBucket:
+		count := 0
+		for _, material := range m.courseFiles(n.courseID) {
+			if (n.bucket == "downloaded") == material.Downloaded {
+				count++
+			}
+		}
+		content = background(stRow).Render(fmt.Sprintf("%s (%d)", n.bucket, count))
+	case nodeFile:
+		glyph, stateStyle := materialTreeState(n.mat)
+		state := "○"
+		if glyph == "downloaded" {
+			state = "●"
+		}
+		content = background(stateStyle).Render(state) + background(stFaint).Render(" ⁝ ") + background(stRow).Render(ansi.Truncate(n.mat.Name, maxInt(1, width-lipgloss.Width(prefix)-12), "…")) + background(stateStyle).Render(" "+glyph)
+	case nodeWeek:
+		content = background(stCode.Bold(true)).Render(sectionLabel(n.mat.Section))
+	case nodeMaterialAssignment:
+		content = background(triageStyle(n.task.Triage)).Render(flagChar(n.task.Triage)) + background(stFaint).Render(" ⁝ ") + background(stRow).Render("assignment: "+n.task.Name) + background(stRowDim).Render(" · "+n.task.ID)
+	}
+	open := n.key != "" && m.isOpen(n.key)
+	if (n.kind == nodeCourse || n.kind == nodeMaterialBucket || n.kind == nodeFile) && !open && m.materialHasChildren(n) {
+		content += background(stRowDim).Render("  ⋯")
+	}
+	row := prefix + content
+	row = ansiTruncate(row, width)
+	return row + background(stRow).Render(strings.Repeat(" ", maxInt(0, width-lipgloss.Width(row))))
+}
+
+func (m *App) materialHasChildren(n node) bool {
+	switch n.kind {
+	case nodeCourse:
+		return len(m.courseFiles(n.courseID)) > 0
+	case nodeMaterialBucket:
+		for _, material := range m.courseFiles(n.courseID) {
+			if n.bucket == "downloaded" && material.Downloaded || n.bucket == "new" && !material.Downloaded {
+				return true
+			}
+		}
+	case nodeFile:
+		return m.assignmentForMaterial(n.mat) != nil
+	}
+	return false
 }
 
 // ---- Materials rows ----
