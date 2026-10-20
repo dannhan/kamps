@@ -14,7 +14,9 @@ package tui
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -207,6 +209,15 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loadError = msg.err.Error()
 		return m, nil
 
+	case clipboardMsg:
+		if msg.err != nil {
+			m.toast = "copy failed: " + msg.err.Error()
+		} else {
+			m.toast = fmt.Sprintf("copied %d %s", msg.lines, plural(msg.lines, "line", "lines"))
+		}
+		m.toastTicks = 24
+		return m, nil
+
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -297,17 +308,23 @@ func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "enter":
 		if m.tab == TabCommit {
-			m.toast = "preview only · nothing written"
-			m.toastTicks = 24
-		} else {
-			m.enter()
+			return m, m.copyCommitPreview()
 		}
+		m.enter()
 	case "f":
 		m.cycleFilter()
 	case "s":
 		return m, m.startSync()
 	case "d":
 		m.download()
+	case "y":
+		if m.tab == TabCommit {
+			return m, m.copyCommitPreview()
+		}
+	case "x":
+		if m.tab == TabCommit {
+			m.dropCommitItem()
+		}
 	}
 	return m, nil
 }
@@ -711,6 +728,58 @@ func (m *App) download() {
 
 // ---- commit ----
 
+// clipboardMsg reports the result of handing the preview to the terminal.
+type clipboardMsg struct {
+	lines int
+	err   error
+}
+
+// clipboardCmd copies text through OSC 52, which most terminals accept without
+// an extra dependency. The sequence moves no cursor and draws nothing.
+func clipboardCmd(text string) tea.Cmd {
+	return func() tea.Msg {
+		encoded := base64.StdEncoding.EncodeToString([]byte(text))
+		_, err := os.Stdout.WriteString("\x1b]52;c;" + encoded + "\a")
+		return clipboardMsg{lines: len(strings.Split(text, "\n")), err: err}
+	}
+}
+
+// commitPreviewText is exactly what the queue would hand to a todo list.
+func (m *App) commitPreviewText() string {
+	items := m.commitItems()
+	lines := make([]string, 0, len(items))
+	for _, item := range items {
+		lines = append(lines, m.taskLine(item.assignment))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// copyCommitPreview puts the preview lines on the clipboard, or explains that
+// there is nothing queued yet.
+func (m *App) copyCommitPreview() tea.Cmd {
+	text := m.commitPreviewText()
+	if text == "" {
+		m.toast = "nothing to copy · decide in Tasks first"
+		m.toastTicks = 20
+		return nil
+	}
+	return clipboardCmd(text)
+}
+
+// dropCommitItem removes the focused decision from the queue. The decision
+// itself stays applied; only the export is dropped.
+func (m *App) dropCommitItem() {
+	items := m.commitItems()
+	if m.commitCursor < 0 || m.commitCursor >= len(items) {
+		return
+	}
+	item := items[m.commitCursor]
+	delete(m.pending, item.assignment.ID)
+	m.clampCursor()
+	m.toast = "dropped " + item.assignment.ID + " from the queue"
+	m.toastTicks = 20
+}
+
 func (m *App) openCommit() {
 	m.switchTab(TabCommit)
 }
@@ -997,8 +1066,8 @@ func (m *App) tabContent(width, height int) (string, string, []string, []string)
 		hints = []string{"↑↓ move", "s sync"}
 		rows = m.syncBody(width, height)
 	case TabCommit:
-		title = "review & commit · preview"
-		hints = []string{"↑↓ move", "enter preview", "esc return"}
+		title = "review & commit · y copies the preview"
+		hints = []string{"↑↓ move", "y copy", "x drop", "esc back"}
 		rows = m.commitBody(width, height)
 	}
 	return title, right, hints, rows
@@ -1056,21 +1125,27 @@ func (m *App) commitBody(width, height int) []string {
 		if focusIndex == m.commitCursor {
 			cursorRow = len(all)
 		}
-		all = append(all, displayRow{text: stRow.Render("  " + a.ID + " · " + course + " · " + a.Name), focused: focusIndex == m.commitCursor})
+		lead := "  " + a.ID + " · " + course + " · "
+		nameWidth := maxInt(1, width-lipgloss.Width(lead))
+		all = append(all, displayRow{text: stRow.Render(lead + truncate(a.Name, nameWidth)), focused: focusIndex == m.commitCursor})
 		focusIndex++
 		if item.action == model.Tracked {
-			all = append(all, displayRow{text: "    " + stDim.Render(m.taskLine(a))})
+			all = append(all, displayRow{text: "    " + stDim.Render(truncate(m.taskLine(a), maxInt(1, width-4)))})
 		}
 		if a.HasDue && a.Due.Before(time.Now()) {
 			all = append(all, displayRow{text: "    " + stOverdue.Render("will show as OVERDUE")})
 		}
 		if similar := m.similarManualTask(a); similar != "" {
-			all = append(all, displayRow{text: "    " + stDim.Render(fmt.Sprintf("similar manual task: %q", similar))})
+			line := fmt.Sprintf("similar manual task: %q", similar)
+			all = append(all, displayRow{text: "    " + stDim.Render(truncate(line, maxInt(1, width-4)))})
 		}
 		all = append(all, displayRow{text: ""})
 	}
 	if len(all) == 0 {
-		all = append(all, displayRow{text: stEmpty.Render("no decisions queued · mark items in Tasks first")})
+		all = append(all,
+			displayRow{text: stEmpty.Render("no decisions queued")},
+			displayRow{text: stFaint.Render("  decide with t/m/i in Tasks; y copies the lines")},
+		)
 	}
 	start, end := windowRange(len(all), cursorRow, height)
 	rows := make([]string, 0, end-start)

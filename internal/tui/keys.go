@@ -17,6 +17,8 @@ type KeyMap struct {
 	Undecide    key.Binding
 	All         key.Binding
 	Commit      key.Binding
+	Copy        key.Binding
+	Drop        key.Binding
 	Filter      key.Binding
 	Sync        key.Binding
 	Download    key.Binding
@@ -43,6 +45,8 @@ func DefaultKeys() KeyMap {
 		Undecide: key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "undecided")),
 		All:      key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "select all")),
 		Commit:   key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "commit tab")),
+		Copy:     key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "copy preview")),
+		Drop:     key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "drop from queue")),
 		Filter:   key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter")),
 		Sync:     key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sync")),
 		Download: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "download")),
@@ -63,7 +67,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right, k.NextTab, k.PrevTab, k.Tabs},
 		{k.Select, k.All, k.Track, k.Missed, k.Ignore, k.Undecide},
-		{k.Commit, k.Filter, k.Sync, k.Download, k.Confirm, k.Back},
+		{k.Commit, k.Filter, k.Copy, k.Drop, k.Sync, k.Download, k.Back},
 		{k.Help, k.Quit},
 	}
 }
