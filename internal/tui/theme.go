@@ -116,10 +116,7 @@ var (
 
 	stPaneTitle = lipgloss.NewStyle().Foreground(themeTokens.Bright)
 	stRule      = lipgloss.NewStyle().Foreground(themeTokens.Border)
-	stLabel     = lipgloss.NewStyle().Foreground(themeTokens.Dim)
-	stValue     = stPrimary
 	stKey       = lipgloss.NewStyle().Foreground(themeTokens.Accent)
-	stBarEmpty  = lipgloss.NewStyle().Foreground(themeTokens.Border)
 
 	stFlagNew = lipgloss.NewStyle().Foreground(themeTokens.New)
 	stFlagT   = lipgloss.NewStyle().Foreground(themeTokens.Tracked)

@@ -167,53 +167,6 @@ func triageStyle(t model.Triage) lipgloss.Style {
 	return stFlagNew
 }
 
-func kv(k, v string, style lipgloss.Style) string {
-	return stLabel.Render(pad(k, 6, false)) + " " + style.Render(v)
-}
-
-// bar renders a labelled count bar within width columns, e.g.
-// "tracked   12  ██████░░░░░░░░".
-func bar(label string, n, total, width int) string {
-	return barW(label, n, total, width, 9)
-}
-
-// barW is bar with an explicit label column width. The leading column is the
-// pane's margin, so the bar lines up with the rest of the pane's content.
-func barW(label string, n, total, width, labelW int) string {
-	barWidth := clampInt(width-(labelW+5)-1, 4, 24)
-	return " " + stLabel.Render(pad(label, labelW, false)) + stValue.Render(fmt.Sprintf("%3d", n)) + "  " +
-		barCells(n, total, barWidth, barStyleFor(label))
-}
-
-// barStyleFor colour-codes the filled part of a bar by what it counts. The
-// undecided pile gets the loudest colour: it is the one that needs you.
-func barStyleFor(label string) lipgloss.Style {
-	switch label {
-	case "track", "tracked":
-		return stFlagT
-	case "missed":
-		return stFlagM
-	case "ignore", "ignored":
-		return stFlagI
-	case "done":
-		return stDone
-	case "new", "undecided":
-		return stFlagNew
-	}
-	return stFlagNew
-}
-
-// barCells renders just the filled/empty bar, width columns wide. The empty
-// track uses the border grey so a filled segment always stands out, even for
-// the muted "ignore" bar.
-func barCells(n, total, width int, style lipgloss.Style) string {
-	if width < 1 {
-		width = 1
-	}
-	filled := clampInt(n*width/maxInt(total, 1), 0, width)
-	return style.Render(strings.Repeat("█", filled)) + stBarEmpty.Render(strings.Repeat("░", width-filled))
-}
-
 func maxInt(a, b int) int {
 	if a > b {
 		return a

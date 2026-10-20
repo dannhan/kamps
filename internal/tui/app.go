@@ -84,6 +84,10 @@ type App struct {
 	syncCursor   int
 	commitCursor int
 
+	// detailPane is the Tasks detail pane override: -1 follows the terminal
+	// width, 0 keeps it closed, 1 keeps it open.
+	detailPane int
+
 	tabFilters  [tabCount]string
 	tabExpanded [tabCount]map[string]bool
 	returnTab   Tab
@@ -124,6 +128,7 @@ func New(src source.Source, cfg config.Config, version string) *App {
 		help:        h,
 		filter:      "all",
 		returnTab:   TabTasks,
+		detailPane:  -1,
 		tabFilters:  [tabCount]string{"all", "all", "all", "all"},
 		tabExpanded: [tabCount]map[string]bool{0: {}, 1: {}, 2: {}, 3: {}},
 		expanded:    map[string]bool{},
@@ -719,7 +724,7 @@ func (m *App) closeCommit() {
 func (m *App) enter() {
 	switch m.tab {
 	case TabTasks:
-		m.openCommit()
+		m.toggleDetailPane()
 	case TabMaterials:
 		m.download()
 	}
@@ -969,8 +974,15 @@ func (m *App) tabContent(width, height int) (string, string, []string, []string)
 		if m.filter != "all" {
 			filterHint = "esc clear"
 		}
-		hints = []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", filterHint, "c commit"}
+		detailHint := "enter detail"
+		if m.detailVisible() {
+			detailHint = "enter hide"
+		}
+		hints = []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", detailHint, filterHint, "c commit"}
 		rows = m.taskRows(nodes, width, height)
+		if m.detailVisible() {
+			rows = m.splitTaskRows(nodes, width, height)
+		}
 	case TabMaterials:
 		nodes := m.matNodes()
 		title = fmt.Sprintf("materials · %d files · %d local", len(m.materials), m.downloadedMaterials())

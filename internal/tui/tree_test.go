@@ -162,7 +162,7 @@ func TestQuietTreeLineColorTracksForegroundAndBackground(t *testing.T) {
 
 func TestTaskFooterKeepsPriorityAndMoreHint(t *testing.T) {
 	full := taskFooterHints(200)
-	want := "↑↓ move · h/l fold · space select · t/m/i decide · c commit · f filter · ? more"
+	want := "↑↓ move · h/l fold · space select · t/m/i decide · c commit · enter detail · f filter · ? more"
 	if got := stripANSI(full); got != want {
 		t.Fatalf("full footer = %q, want %q", got, want)
 	}

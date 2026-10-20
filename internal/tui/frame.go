@@ -76,7 +76,7 @@ func hintsFit(items []string, w int) []string {
 
 // hints renders "key label · key label …" for the help bar.
 func taskFooterHints(width int) string {
-	items := []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", "c commit", "f filter", "? more"}
+	items := []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", "c commit", "enter detail", "f filter", "? more"}
 	kept := []string{"? more"}
 	used := lipgloss.Width(kept[0])
 	for _, item := range items[:len(items)-1] {

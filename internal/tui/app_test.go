@@ -6,6 +6,9 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/ruyam/kamps/internal/model"
 )
 
 func TestEscapeClearsFilterBeforeSelections(t *testing.T) {
@@ -64,6 +67,94 @@ func TestShellUsesRulesInsteadOfABox(t *testing.T) {
 	}
 	if lines[2] != want || lines[len(lines)-2] != want {
 		t.Fatalf("rules are not fenced around the body: %q / %q", lines[2], lines[len(lines)-2])
+	}
+}
+
+func TestDetailPaneFollowsWidthAndEnter(t *testing.T) {
+	app := demoApp(t)
+	app.tab = TabTasks
+
+	app.width = 100
+	if !app.detailVisible() {
+		t.Fatal("detail pane should show at 100 columns")
+	}
+	app.width = 80
+	if app.detailVisible() {
+		t.Fatal("detail pane should auto-hide at 80 columns")
+	}
+
+	app.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if !app.detailVisible() {
+		t.Fatal("enter should pin the detail pane open at 80 columns")
+	}
+	if app.tab != TabTasks {
+		t.Fatal("enter must not jump to the commit tab")
+	}
+	app.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if app.detailVisible() {
+		t.Fatal("a second enter should close the detail pane")
+	}
+
+	app.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	if app.tab != TabCommit {
+		t.Fatal("c should still open the commit tab")
+	}
+}
+
+func TestDetailPaneRendersTheSelectedTask(t *testing.T) {
+	app := demoApp(t)
+	app.tab = TabTasks
+	nodes := app.taskNodes()
+	cursor := -1
+	for i, n := range nodes {
+		if n.kind == nodeTask {
+			cursor = i
+			break
+		}
+	}
+	if cursor < 0 {
+		t.Fatal("demo data has no task rows")
+	}
+	task := nodes[cursor].task
+	lines := stripANSI(strings.Join(app.detailLines(nodes[cursor], 40), "\n"))
+	for _, want := range []string{task.ID, task.Name, "due", "state", "course"} {
+		if !strings.Contains(lines, want) {
+			t.Fatalf("detail pane %q is missing %q", lines, want)
+		}
+	}
+}
+
+func TestDetailPaneClipsLongTextWithEllipsis(t *testing.T) {
+	app := demoApp(t)
+	app.taskCursor = 0
+	long := strings.Repeat("a very long task description ", 40)
+	nodes := []node{{kind: nodeTask, task: model.Assignment{ID: "K999999", Name: long, Triage: model.Undecided}}}
+	rows := app.detailRows(nodes, 34, 8)
+	if len(rows) != 8 {
+		t.Fatalf("detail rows = %d, want 8", len(rows))
+	}
+	for i, row := range rows {
+		if got := lipgloss.Width(row); got != 34 {
+			t.Fatalf("detail row %d width %d, want 34", i, got)
+		}
+	}
+	if !strings.Contains(stripANSI(rows[7]), "…") {
+		t.Fatalf("clipped detail pane has no ellipsis: %q", stripANSI(rows[7]))
+	}
+}
+
+func TestSplitPaneKeepsEveryLineAtWidth(t *testing.T) {
+	for _, width := range []int{100, 80} {
+		app := demoApp(t)
+		app.width, app.height = width, 24
+		app.tab = TabTasks
+		app.detailPane = 1 // force the pane on, even at 80
+		for i, line := range strings.Split(stripANSI(app.View()), "\n") {
+			if got := lipgloss.Width(line); got != width {
+				t.Fatalf("%d-column split line %d width %d: %q", width, i, got, line)
+			}
+		}
 	}
 }
 
