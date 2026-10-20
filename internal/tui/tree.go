@@ -376,26 +376,33 @@ func materialBucketKey(courseID int, bucket string) string {
 	return fmt.Sprintf("mb:%d:%s", courseID, bucket)
 }
 
+// materialNodeFiles lists the materials a row stands for: the file itself,
+// every file in a state bucket, every file in a week, or every file in a
+// course.
+func (m *App) materialNodeFiles(n node) []model.Material {
+	switch n.kind {
+	case nodeFile:
+		return []model.Material{n.mat}
+	case nodeMaterialBucket:
+		files := []model.Material{}
+		for _, material := range m.courseFiles(n.courseID) {
+			if n.bucket == "downloaded" && material.Downloaded || n.bucket == "new" && !material.Downloaded {
+				files = append(files, material)
+			}
+		}
+		return files
+	case nodeWeek:
+		return m.sectionFiles(n.courseID, n.mat.Section)
+	case nodeCourse:
+		return m.courseFiles(n.courseID)
+	}
+	return nil
+}
+
 // materialNodeIDs lists the material IDs a row stands for: the file itself,
 // every file in a state bucket, or every file in a course/week.
 func (m *App) materialNodeIDs(n node) []string {
-	switch n.kind {
-	case nodeFile:
-		return []string{n.mat.ID}
-	case nodeMaterialBucket:
-		ids := []string{}
-		for _, material := range m.courseFiles(n.courseID) {
-			if n.bucket == "downloaded" && material.Downloaded || n.bucket == "new" && !material.Downloaded {
-				ids = append(ids, material.ID)
-			}
-		}
-		return ids
-	case nodeWeek:
-		return idsOf(m.sectionFiles(n.courseID, n.mat.Section))
-	case nodeCourse:
-		return idsOf(m.courseFiles(n.courseID))
-	}
-	return nil
+	return idsOf(m.materialNodeFiles(n))
 }
 
 // materialNodeSelected reports whether every material behind a row is marked,

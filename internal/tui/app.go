@@ -86,7 +86,7 @@ type App struct {
 	syncCursor   int
 	commitCursor int
 
-	// detailPane is the Tasks detail pane override: -1 follows the terminal
+	// detailPane is the tree detail pane override: -1 follows the terminal
 	// width, 0 keeps it closed, 1 keeps it open.
 	detailPane int
 
@@ -792,10 +792,8 @@ func (m *App) closeCommit() {
 
 func (m *App) enter() {
 	switch m.tab {
-	case TabTasks:
+	case TabTasks, TabMaterials:
 		m.toggleDetailPane()
-	case TabMaterials:
-		m.download()
 	}
 }
 
@@ -1050,19 +1048,34 @@ func (m *App) tabContent(width, height int) (string, string, []string, []string)
 			detailHint = "enter hide"
 		}
 		hints = []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", detailHint, filterHint, "c commit"}
-		rows = m.taskRows(nodes, width, height)
+		leftWidth := width
 		if m.detailVisible() {
-			rows = m.splitTaskRows(nodes, width, height)
+			leftWidth, _ = splitWidths(width)
+		}
+		rows = m.taskRows(nodes, leftWidth, height)
+		if m.detailVisible() {
+			rows = m.splitTreeRows(rows, nodes, m.taskCursor, width, height)
 		}
 	case TabMaterials:
 		nodes := m.matNodes()
 		title = fmt.Sprintf("materials · %d files · %d local", len(m.materials), m.downloadedMaterials())
 		right = scrollHint(len(nodes), m.matCursor, height)
-		hints = []string{"↑↓ move", "h/l fold", "space select", "d download"}
+		detailHint := "enter detail"
+		if m.detailVisible() {
+			detailHint = "enter hide"
+		}
+		hints = []string{"↑↓ move", "h/l fold", "space select", detailHint, "d download"}
 		if m.filter != "all" {
 			hints = append(hints, "esc clear")
 		}
-		rows = m.materialRows(nodes, width, height)
+		leftWidth := width
+		if m.detailVisible() {
+			leftWidth, _ = splitWidths(width)
+		}
+		rows = m.materialRows(nodes, leftWidth, height)
+		if m.detailVisible() {
+			rows = m.splitTreeRows(rows, nodes, m.matCursor, width, height)
+		}
 	case TabSync:
 		title = "sync status · " + m.src.Label()
 		hints = []string{"↑↓ move", "s sync"}

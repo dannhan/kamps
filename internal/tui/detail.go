@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -9,14 +10,14 @@ import (
 	"github.com/ruyam/kamps/internal/model"
 )
 
-// detailMinWidth is where the Tasks detail pane starts showing on its own.
+// detailMinWidth is where the tree detail pane starts showing on its own.
 // Below this the tree keeps every column until the pane is toggled on.
 const detailMinWidth = 100
 
 // detailVisible reports whether the selected item's detail pane should be
 // drawn: an explicit toggle wins, otherwise it follows the terminal width.
 func (m *App) detailVisible() bool {
-	if m.tab != TabTasks {
+	if m.tab != TabTasks && m.tab != TabMaterials {
 		return false
 	}
 	if m.detailPane >= 0 {
@@ -49,12 +50,11 @@ func splitWidths(width int) (left, right int) {
 	return left, right
 }
 
-// splitTaskRows draws the tree on the left and the focused node's details on
+// splitTreeRows draws the tree on the left and the focused node's details on
 // the right.
-func (m *App) splitTaskRows(nodes []node, width, height int) []string {
+func (m *App) splitTreeRows(tree []string, nodes []node, cursor, width, height int) []string {
 	leftWidth, rightWidth := splitWidths(width)
-	tree := m.taskRows(nodes, leftWidth, height)
-	detail := m.detailRows(nodes, rightWidth, height)
+	detail := m.detailRows(nodes, cursor, rightWidth, height)
 	divider := stTreeLine.Render("│")
 	rows := make([]string, 0, height)
 	for i := 0; i < height; i++ {
@@ -72,14 +72,14 @@ func (m *App) splitTaskRows(nodes []node, width, height int) []string {
 
 // detailRows renders the right column, padding it to the pane height and
 // marking a clipped description with an ellipsis.
-func (m *App) detailRows(nodes []node, width, height int) []string {
+func (m *App) detailRows(nodes []node, cursor, width, height int) []string {
 	if height <= 0 {
 		return nil
 	}
 	inner := maxInt(1, width-2)
 	var content []string
-	if m.taskCursor >= 0 && m.taskCursor < len(nodes) {
-		content = m.detailLines(nodes[m.taskCursor], inner)
+	if cursor >= 0 && cursor < len(nodes) {
+		content = m.detailLines(nodes[cursor], inner)
 	}
 	if len(content) > height {
 		content = content[:height]
@@ -98,6 +98,9 @@ func (m *App) detailRows(nodes []node, width, height int) []string {
 
 // detailLines is the content of the detail pane for one tree node.
 func (m *App) detailLines(n node, width int) []string {
+	if m.tab == TabMaterials {
+		return m.materialDetailLines(n, width)
+	}
 	var lines []string
 	add := func(line string) { lines = append(lines, line) }
 	addKV := func(key, value string, style lipgloss.Style) {
@@ -207,4 +210,129 @@ func (m *App) detailLines(n node, width int) []string {
 		}
 	}
 	return lines
+}
+
+// materialDetailLines is the right-hand pane on the Materials tab.
+func (m *App) materialDetailLines(n node, width int) []string {
+	var lines []string
+	add := func(line string) { lines = append(lines, line) }
+	addKV := func(key, value string, style lipgloss.Style) {
+		const keyWidth = 8
+		value = truncate(value, maxInt(1, width-keyWidth-1))
+		add(stFaint.Render(pad(key, keyWidth, false)) + " " + style.Render(value))
+	}
+	addWrapped := func(text string, style lipgloss.Style) {
+		for _, line := range wrapCell(text, width) {
+			add(style.Render(line))
+		}
+	}
+	addFiles := func(files []model.Material) {
+		local := 0
+		for _, material := range files {
+			if material.Downloaded {
+				local++
+			}
+		}
+		addKV("files", fmt.Sprint(len(files)), stRow)
+		addKV("local", fmt.Sprintf("%d of %d", local, len(files)), stRow)
+		addKV("size", materialSizeSummary(files), stRow)
+	}
+
+	switch n.kind {
+	case nodeCourse:
+		if course, ok := m.courseByID(n.courseID); ok {
+			add(stPaneTitle.Render(truncate(course.Name, width)))
+			add(stFaint.Render(truncate(course.Code+" · "+course.Term, width)))
+		} else {
+			add(stPaneTitle.Render(m.shortCode(n.courseID)))
+		}
+		add("")
+		addFiles(m.courseFiles(n.courseID))
+	case nodeMaterialBucket:
+		add(stPaneTitle.Render(n.bucket + " files"))
+		add("")
+		addFiles(m.materialNodeFiles(n))
+	case nodeWeek:
+		add(stPaneTitle.Render(sectionLabel(n.mat.Section)))
+		add("")
+		addKV("course", m.shortCode(n.courseID), stRow)
+		addFiles(m.materialNodeFiles(n))
+	case nodeFile:
+		material := n.mat
+		add(stCode.Render(material.ID))
+		addWrapped(material.Name, stRow)
+		add("")
+		if course, ok := m.courseByID(material.CourseID); ok {
+			addKV("course", course.Name, stRow)
+		} else {
+			addKV("course", m.shortCode(material.CourseID), stRow)
+		}
+		addKV("section", sectionLabel(material.Section), stRow)
+		if material.Kind != "" {
+			addKV("kind", material.Kind, stRow)
+		}
+		if material.Size > 0 {
+			addKV("size", humanSize(material.Size), stRow)
+		}
+		state, style := materialTreeState(material)
+		addKV("state", state, style)
+		if assignment := m.assignmentForMaterial(material); assignment != nil {
+			addKV("linked", assignment.ID+" · "+assignment.Name, stRow)
+		}
+		if material.URL != "" {
+			add("")
+			add(stFaint.Render("url"))
+			add(stRow.Render(truncate(material.URL, width)))
+		}
+	case nodeMaterialAssignment:
+		task := n.task
+		add(stCode.Render(task.ID))
+		addWrapped(task.Name, stRow)
+		add("")
+		if course, ok := m.courseByID(task.CourseID); ok {
+			addKV("course", course.Name, stRow)
+		} else {
+			addKV("course", m.shortCode(task.CourseID), stRow)
+		}
+		state := task.Triage.String()
+		if task.Triage == model.Undecided {
+			state = "new"
+		}
+		addKV("state", flagChar(task.Triage)+" "+state, triageStyle(task.Triage))
+		now := time.Now()
+		due, dueStyle := "none", stRow
+		if task.HasDue {
+			due = task.Due.Format("2006-01-02") + " · " + dueAge(task, now)
+			if task.Overdue(now) {
+				dueStyle = stOverdue
+			}
+		}
+		addKV("due", due, dueStyle)
+	}
+	return lines
+}
+
+// materialSizeSummary adds up the sizes we know about and says how many files
+// have no size, instead of pretending the total is complete.
+func materialSizeSummary(files []model.Material) string {
+	var total int64
+	unknown := 0
+	for _, material := range files {
+		if material.Size > 0 {
+			total += material.Size
+		} else {
+			unknown++
+		}
+	}
+	parts := []string{}
+	if total > 0 {
+		parts = append(parts, humanSize(total))
+	}
+	if unknown > 0 {
+		parts = append(parts, fmt.Sprintf("%d unknown", unknown))
+	}
+	if len(parts) == 0 {
+		return "—"
+	}
+	return strings.Join(parts, " · ")
 }
