@@ -19,7 +19,7 @@ type Config struct {
 	SiteURL string
 	// LibraryDir is where downloaded materials are stored.
 	LibraryDir string
-	// StateDir holds kamps' own data (future sqlite db, credentials).
+	// StateDir holds kamps' own data (decisions, download flags).
 	StateDir string
 	// ConfigDir holds config.toml.
 	ConfigDir string
@@ -36,6 +36,15 @@ func Default() Config {
 		StateDir:   xdg("XDG_STATE_HOME", filepath.Join(home, ".local", "state")),
 		ConfigDir:  xdg("XDG_CONFIG_HOME", filepath.Join(home, ".config")),
 	}
+}
+
+// StatePath is the JSON file that keeps decisions and download flags between
+// runs.
+func (c Config) StatePath() string {
+	if c.StateDir == "" {
+		return ""
+	}
+	return filepath.Join(c.StateDir, "state.json")
 }
 
 func xdg(env, fallback string) string {

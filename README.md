@@ -14,9 +14,14 @@ For each item you make a decision, and it is remembered:
 | `missed` | the deadline passed and it is gone |
 | `ignored` | not real work — a template, last year's file, an optional extra |
 
+Decisions and download flags are written atomically to
+`$XDG_STATE_HOME/kamps/state.json` (`~/.local/state/kamps/state.json` when the
+variable is unset) and reapplied on the next launch.
+
 Your actual to-do list lives wherever you keep it; `kamps` can hand decided
 items to it via the review & commit queue (`c`), which shows the exact lines
-before anything is written. Today `y` copies those lines to the terminal
+before anything is written. Decisions are saved as soon as you make them; the
+queue is the export step. Today `y` copies those lines to the terminal
 clipboard (OSC 52), so you can paste them into whatever list you use.
 
 ## Installation
@@ -69,6 +74,7 @@ matches.
 cmd/kamps/        entry point
 internal/model/   Course, Assignment, Material — data types
 internal/source/  the Source interface + the demo data source
+internal/store/   local state: decisions and download flags
 internal/tui/     the terminal UI
 internal/config/  paths and settings
 docs/kulon2.md    notes on the Moodle/Kulon2 instance
@@ -83,8 +89,7 @@ anything else.
 Early days: the UI is complete and runs against demo data. Next up, in order:
 
 1. Real Moodle source: cookie auth, course list, HTML parsing. See `docs/kulon2.md`.
-2. Local store so decisions and downloads survive restarts.
-3. A real commit writer behind the queue preview (today `y` copies the lines).
-4. Downloads with progress and a configurable library directory.
+2. A real commit writer behind the queue preview (today `y` copies the lines).
+3. Downloads with progress and a configurable library directory.
 
 Later, not now: bulk actions and a plugin surface for new sources.

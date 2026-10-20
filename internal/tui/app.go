@@ -29,6 +29,7 @@ import (
 	"github.com/ruyam/kamps/internal/config"
 	"github.com/ruyam/kamps/internal/model"
 	"github.com/ruyam/kamps/internal/source"
+	"github.com/ruyam/kamps/internal/store"
 )
 
 // ---- top-level navigation ----
@@ -105,6 +106,12 @@ type App struct {
 	selectedM map[string]bool // material id -> checked
 	pending   map[string]model.Triage
 
+	// state is the local store behind decisions and download flags; statePath
+	// is empty when the config has no state directory.
+	state     store.State
+	statePath string
+	stateErr  string
+
 	spinner    spinner.Model
 	syncing    bool
 	syncTicks  int
@@ -125,6 +132,18 @@ func New(src source.Source, cfg config.Config, version string) *App {
 
 	h := help.New()
 
+	state := store.New()
+	statePath := cfg.StatePath()
+	stateErr := ""
+	if statePath != "" {
+		loaded, err := store.Load(statePath)
+		if err != nil {
+			stateErr = err.Error()
+		} else {
+			state = loaded
+		}
+	}
+
 	return &App{
 		src:         src,
 		cfg:         cfg,
@@ -140,6 +159,9 @@ func New(src source.Source, cfg config.Config, version string) *App {
 		selected:    map[string]bool{},
 		selectedM:   map[string]bool{},
 		pending:     map[string]model.Triage{},
+		state:       state,
+		statePath:   statePath,
+		stateErr:    stateErr,
 		spinner:     sp,
 		width:       100,
 		height:      30,
@@ -204,7 +226,13 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return a.Name < b.Name
 		})
+		m.applyState()
 		m.clampCursor()
+		if m.stateErr != "" {
+			m.toast = "state: " + m.stateErr
+			m.toastTicks = 40
+			m.stateErr = ""
+		}
 		return m, nil
 
 	case errMsg:
@@ -631,6 +659,7 @@ func (m *App) applyTriage(t model.Triage) {
 		if a := m.byID(id); a != nil {
 			a.Triage = t
 		}
+		m.state.SetDecision(id, t)
 		if t == model.Undecided {
 			delete(m.pending, id)
 		} else {
@@ -640,6 +669,34 @@ func (m *App) applyTriage(t model.Triage) {
 	m.selected = map[string]bool{}
 	m.toast = fmt.Sprintf("%d %s %s", len(ids), plural(len(ids), "item", "items"), t.String())
 	m.toastTicks = 24
+	m.saveState()
+}
+
+// applyState folds the local store into freshly loaded data. The store wins
+// over whatever the source reports, because it is the user's own decision.
+func (m *App) applyState() {
+	for i := range m.assignments {
+		if decision := m.state.Decision(m.assignments[i].ID); decision != model.Undecided {
+			m.assignments[i].Triage = decision
+		}
+	}
+	for i := range m.materials {
+		if m.state.Downloads[m.materials[i].ID] {
+			m.materials[i].Downloaded = true
+		}
+	}
+}
+
+// saveState persists decisions and download flags. Errors go to the toast
+// rather than interrupting the action; the next successful save retries.
+func (m *App) saveState() {
+	if m.statePath == "" {
+		return
+	}
+	if err := m.state.Save(m.statePath); err != nil {
+		m.toast = "could not save state: " + err.Error()
+		m.toastTicks = 40
+	}
 }
 
 // pendingCounts returns how many uncommitted decisions of each kind are queued.
@@ -733,6 +790,7 @@ func (m *App) download() {
 		for _, id := range targets {
 			if m.materials[i].ID == id && !m.materials[i].Downloaded {
 				m.materials[i].Downloaded = true
+				m.state.SetDownloaded(m.materials[i].ID, true)
 				break
 			}
 		}
@@ -740,6 +798,7 @@ func (m *App) download() {
 	m.selectedM = map[string]bool{}
 	m.toast = fmt.Sprintf("downloaded %d %s", len(targets), plural(len(targets), "file", "files"))
 	m.toastTicks = 24
+	m.saveState()
 }
 
 // ---- commit ----

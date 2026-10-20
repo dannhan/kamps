@@ -18,16 +18,13 @@ import (
 
 func demoApp(t *testing.T) *App {
 	t.Helper()
-	app := New(source.NewDemo(), config.Config{}, "test")
-	msg := app.Init()()
-	loaded, ok := msg.(loadedMsg)
-	if !ok {
-		t.Fatalf("Init() returned %T, want loadedMsg", msg)
-	}
-	app.loaded = true
-	app.courses = loaded.courses
-	app.assignments = loaded.assignments
-	app.materials = loaded.materials
+	return newDemoApp(t, config.Config{StateDir: t.TempDir()})
+}
+
+func newDemoApp(t *testing.T, cfg config.Config) *App {
+	t.Helper()
+	app := New(source.NewDemo(), cfg, "test")
+	app.Update(app.Init()())
 	return app
 }
 
