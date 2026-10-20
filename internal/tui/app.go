@@ -920,7 +920,9 @@ func (m *App) sharedFooter(w int, items []string) string {
 	if len(items) > 6 {
 		items = items[:6]
 	}
-	items = append(items, "? more")
+	if len(items) == 0 || items[len(items)-1] != "? more" {
+		items = append(items, "? more")
+	}
 	available := maxInt(0, w-lipgloss.Width(queue)-3)
 	for lipgloss.Width(hints(items)) > available && len(items) > 1 {
 		items = append(items[:len(items)-2], items[len(items)-1])

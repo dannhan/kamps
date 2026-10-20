@@ -254,8 +254,12 @@ func TestSharedShellAllTabsAtRequestedSizes(t *testing.T) {
 func TestSharedShellShowsSmallTerminalMessage(t *testing.T) {
 	app := demoApp(t)
 	app.width, app.height = 79, 23
-	if got := stripANSI(app.View()); !strings.Contains(got, "terminal too small") {
-		t.Fatalf("small-terminal message missing: %q", got)
+	view := stripANSI(app.View())
+	if !strings.Contains(view, "terminal too small") {
+		t.Fatalf("small-terminal message missing: %q", view)
+	}
+	if strings.Count(view, "? more") != 1 {
+		t.Fatalf("small-terminal footer repeats the ? more hint: %q", view)
 	}
 }
 
