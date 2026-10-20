@@ -420,6 +420,24 @@ func TestCursorAndMarksAreVisuallyDistinct(t *testing.T) {
 	}
 }
 
+func TestMaterialRowsKeepRightPadding(t *testing.T) {
+	app := demoApp(t)
+	app.tab = TabMaterials
+	nodes := app.matNodes()
+	if len(nodes) == 0 {
+		t.Fatal("demo data has no material rows")
+	}
+	for i := range nodes {
+		row := stripANSI(app.matTreeRow(nodes, i, 60, false))
+		if got := lipgloss.Width(row); got != 60 {
+			t.Fatalf("material row %d width %d, want 60: %q", i, got, row)
+		}
+		if !strings.HasSuffix(row, "  ") {
+			t.Fatalf("material row %d has no right padding: %q", i, row)
+		}
+	}
+}
+
 func TestMaterialRowsShowMarkState(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabMaterials

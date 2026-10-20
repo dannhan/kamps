@@ -652,11 +652,17 @@ func materialTreeState(material model.Material) (string, lipgloss.Style) {
 	return "new", stFlagNew
 }
 
+// matRowRightPad mirrors taskRowRightPad: the status labels and long names
+// stop two columns short of the divider and the terminal edge. The final pad
+// carries the row band, so a cursor row stays one continuous strip.
+const matRowRightPad = 2
+
 func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 	n := nodes[index]
 	h := rowHighlight{cursor: index == m.matCursor, mark: selected}
 	background := h.style
 	prefix := h.gutter() + background(stFaint).Render(treeGuides(nodes, index))
+	inner := maxInt(1, width-matRowRightPad)
 	parent := m.materialHasChildren(n)
 	open := n.key != "" && m.isOpen(n.key)
 	lead := ""
@@ -689,7 +695,7 @@ func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 		if parent {
 			caret = h.style(stFaint).Render(caretGlyph(open)) + h.style(stRow).Render(" ")
 		}
-		nameWidth := maxInt(1, width-lipgloss.Width(prefix)-12-lipgloss.Width(caret))
+		nameWidth := maxInt(1, inner-lipgloss.Width(prefix)-12-lipgloss.Width(caret))
 		content = background(stateStyle).Render(state) +
 			background(stRow).Render(" ") + h.markCell(selected) + background(stRow).Render(" ") + caret +
 			background(stRow).Render(ansi.Truncate(n.mat.Name, nameWidth, "…")) +
@@ -703,7 +709,7 @@ func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 		content += background(stRowDim).Render("  ⋯")
 	}
 	row := prefix + content
-	row = ansiTruncate(row, width)
+	row = ansiTruncate(row, inner)
 	return row + background(stRow).Render(strings.Repeat(" ", maxInt(0, width-lipgloss.Width(row))))
 }
 
