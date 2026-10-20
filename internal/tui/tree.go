@@ -314,17 +314,36 @@ func (m *App) courseChildren(courseID int) []model.Assignment {
 
 // ---- Materials tree ----
 
-// matNodes is the Materials pane: course ▸ week (or "general") ▸ file. Weeks
-// keep the source's own label; an empty section shows as "general".
+// visibleMaterials returns the Materials-tab files after the active filter and
+// search. The tree, counters and cursor all read this one list.
+func (m *App) visibleMaterials() []model.Material {
+	out := make([]model.Material, 0, len(m.materials))
+	for _, material := range m.materials {
+		if !m.matchesMaterialFilter(material) || !m.matchesMaterialSearch(material) {
+			continue
+		}
+		out = append(out, material)
+	}
+	return out
+}
+
+func (m *App) matchesMaterialFilter(material model.Material) bool {
+	switch m.filter {
+	case "new":
+		return !material.Downloaded
+	case "downloaded":
+		return material.Downloaded
+	case "link":
+		return material.Kind == "url"
+	}
+	return true
+}
+
+// matNodes is the Materials pane: course ▸ state bucket ▸ file. Weeks keep the
+// source's own label; an empty section shows as "general".
 func (m *App) matNodes() []node {
 	byCourse := map[int][]model.Material{}
-	for _, material := range m.materials {
-		if m.tab == TabMaterials && m.filter != "all" {
-			matches := m.filter == "new" && !material.Downloaded || m.filter == "downloaded" && material.Downloaded || m.filter == "link" && material.Kind == "url"
-			if !matches {
-				continue
-			}
-		}
+	for _, material := range m.visibleMaterials() {
 		byCourse[material.CourseID] = append(byCourse[material.CourseID], material)
 	}
 	courseIDs := make([]int, 0, len(byCourse))

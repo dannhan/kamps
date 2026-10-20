@@ -48,7 +48,8 @@ Handy keys:
 | `space`, `a` | select item / select all |
 | `t` / `m` / `i` / `u` | decide: track / missed / ignore / undecided |
 | `f` | cycle the filter |
-| `esc` | clear the filter, then drop back |
+| `/` | search the tree (composes with the filter) |
+| `esc` | clear the search, then the filter, then drop back |
 | `c` | review & commit |
 | `y` | copy the queue lines (Commit) |
 | `x` | drop an item from the queue (Commit) |
@@ -58,7 +59,9 @@ Handy keys:
 | `q` | quit |
 
 The detail pane follows the cursor and opens on its own when the terminal is
-wide enough; `enter` pins it open or closed either way.
+wide enough; `enter` pins it open or closed either way. Search narrows both
+trees as you type, and `enter` leaves the query on while you move through the
+matches.
 
 ## Project structure
 
@@ -84,4 +87,4 @@ Early days: the UI is complete and runs against demo data. Next up, in order:
 3. A real commit writer behind the queue preview (today `y` copies the lines).
 4. Downloads with progress and a configurable library directory.
 
-Later, not now: bulk actions, search, and a plugin surface for new sources.
+Later, not now: bulk actions and a plugin surface for new sources.

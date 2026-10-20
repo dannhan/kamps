@@ -19,6 +19,7 @@ type KeyMap struct {
 	Commit      key.Binding
 	Copy        key.Binding
 	Drop        key.Binding
+	Search      key.Binding
 	Filter      key.Binding
 	Sync        key.Binding
 	Download    key.Binding
@@ -47,6 +48,7 @@ func DefaultKeys() KeyMap {
 		Commit:   key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "commit tab")),
 		Copy:     key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "copy preview")),
 		Drop:     key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "drop from queue")),
+		Search:   key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
 		Filter:   key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter")),
 		Sync:     key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sync")),
 		Download: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "download")),
@@ -67,7 +69,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right, k.NextTab, k.PrevTab, k.Tabs},
 		{k.Select, k.All, k.Track, k.Missed, k.Ignore, k.Undecide},
-		{k.Commit, k.Filter, k.Copy, k.Drop, k.Sync, k.Download, k.Back},
-		{k.Help, k.Quit},
+		{k.Search, k.Filter, k.Commit, k.Copy, k.Drop, k.Sync, k.Download},
+		{k.Back, k.Help, k.Quit},
 	}
 }

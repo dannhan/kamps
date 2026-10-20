@@ -314,6 +314,128 @@ func TestSplitPaneKeepsEveryLineAtWidth(t *testing.T) {
 	}
 }
 
+func TestSlashOpensSearchAndNarrowsTasks(t *testing.T) {
+	app := demoApp(t)
+	app.tab = TabTasks
+	app.width, app.height = 100, 24
+
+	app.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	if !app.searching {
+		t.Fatal("slash should open search")
+	}
+	for _, r := range "quiz" {
+		app.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	if app.search != "quiz" {
+		t.Fatalf("search = %q, want quiz", app.search)
+	}
+
+	visible := app.visible()
+	if len(visible) == 0 || len(visible) == len(app.assignments) {
+		t.Fatalf("search matched %d of %d assignments", len(visible), len(app.assignments))
+	}
+	for _, assignment := range visible {
+		if !app.matchesTaskSearch(assignment) {
+			t.Fatalf("search kept a non-matching task: %q", assignment.Name)
+		}
+	}
+
+	view := stripANSI(app.View())
+	if !strings.Contains(view, "search · quiz") || !strings.Contains(view, "matches") {
+		t.Fatalf("search title missing from view: %q", view)
+	}
+	if !strings.Contains(view, "enter done") {
+		t.Fatalf("search footer missing: %q", view)
+	}
+}
+
+func TestSearchKeepsCompoundInputAndBackspace(t *testing.T) {
+	app := demoApp(t)
+	app.tab = TabTasks
+
+	app.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	app.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	app.handleKey(tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}})
+	app.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
+	if app.search != "q u" {
+		t.Fatalf("space should be typed into the query, got %q", app.search)
+	}
+
+	app.handleKey(tea.KeyMsg{Type: tea.KeyBackspace})
+	if app.search != "q " {
+		t.Fatalf("backspace = %q, want %q", app.search, "q ")
+	}
+	app.handleKey(tea.KeyMsg{Type: tea.KeyCtrlU})
+	if app.search != "" {
+		t.Fatalf("ctrl+u should clear the query, got %q", app.search)
+	}
+}
+
+func TestSearchEnterKeepsQueryAndEscClearsItFirst(t *testing.T) {
+	app := demoApp(t)
+	app.tab = TabTasks
+	app.search = "quiz"
+	app.searching = true
+
+	app.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if app.searching || app.search != "quiz" {
+		t.Fatalf("enter should keep the query and leave edit mode: %q searching=%v", app.search, app.searching)
+	}
+	if len(app.visible()) == 0 {
+		t.Fatal("query should still narrow the tree after enter")
+	}
+
+	app.filter = "undecided"
+	app.tabFilters[TabTasks] = "undecided"
+	app.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	if app.search != "" || app.filter != "undecided" {
+		t.Fatalf("esc should clear search first: search=%q filter=%q", app.search, app.filter)
+	}
+	app.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	if app.filter != "all" {
+		t.Fatalf("second esc should clear the filter, got %q", app.filter)
+	}
+}
+
+func TestSearchNarrowsMaterialsAndComposesWithFilter(t *testing.T) {
+	app := demoApp(t)
+	app.tab = TabMaterials
+	app.search = "modul"
+
+	files := 0
+	for _, n := range app.matNodes() {
+		if n.kind != nodeFile {
+			continue
+		}
+		files++
+		if !app.matchesMaterialSearch(n.mat) {
+			t.Fatalf("search kept a non-matching material: %q", n.mat.Name)
+		}
+	}
+	if files == 0 {
+		t.Fatal("materials search found no files")
+	}
+
+	app.filter = "new"
+	for _, n := range app.matNodes() {
+		if n.kind == nodeFile && n.mat.Downloaded {
+			t.Fatalf("new filter let a downloaded file through: %q", n.mat.Name)
+		}
+	}
+}
+
+func TestSwitchTabClearsSearch(t *testing.T) {
+	app := demoApp(t)
+	app.tab = TabTasks
+	app.search = "quiz"
+	app.searching = true
+
+	app.switchTab(TabMaterials)
+	if app.search != "" || app.searching {
+		t.Fatalf("tab switch should drop the search: %q searching=%v", app.search, app.searching)
+	}
+}
+
 func TestFilterCyclesOnFAndNotSlash(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabTasks

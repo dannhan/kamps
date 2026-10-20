@@ -84,17 +84,20 @@ FLAGS
 
 SCREENS
   1 Tasks       2 Materials       3 Sync       4 Commit
-  c  open the full-screen commit preview
-  tab / shift+tab  switch tabs
+  c  open the commit queue
+  enter  toggle the detail pane (Tasks, Materials); copy the queue (Commit)
+  /  search     f  filter     esc  clear search/filter
 
 KEYS
   ↑/k ↓/j    move            space   select
-  ←/h →/l    move (board)    a       select all
+  ←/h →/l    fold / open     a       select all
   t          track           m       missed
   i          ignore          u       undecided
-  c          review & commit /       filter
-  s          sync            d       download
-  ?          help            q       quit
+  c          review & commit y       copy queue lines
+  x          drop from queue s       sync
+  d          download        /       search
+  f          filter          ?       help
+  q          quit
 
 Demo data is bundled for now; the Moodle source is next.
 `)

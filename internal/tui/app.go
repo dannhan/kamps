@@ -80,6 +80,9 @@ type App struct {
 
 	tab    Tab
 	filter string
+	search string
+
+	searching bool
 
 	taskCursor   int
 	matCursor    int
@@ -237,6 +240,8 @@ func (m *App) switchTab(tab Tab) {
 	if tab < 0 || tab >= tabCount {
 		return
 	}
+	m.searching = false
+	m.search = ""
 	m.tabFilters[m.tab] = m.filter
 	m.tabExpanded[m.tab] = m.expanded
 	if tab == TabCommit && m.tab != TabCommit {
@@ -265,6 +270,10 @@ func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		return m, nil
+	}
+
+	if m.searching {
+		return m.handleSearchKey(msg)
 	}
 
 	switch msg.String() {
@@ -303,7 +312,7 @@ func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		if m.tab == TabCommit {
 			m.closeCommit()
-		} else if !m.clearFilter() {
+		} else if !m.clearSearch() && !m.clearFilter() {
 			m.back()
 		}
 	case "enter":
@@ -313,6 +322,12 @@ func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.enter()
 	case "f":
 		m.cycleFilter()
+	case "/":
+		if m.tab == TabTasks || m.tab == TabMaterials {
+			m.searching = true
+			m.search = ""
+			m.resetTreeCursor()
+		}
 	case "s":
 		return m, m.startSync()
 	case "d":
@@ -522,12 +537,13 @@ func (m *App) clearFilter() bool {
 
 // ---- task data ----
 
-// visible returns the Tasks-tab assignments after the active filter, sorted.
+// visible returns the Tasks-tab assignments after the active filter and
+// search, sorted.
 func (m *App) visible() []model.Assignment {
 	now := time.Now()
 	out := make([]model.Assignment, 0, len(m.assignments))
 	for _, a := range m.assignments {
-		if !m.matchesFilter(a, now) {
+		if !m.matchesFilter(a, now) || !m.matchesTaskSearch(a) {
 			continue
 		}
 		out = append(out, a)
@@ -936,6 +952,10 @@ func (m *App) sharedFooter(w int, items []string) string {
 // commit queue — or whatever the app just did — on the right.
 func (m *App) helpBar(w int) string {
 	inner := w - 1
+	if m.searching {
+		left := hints([]string{"type to search", "↑↓ move", "enter done", "esc cancel"})
+		return " " + barLine(left, m.taskQueueLabel(), inner)
+	}
 	if m.tab == TabTasks {
 		return " " + m.taskFooter(inner)
 	}
@@ -1035,12 +1055,18 @@ func (m *App) tabContent(width, height int) (string, string, []string, []string)
 	switch m.tab {
 	case TabTasks:
 		nodes := m.taskNodes()
-		title = fmt.Sprintf("courses · %s · %d assignments", m.filter, len(m.visible()))
+		matches := len(m.visible())
 		hint := scrollHint(len(nodes), m.taskCursor, height)
-		budget := maxInt(0, width-lipgloss.Width(title)-4)
-		right = rightAligned(m.taskTotals(maxInt(0, budget-lipgloss.Width(hint)-2)), hint)
+		if m.searchActive() {
+			title = m.searchTitle()
+			right = rightAligned(fmt.Sprintf("%d %s", matches, plural(matches, "match", "matches")), hint)
+		} else {
+			title = fmt.Sprintf("courses · %s · %d assignments", m.filter, matches)
+			budget := maxInt(0, width-lipgloss.Width(title)-4)
+			right = rightAligned(m.taskTotals(maxInt(0, budget-lipgloss.Width(hint)-2)), hint)
+		}
 		filterHint := "f filter"
-		if m.filter != "all" {
+		if m.filter != "all" || m.search != "" {
 			filterHint = "esc clear"
 		}
 		detailHint := "enter detail"
@@ -1058,8 +1084,15 @@ func (m *App) tabContent(width, height int) (string, string, []string, []string)
 		}
 	case TabMaterials:
 		nodes := m.matNodes()
-		title = fmt.Sprintf("materials · %d files · %d local", len(m.materials), m.downloadedMaterials())
-		right = scrollHint(len(nodes), m.matCursor, height)
+		matches := len(m.visibleMaterials())
+		hint := scrollHint(len(nodes), m.matCursor, height)
+		if m.searchActive() {
+			title = m.searchTitle()
+			right = rightAligned(fmt.Sprintf("%d %s", matches, plural(matches, "match", "matches")), hint)
+		} else {
+			title = fmt.Sprintf("materials · %d files · %d local", len(m.materials), m.downloadedMaterials())
+			right = hint
+		}
 		detailHint := "enter detail"
 		if m.detailVisible() {
 			detailHint = "enter hide"
@@ -1084,6 +1117,9 @@ func (m *App) tabContent(width, height int) (string, string, []string, []string)
 		title = "review & commit · y copies the preview"
 		hints = []string{"↑↓ move", "y copy", "x drop", "esc back"}
 		rows = m.commitBody(width, height)
+	}
+	if m.searching {
+		hints = []string{"type to search", "↑↓ move", "enter done", "esc cancel"}
 	}
 	return title, right, hints, rows
 }
