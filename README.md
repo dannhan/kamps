@@ -15,8 +15,9 @@ For each item you make a decision, and it is remembered:
 | `ignored` | not real work — a template, last year's file, an optional extra |
 
 Your actual to-do list lives wherever you keep it; `kamps` can hand decided
-items to it via a review & commit wizard (`c`) that previews the exact lines
-before anything is written.
+items to it via the review & commit queue (`c`), which shows the exact lines
+before anything is written. Today `y` copies those lines to the terminal
+clipboard (OSC 52), so you can paste them into whatever list you use.
 
 ## Installation
 
@@ -42,16 +43,22 @@ Handy keys:
 |---|---|
 | `↑↓` / `jk` | move |
 | `hl` | fold / open (courses, weeks) |
-| `tab`, `1`–`3` | switch tabs |
-| `v` | cycle the Tasks view |
+| `tab`, `1`–`4` | switch tabs |
+| `enter` | open / close the detail pane (Tasks, Materials); copy the queue (Commit) |
 | `space`, `a` | select item / select all |
 | `t` / `m` / `i` / `u` | decide: track / missed / ignore / undecided |
-| `/` | cycle the filter |
+| `f` | cycle the filter |
+| `esc` | clear the filter, then drop back |
 | `c` | review & commit |
+| `y` | copy the queue lines (Commit) |
+| `x` | drop an item from the queue (Commit) |
 | `s` | sync |
 | `d` | download (Materials) |
 | `?` | help |
 | `q` | quit |
+
+The detail pane follows the cursor and opens on its own when the terminal is
+wide enough; `enter` pins it open or closed either way.
 
 ## Project structure
 
@@ -74,7 +81,7 @@ Early days: the UI is complete and runs against demo data. Next up, in order:
 
 1. Real Moodle source: cookie auth, course list, HTML parsing. See `docs/kulon2.md`.
 2. Local store so decisions and downloads survive restarts.
-3. The real commit writer behind the wizard's preview.
+3. A real commit writer behind the queue preview (today `y` copies the lines).
 4. Downloads with progress and a configurable library directory.
 
 Later, not now: bulk actions, search, and a plugin surface for new sources.
