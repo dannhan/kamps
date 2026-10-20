@@ -77,7 +77,7 @@ internal/source/  the Source interface + the demo data source
 internal/store/   local state: decisions and download flags
 internal/tui/     the terminal UI
 internal/config/  paths and settings
-docs/kulon2.md    notes on the Moodle/Kulon2 instance
+docs/             developer guides and Kulon2 notes
 ```
 
 Everything is built against one interface, `source.Source`. Today it is filled
