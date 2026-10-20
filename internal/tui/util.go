@@ -77,6 +77,21 @@ func windowRange(total, cursor, height int) (int, int) {
 	return start, start + height
 }
 
+// scrollHint reports how many rows the viewport hides above and below the
+// window windowRange would pick. It returns "" when everything fits, so the
+// caller can append it to a title row without special-casing the full case.
+func scrollHint(total, cursor, height int) string {
+	start, end := windowRange(total, cursor, height)
+	var parts []string
+	if start > 0 {
+		parts = append(parts, fmt.Sprintf("▲ %d", start))
+	}
+	if end < total {
+		parts = append(parts, fmt.Sprintf("▼ %d", total-end))
+	}
+	return stFaint.Render(strings.Join(parts, " "))
+}
+
 func clampInt(v, lo, hi int) int {
 	if v < lo {
 		return lo

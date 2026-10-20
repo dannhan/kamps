@@ -2,6 +2,7 @@ package tui
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -36,6 +37,41 @@ func TestEscapeClearsFilterBeforeSelections(t *testing.T) {
 
 	if len(app.selected) != 0 {
 		t.Fatalf("a second esc should clear the selection, got %v", app.selected)
+	}
+}
+
+func TestScrollHintReportsHiddenRows(t *testing.T) {
+	cases := []struct {
+		total, cursor, height int
+		want                  string
+	}{
+		{20, 10, 5, "▲ 8 ▼ 7"},
+		{10, 0, 3, "▼ 7"},
+		{10, 9, 3, "▲ 7"},
+		{5, 4, 5, ""},
+		{0, 0, 5, ""},
+	}
+	for _, tc := range cases {
+		if got := stripANSI(scrollHint(tc.total, tc.cursor, tc.height)); got != tc.want {
+			t.Errorf("scrollHint(%d, %d, %d) = %q, want %q", tc.total, tc.cursor, tc.height, got, tc.want)
+		}
+	}
+}
+
+func TestPanesAdvertiseHiddenRows(t *testing.T) {
+	app := demoApp(t)
+
+	app.tab = TabTasks
+	if _, right, _, _ := app.tabContent(96, 1); !strings.Contains(stripANSI(right), "▼") {
+		t.Fatalf("a clipped task tree should show a down hint, got %q", stripANSI(right))
+	}
+	if _, right, _, _ := app.tabContent(96, 500); strings.ContainsAny(stripANSI(right), "▲▼") {
+		t.Fatalf("a tree that fits should not show a scroll hint, got %q", stripANSI(right))
+	}
+
+	app.tab = TabMaterials
+	if _, right, _, _ := app.tabContent(96, 1); !strings.Contains(stripANSI(right), "▼") {
+		t.Fatalf("a clipped material tree should show a down hint, got %q", stripANSI(right))
 	}
 }
 

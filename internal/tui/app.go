@@ -1246,21 +1246,26 @@ func (m *App) tabContent(width, height int) (string, string, []string, []string)
 	var rows []string
 	switch m.tab {
 	case TabTasks:
+		nodes := m.taskNodes()
 		title = fmt.Sprintf("courses · %s · %d assignments", m.filter, len(m.visible()))
-		right = m.taskTotals(maxInt(0, width-lipgloss.Width(title)-4))
+		hint := scrollHint(len(nodes), m.taskCursor, height)
+		budget := maxInt(0, width-lipgloss.Width(title)-4)
+		right = rightAligned(m.taskTotals(maxInt(0, budget-lipgloss.Width(hint)-2)), hint)
 		filterHint := "/ filter"
 		if m.filter != "all" {
 			filterHint = "esc clear"
 		}
 		hints = []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", filterHint, "c commit"}
-		rows = m.taskBody(width, height)
+		rows = m.taskRows(nodes, width, height)
 	case TabMaterials:
+		nodes := m.matNodes()
 		title = fmt.Sprintf("materials · %d files · %d local", len(m.materials), m.downloadedMaterials())
+		right = scrollHint(len(nodes), m.matCursor, height)
 		hints = []string{"↑↓ move", "h/l fold", "space select", "d download"}
 		if m.filter != "all" {
 			hints = append(hints, "esc clear")
 		}
-		rows = m.materialBody(width, height)
+		rows = m.materialRows(nodes, width, height)
 	case TabSync:
 		title = "sync status · " + m.src.Label()
 		hints = []string{"↑↓ move", "s sync"}
@@ -1362,8 +1367,7 @@ func commitActionLabel(action model.Triage) (string, lipgloss.Style) {
 	}
 }
 
-func (m *App) taskBody(width, height int) []string {
-	nodes := m.taskNodes()
+func (m *App) taskRows(nodes []node, width, height int) []string {
 	start, end := windowRange(len(nodes), m.taskCursor, height)
 	rows := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
@@ -1385,8 +1389,7 @@ func sharedFocusRow(content string, width int, focused bool) string {
 	return content + padding
 }
 
-func (m *App) materialBody(width, height int) []string {
-	nodes := m.matNodes()
+func (m *App) materialRows(nodes []node, width, height int) []string {
 	start, end := windowRange(len(nodes), m.matCursor, height)
 	rows := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
@@ -1420,6 +1423,18 @@ func (m *App) syncBody(width, height int) []string {
 		rows = append(rows, sharedFocusRow(row, width, i == m.syncCursor))
 	}
 	return rows
+}
+
+// rightAligned joins the non-empty pieces of a title's right side with the
+// usual two-space gap.
+func rightAligned(parts ...string) string {
+	kept := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part != "" {
+			kept = append(kept, part)
+		}
+	}
+	return strings.Join(kept, "  ")
 }
 
 // taskTotals is the top-bar legend with the totals for every decision state
