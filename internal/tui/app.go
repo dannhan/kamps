@@ -783,25 +783,27 @@ func (m *App) View() string {
 		h = maxInt(1, h)
 	}
 
-	title, right, hints, rows := m.tabContent(maxInt(1, w-4), maxInt(1, h-5))
+	title, right, hints, rows := m.tabContent(maxInt(1, w), maxInt(0, h-5))
 	if m.loadError != "" {
 		rows = []string{stOverdue.Render("error · " + m.loadError)}
 	} else if !m.loaded {
 		rows = []string{stDim.Render("loading…")}
 	}
 	if m.helpOn {
-		title, right, hints, rows = "help", "", []string{"↑↓ move", "tab switch", "? close"}, m.helpLines(maxInt(1, w-2))
+		title, right, hints, rows = "help", "", []string{"↑↓ move", "tab switch", "? close"}, m.helpLines(maxInt(1, w))
 	}
 	if w < 80 || h < 24 {
 		title, right, rows = "terminal too small", "", []string{"terminal too small"}
 		hints = []string{"? more"}
 	}
+	bodyHeight := maxInt(0, h-5)
 	lines := []string{
 		m.tabBar(w),
 		titleLine(title, right, w),
+		rule(w),
 	}
-	lines = append(lines, bodyFrame(rows, w, h-3)...)
-	lines = append(lines, m.sharedFooter(w, hints))
+	lines = append(lines, bodyLines(rows, w, bodyHeight)...)
+	lines = append(lines, rule(w), m.sharedFooter(w, hints))
 	return strings.Join(lines, "\n")
 }
 

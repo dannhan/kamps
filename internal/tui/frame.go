@@ -6,18 +6,14 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Pane lines and titles.
+// Shell lines.
 //
-// A pane's interior is the whole span between its two border glyphs, w-2 columns.
-// panel passes each row through untouched, so a row owns that space — margins
-// included. That is what lets a highlighted row's background reach both borders
-// instead of stopping one column short and leaving a visible gap; ordinary text
-// rows simply start with a space of their own.
-//
-// Every helper returns a string of exactly w visible columns, which is what the
-// alignment tests check.
+// The main area is not boxed: the top information and the footer are fenced
+// off with full-width rules, which leaves every column for content and keeps a
+// split pane from feeling squeezed between two borders. Every helper returns a
+// string of exactly w visible columns, which is what the alignment tests check.
 
-// rule is a horizontal line of exactly w columns.
+// titleLine is the filter/status row between the tab bar and the first rule.
 func titleLine(title, right string, width int) string {
 	inner := maxInt(0, width-2)
 	rightWidth := lipgloss.Width(right)
@@ -27,40 +23,21 @@ func titleLine(title, right string, width int) string {
 	return fitLine(" "+left+strings.Repeat(" ", gap)+right+" ", width)
 }
 
-func bodyFrame(rows []string, width, height int) []string {
+// bodyLines clamps the content area to height full-width rows, padding with
+// blanks and never letting a row spill past the terminal edge.
+func bodyLines(rows []string, width, height int) []string {
 	if height <= 0 {
 		return nil
 	}
-	innerWidth := maxInt(0, width-2)
-	contentHeight := maxInt(0, height-2)
 	out := make([]string, 0, height)
-	if width >= 2 {
-		out = append(out, paneTop(width, true))
-	} else {
-		out = append(out, fitLine("", width))
-	}
-	for i := 0; i < contentHeight; i++ {
+	for i := 0; i < height; i++ {
 		content := ""
 		if i < len(rows) {
 			content = rows[i]
 		}
-		content = ansiTruncate(content, maxInt(0, innerWidth-2))
-		line := " " + content + strings.Repeat(" ", maxInt(0, innerWidth-lipgloss.Width(content)-2)) + " "
-		if width >= 2 {
-			out = append(out, paneBorder(true).Render("│")+fitLine(line, innerWidth)+paneBorder(true).Render("│"))
-		} else {
-			out = append(out, fitLine(content, width))
-		}
+		out = append(out, fitLine(content, width))
 	}
-	if width >= 2 {
-		out = append(out, paneBottom(width, true))
-	} else {
-		out = append(out, fitLine("", width))
-	}
-	for len(out) < height {
-		out = append(out, fitLine("", width))
-	}
-	return out[:height]
+	return out
 }
 
 func fixedTabCell(label string, active bool, width int) string {
@@ -77,32 +54,6 @@ func rule(w int) string {
 		return ""
 	}
 	return stRule.Render(strings.Repeat("─", w))
-}
-
-func paneBorder(focused bool) lipgloss.Style {
-	if focused {
-		return stBorderHi
-	}
-	return stBorder
-}
-
-func paneTop(w int, focused bool) string {
-	return paneBorder(focused).Render("╭" + strings.Repeat("─", maxInt(0, w-2)) + "╮")
-}
-
-func paneBottom(w int, focused bool) string {
-	return paneBorder(focused).Render("╰" + strings.Repeat("─", maxInt(0, w-2)) + "╯")
-}
-
-func paneLine(content string, w int, focused bool) string {
-	inner := maxInt(0, w-2)
-	content = ansiTruncate(content, inner)
-	gap := inner - lipgloss.Width(content)
-	if gap < 0 {
-		gap = 0
-	}
-	return paneBorder(focused).Render("│") + content +
-		strings.Repeat(" ", gap) + paneBorder(focused).Render("│")
 }
 
 // hintsFit drops items from the end until they fit in w columns.

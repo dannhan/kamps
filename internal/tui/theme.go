@@ -99,19 +99,10 @@ var (
 	stDim      = lipgloss.NewStyle().Foreground(themeTokens.Dim)
 	stTreeLine = lipgloss.NewStyle().Foreground(themeTokens.TreeLine)
 	stFaint    = lipgloss.NewStyle().Foreground(themeTokens.Subtle)
-	stTitle    = lipgloss.NewStyle().Foreground(themeTokens.Bright).Bold(true)
 	stEmpty    = lipgloss.NewStyle().Foreground(themeTokens.Subtle).Italic(true)
-	stHelpBox  = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(themeTokens.Border).
-			Padding(1, 2)
-
-	stTabOn  = lipgloss.NewStyle().Foreground(themeTokens.Bright).Background(themeTokens.Surface).Padding(0, 1)
-	stTabOff = lipgloss.NewStyle().Foreground(themeTokens.Subtle).Padding(0, 1)
-
-	stHelpKey = lipgloss.NewStyle().Foreground(themeTokens.Bright)
-	stHelpTxt = lipgloss.NewStyle().Foreground(themeTokens.Subtle)
-	stHelpSep = lipgloss.NewStyle().Foreground(themeTokens.Border)
+	stHelpKey  = lipgloss.NewStyle().Foreground(themeTokens.Bright)
+	stHelpTxt  = lipgloss.NewStyle().Foreground(themeTokens.Subtle)
+	stHelpSep  = lipgloss.NewStyle().Foreground(themeTokens.Border)
 
 	stRow     = stPrimary
 	stRowDim  = lipgloss.NewStyle().Foreground(themeTokens.Subtle)
@@ -121,18 +112,13 @@ var (
 	stDone    = lipgloss.NewStyle().Foreground(themeTokens.Done)
 	stSoon    = lipgloss.NewStyle().Foreground(themeTokens.Dim)
 	stOverdue = lipgloss.NewStyle().Foreground(themeTokens.Missed)
-	stIgnored = lipgloss.NewStyle().Foreground(themeTokens.Ignored)
 	stCode    = lipgloss.NewStyle().Foreground(themeTokens.Accent)
 
-	stBorder    = lipgloss.NewStyle().Foreground(themeTokens.Border)
-	stBorderHi  = lipgloss.NewStyle().Foreground(themeTokens.Accent)
 	stPaneTitle = lipgloss.NewStyle().Foreground(themeTokens.Bright)
 	stRule      = lipgloss.NewStyle().Foreground(themeTokens.Border)
 	stLabel     = lipgloss.NewStyle().Foreground(themeTokens.Dim)
 	stValue     = stPrimary
 	stKey       = lipgloss.NewStyle().Foreground(themeTokens.Accent)
-	stSection   = lipgloss.NewStyle().Foreground(themeTokens.Bright)
-	stStep      = lipgloss.NewStyle().Foreground(themeTokens.Subtle)
 	stBarEmpty  = lipgloss.NewStyle().Foreground(themeTokens.Border)
 
 	stFlagNew = lipgloss.NewStyle().Foreground(themeTokens.New)

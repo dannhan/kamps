@@ -40,6 +40,33 @@ func TestEscapeClearsFilterBeforeSelections(t *testing.T) {
 	}
 }
 
+func TestShellUsesRulesInsteadOfABox(t *testing.T) {
+	app := demoApp(t)
+	app.width, app.height = 100, 30
+	lines := strings.Split(stripANSI(app.View()), "\n")
+	if strings.ContainsAny(strings.Join(lines, ""), "╭╮") {
+		t.Fatal("shell still draws rounded pane corners")
+	}
+	for i, line := range lines {
+		if strings.HasSuffix(line, "│") {
+			t.Fatalf("line %d still has a vertical pane border: %q", i, line)
+		}
+	}
+	want := strings.Repeat("─", 100)
+	rules := 0
+	for _, line := range lines {
+		if line == want {
+			rules++
+		}
+	}
+	if rules != 2 {
+		t.Fatalf("want one rule above and one below the body, got %d", rules)
+	}
+	if lines[2] != want || lines[len(lines)-2] != want {
+		t.Fatalf("rules are not fenced around the body: %q / %q", lines[2], lines[len(lines)-2])
+	}
+}
+
 func TestFilterCyclesOnFAndNotSlash(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabTasks
