@@ -51,7 +51,7 @@ func main() {
 
 	// Non-interactive fallback: piping `kamps | less` should still work.
 	if !isTTY(os.Stdout) {
-		tui.PrintPlain(os.Stdout, src)
+		tui.PrintPlain(os.Stdout, src, cfg)
 		return
 	}
 

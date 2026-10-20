@@ -93,6 +93,21 @@ func (s *State) SetDownloaded(id string, downloaded bool) {
 	delete(s.Downloads, id)
 }
 
+// Apply folds the saved state into freshly loaded data in place. The store wins
+// over whatever the source reports, because it is the user's own decision.
+func (s State) Apply(assignments []model.Assignment, materials []model.Material) {
+	for i := range assignments {
+		if decision := s.Decision(assignments[i].ID); decision != model.Undecided {
+			assignments[i].Triage = decision
+		}
+	}
+	for i := range materials {
+		if s.Downloads[materials[i].ID] {
+			materials[i].Downloaded = true
+		}
+	}
+}
+
 // Save writes the state atomically: a temp file in the same directory, then a
 // rename, so a crash mid-write can never leave a half-parsed state file.
 func (s State) Save(path string) error {

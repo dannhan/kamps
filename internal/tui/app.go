@@ -675,16 +675,7 @@ func (m *App) applyTriage(t model.Triage) {
 // applyState folds the local store into freshly loaded data. The store wins
 // over whatever the source reports, because it is the user's own decision.
 func (m *App) applyState() {
-	for i := range m.assignments {
-		if decision := m.state.Decision(m.assignments[i].ID); decision != model.Undecided {
-			m.assignments[i].Triage = decision
-		}
-	}
-	for i := range m.materials {
-		if m.state.Downloads[m.materials[i].ID] {
-			m.materials[i].Downloaded = true
-		}
-	}
+	m.state.Apply(m.assignments, m.materials)
 }
 
 // saveState persists decisions and download flags. Errors go to the toast

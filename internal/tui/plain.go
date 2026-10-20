@@ -6,18 +6,25 @@ import (
 	"io"
 	"time"
 
+	"github.com/ruyam/kamps/internal/config"
 	"github.com/ruyam/kamps/internal/model"
 	"github.com/ruyam/kamps/internal/source"
+	"github.com/ruyam/kamps/internal/store"
 )
 
 // PrintPlain writes a plain-text snapshot of the source. It is used when
 // stdout is not a terminal (pipes, files, CI) so `kamps` is still useful in
 // scripts. No ANSI, no animation.
-func PrintPlain(w io.Writer, src source.Source) {
+func PrintPlain(w io.Writer, src source.Source, cfg config.Config) {
 	ctx := context.Background()
 	courses, _ := src.Courses(ctx)
 	assignments, _ := src.Assignments(ctx)
 	materials, _ := src.Materials(ctx)
+	if path := cfg.StatePath(); path != "" {
+		if state, err := store.Load(path); err == nil {
+			state.Apply(assignments, materials)
+		}
+	}
 	sortSlice(assignments)
 
 	fmt.Fprintf(w, "kamps (plain mode) — source: %s\n", src.Label())
