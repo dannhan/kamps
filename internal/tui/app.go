@@ -891,7 +891,7 @@ func (m *App) View() string {
 		rule(w),
 	}
 	lines = append(lines, bodyLines(rows, w, bodyHeight)...)
-	lines = append(lines, rule(w), m.sharedFooter(w, hints))
+	lines = append(lines, rule(w), m.helpBar(w, hints))
 	return strings.Join(lines, "\n")
 }
 
@@ -923,34 +923,7 @@ func (m *App) tabBar(w int) string {
 	return fitLine(left+strings.Repeat(" ", w-len(cells)*cellWidth-statusWidth)+status, w)
 }
 
-func (m *App) sharedFooter(w int, items []string) string {
-	queue := m.taskQueueLabel()
-	if m.tab == TabCommit {
-		queue = stKey.Render(fmt.Sprintf("queue: %d", len(m.pending)))
-	}
-	if lipgloss.Width(queue) >= w {
-		return fitLine(queue, w)
-	}
-	if len(items) > 6 {
-		items = items[:6]
-	}
-	if len(items) == 0 || items[len(items)-1] != "? more" {
-		items = append(items, "? more")
-	}
-	available := maxInt(0, w-lipgloss.Width(queue)-3)
-	for lipgloss.Width(hints(items)) > available && len(items) > 1 {
-		items = append(items[:len(items)-2], items[len(items)-1])
-	}
-	left := hints(items)
-	if lipgloss.Width(left)+3+lipgloss.Width(queue) > w {
-		left = ""
-	}
-	return barLine(left, queue, w)
-}
-
-// helpBar is the bottom line: the keys that work right now on the left, and the
-// commit queue — or whatever the app just did — on the right.
-func (m *App) helpBar(w int) string {
+func (m *App) helpBar(w int, items []string) string {
 	inner := w - 1
 	if m.searching {
 		left := hints([]string{"type to search", "↑↓ move", "enter done", "esc cancel"})
@@ -960,14 +933,30 @@ func (m *App) helpBar(w int) string {
 		return " " + m.taskFooter(inner)
 	}
 	right := m.queueLabel()
+	if m.tab == TabCommit {
+		right = stKey.Render(fmt.Sprintf("queue: %d", len(m.pending)))
+	}
 	if f := m.footer(); f != "" {
 		right = f
 	}
-	return " " + barLine(m.hintsLine(inner, m.helpWhere()), right, inner)
+	if len(items) > 6 {
+		items = items[:6]
+	}
+	if len(items) == 0 || items[len(items)-1] != "? more" {
+		items = append(items, "? more")
+	}
+	available := maxInt(0, inner-lipgloss.Width(right)-3)
+	for lipgloss.Width(hints(items)) > available && len(items) > 1 {
+		items = append(items[:len(items)-2], items[len(items)-1])
+	}
+	return " " + barLine(hints(items), right, inner)
 }
 
 func (m *App) taskFooter(width int) string {
 	queue := m.taskQueueLabel()
+	if f := m.footer(); f != "" {
+		queue = f
+	}
 	queueWidth := lipgloss.Width(queue)
 	if queueWidth >= width {
 		return fitLine(queue, width)
@@ -1036,18 +1025,6 @@ func (m *App) queueLabel() string {
 	return strings.Join(parts, stFaint.Render(" · ")) + stFaint.Render(" to commit ")
 }
 
-// helpWhere names the key set for the help bar.
-func (m *App) helpWhere() string {
-	switch {
-	case m.tab == TabMaterials:
-		return "materials"
-	case m.tab == TabSync:
-		return "sync"
-	default:
-		return "tasks"
-	}
-}
-
 func (m *App) tabContent(width, height int) (string, string, []string, []string) {
 	var title, right string
 	var hints []string
@@ -1073,7 +1050,7 @@ func (m *App) tabContent(width, height int) (string, string, []string, []string)
 		if m.detailVisible() {
 			detailHint = "enter hide"
 		}
-		hints = []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", detailHint, filterHint, "c commit"}
+		hints = []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", "c commit", filterHint, detailHint}
 		leftWidth := width
 		if m.detailVisible() {
 			leftWidth, _ = splitWidths(width)

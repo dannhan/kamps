@@ -162,7 +162,7 @@ func TestQuietTreeLineColorTracksForegroundAndBackground(t *testing.T) {
 
 func TestTaskFooterKeepsPriorityAndMoreHint(t *testing.T) {
 	full := taskFooterHints(200)
-	want := "↑↓ move · h/l fold · space select · t/m/i decide · c commit · enter detail · f filter · ? more"
+	want := "↑↓ move · h/l fold · space select · t/m/i decide · c commit · f filter · enter detail · ? more"
 	if got := stripANSI(full); got != want {
 		t.Fatalf("full footer = %q, want %q", got, want)
 	}
@@ -193,12 +193,26 @@ func TestTaskFooterKeepsQueueAtRightEdge(t *testing.T) {
 	}
 }
 
-func TestSharedFooterKeepsQueueWhenHintsDoNotFit(t *testing.T) {
+func TestFooterKeepsQueueWhenHintsDoNotFit(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabTasks
-	line := stripANSI(app.sharedFooter(24, []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", "c commit", "f filter"}))
+	line := stripANSI(app.helpBar(24, []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", "c commit", "f filter"}))
 	if !strings.HasSuffix(line, "queue empty") {
-		t.Fatalf("shared footer dropped queue: %q", line)
+		t.Fatalf("footer dropped queue: %q", line)
+	}
+}
+
+func TestFooterShowsToasts(t *testing.T) {
+	app := demoApp(t)
+	app.width, app.height = 100, 24
+	app.toast = "copied 2 lines"
+	app.toastTicks = 20
+	for _, tab := range []Tab{TabTasks, TabMaterials} {
+		app.tab = tab
+		view := stripANSI(app.View())
+		if !strings.Contains(view, "copied 2 lines") {
+			t.Fatalf("%s footer hid the toast: %q", tab, view)
+		}
 	}
 }
 

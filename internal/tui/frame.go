@@ -56,27 +56,9 @@ func rule(w int) string {
 	return stRule.Render(strings.Repeat("─", w))
 }
 
-// hintsFit drops items from the end until they fit in w columns.
-func hintsFit(items []string, w int) []string {
-	out := make([]string, 0, len(items))
-	total := 0
-	for _, it := range items {
-		add := lipgloss.Width(it)
-		if len(out) > 0 {
-			add += 3 // " · "
-		}
-		if len(out) > 0 && total+add > w {
-			break
-		}
-		total += add
-		out = append(out, it)
-	}
-	return out
-}
-
 // hints renders "key label · key label …" for the help bar.
 func taskFooterHints(width int) string {
-	items := []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", "c commit", "enter detail", "f filter", "? more"}
+	items := []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", "c commit", "f filter", "enter detail", "? more"}
 	kept := []string{"? more"}
 	used := lipgloss.Width(kept[0])
 	for _, item := range items[:len(items)-1] {

@@ -53,14 +53,6 @@ func (m *App) lastSyncLine() string {
 	return fmt.Sprintf("%s · %s (+%d materials)", stamp, name, fresh)
 }
 
-func (m *App) hintsLine(w int, where string) string {
-	_, _, items, _ := m.tabContent(w, maxInt(1, m.height-5))
-	if where == "help" {
-		items = []string{"↑↓ move", "tab switch", "? more"}
-	}
-	return hints(hintsFit(append(items, "? more"), w))
-}
-
 // wrapCell soft-wraps plain text to width, on spaces where possible.
 func wrapCell(s string, w int) []string {
 	if w < 8 {
