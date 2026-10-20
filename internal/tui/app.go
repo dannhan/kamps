@@ -1225,7 +1225,7 @@ func (m *App) tabContent(width, height int) (string, string, []string, []string)
 	switch m.tab {
 	case TabTasks:
 		title = fmt.Sprintf("courses · %s · %d assignments", m.filter, len(m.visible()))
-		right = taskLegend(maxInt(0, width-lipgloss.Width(title)-4))
+		right = m.taskTotals(maxInt(0, width-lipgloss.Width(title)-4))
 		hints = []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", "/ filter", "c commit"}
 		rows = m.taskBody(width, height)
 	case TabMaterials:
@@ -1393,21 +1393,32 @@ func (m *App) syncBody(width, height int) []string {
 	return rows
 }
 
-func taskLegend(width int) string {
-	var full []string
-	for _, item := range []struct {
-		glyph, label string
-		style        lipgloss.Style
-	}{{"○", "new", stFlagNew}, {"◐", "tracked", stFlagT}, {"●", "done", stDone}, {"◆", "ignored", stFlagI}, {"×", "missed", stFlagM}} {
-		full = append(full, item.style.Render(item.glyph)+" "+stDim.Render(item.label))
+// taskTotals is the top-bar legend with the totals for every decision state
+// across all assignments, so the numbers do not move with the active filter.
+// It degrades to glyphs+counts and then to nothing as width runs out.
+func (m *App) taskTotals(width int) string {
+	totals := tallyTriage(m.assignments)
+	states := []struct {
+		count int
+		glyph string
+		label string
+		style lipgloss.Style
+	}{
+		{totals[0], "○", "new", stFlagNew},
+		{totals[1], "◐", "tracked", stFlagT},
+		{totals[3], "◆", "ignored", stFlagI},
+		{totals[4], "×", "missed", stFlagM},
 	}
-	legend := strings.Join(full, "  ")
-	if lipgloss.Width(legend) <= width {
+	var full, compact []string
+	for _, state := range states {
+		full = append(full, state.style.Render(state.glyph)+" "+stDim.Render(fmt.Sprintf("%s %d", state.label, state.count)))
+		compact = append(compact, state.style.Render(fmt.Sprintf("%s %d", state.glyph, state.count)))
+	}
+	if legend := strings.Join(full, "  "); lipgloss.Width(legend) <= width {
 		return legend
 	}
-	glyphs := stFlagNew.Render("○") + "  " + stFlagT.Render("◐") + "  " + stDone.Render("●") + "  " + stFlagI.Render("◆") + "  " + stFlagM.Render("×")
-	if lipgloss.Width(glyphs) <= width {
-		return glyphs
+	if legend := strings.Join(compact, "  "); lipgloss.Width(legend) <= width {
+		return legend
 	}
 	return ""
 }

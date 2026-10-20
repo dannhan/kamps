@@ -544,15 +544,14 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 	if group {
 		meta := ""
 		if n.kind == nodeCourse {
-			meta = formatTaskCounts(counts)
+			meta = formatTaskCounts(counts, h)
 		}
 		if !open {
 			if meta != "" {
-				meta += "  "
+				meta += background(stRow).Render("  ")
 			}
-			meta += "⋯"
+			meta += background(stRowDim).Render("⋯")
 		}
-		meta = background(stRowDim).Render(meta)
 		metaWidth := lipgloss.Width(meta)
 		contentWidth := maxInt(1, available-metaWidth-1)
 		content = ansiTruncate(content, contentWidth)
@@ -575,12 +574,20 @@ func (m *App) isTaskGroup(n node) bool {
 }
 
 func (m *App) taskNodeCounts(group node) [5]int {
-	var counts [5]int
+	assignments := make([]model.Assignment, 0, 8)
 	for _, id := range m.taskGroupIDs(group) {
-		assignment := m.byID(id)
-		if assignment == nil {
-			continue
+		if assignment := m.byID(id); assignment != nil {
+			assignments = append(assignments, *assignment)
 		}
+	}
+	return tallyTriage(assignments)
+}
+
+// tallyTriage buckets assignments by decision state. Index 2 ("done") is kept
+// for the five-glyph legend shape but no triage value maps to it.
+func tallyTriage(assignments []model.Assignment) [5]int {
+	var counts [5]int
+	for _, assignment := range assignments {
 		switch assignment.Triage {
 		case model.Tracked:
 			counts[1]++
@@ -595,7 +602,10 @@ func (m *App) taskNodeCounts(group node) [5]int {
 	return counts
 }
 
-func formatTaskCounts(counts [5]int) string {
+// formatTaskCounts renders the per-state counts of a container. It takes the
+// row's highlight so every count carries the band background: rendering the
+// styled counts under a background wrapper loses it to the inner colour resets.
+func formatTaskCounts(counts [5]int, h rowHighlight) string {
 	states := []struct {
 		count int
 		glyph string
@@ -604,10 +614,10 @@ func formatTaskCounts(counts [5]int) string {
 	var parts []string
 	for _, state := range states {
 		if state.count > 0 {
-			parts = append(parts, state.style.Render(fmt.Sprintf("%s %d", state.glyph, state.count)))
+			parts = append(parts, h.style(state.style).Render(fmt.Sprintf("%s %d", state.glyph, state.count)))
 		}
 	}
-	return strings.Join(parts, "  ")
+	return strings.Join(parts, h.blanks(2))
 }
 
 func dueAge(assignment model.Assignment, now time.Time) string {

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"github.com/ruyam/kamps/internal/config"
 	"github.com/ruyam/kamps/internal/model"
@@ -297,7 +299,7 @@ func TestMaterialsTreeHasStateBucketsAndAttachedAssignments(t *testing.T) {
 }
 
 func TestHistoricalTreeLabelsRemainStateColored(t *testing.T) {
-	if got := formatTaskCounts([5]int{6, 1, 0, 1, 1}); stripANSI(got) != "○ 6  ◐ 1  ◆ 1  × 1" {
+	if got := formatTaskCounts([5]int{6, 1, 0, 1, 1}, rowHighlight{}); stripANSI(got) != "○ 6  ◐ 1  ◆ 1  × 1" {
 		t.Fatalf("task counters = %q", stripANSI(got))
 	}
 	if got := taskTreeRowForTest(t); !strings.Contains(stripANSI(got), "new · K901013 ·") {
@@ -523,6 +525,51 @@ func TestMaterialParentRowsShowCaretAndMark(t *testing.T) {
 	row = stripANSI(app.matTreeRow(nodes, fileIndex, 98, false))
 	if !strings.Contains(row, markEmpty+" ▸ ") {
 		t.Fatalf("folded file should show a right caret before its name: %q", row)
+	}
+}
+
+func TestCourseCountsKeepTheCursorBand(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
+
+	app := demoApp(t)
+	app.layout = LayList
+	app.tab = TabTasks
+	nodes := app.taskNodes()
+	course := findTaskNode(nodes, nodeCourse, "")
+	app.taskCursor = course
+
+	row := app.taskTreeRow(nodes, course, 98)
+	if !strings.Contains(stripANSI(row), "○ 6") {
+		t.Fatalf("course row is missing its state counts: %q", stripANSI(row))
+	}
+	// Every cell of a cursor row carries the band background. A reset followed
+	// by literal spaces means the counts broke the band, which is the bug this
+	// guards against.
+	if strings.Contains(row, "\x1b[0m ") || strings.Contains(row, "\x1b[0m  ") {
+		t.Fatalf("counts punched holes in the cursor band: %q", row)
+	}
+	if strings.Count(row, "48;") < 5 {
+		t.Fatalf("cursor band is not painted across every cell: %q", row)
+	}
+}
+
+func TestTaskTotalsShowEveryStateCount(t *testing.T) {
+	app := demoApp(t)
+	totals := tallyTriage(app.assignments)
+	legend := stripANSI(app.taskTotals(200))
+	for _, want := range []string{
+		fmt.Sprintf("○ new %d", totals[0]),
+		fmt.Sprintf("◐ tracked %d", totals[1]),
+		fmt.Sprintf("◆ ignored %d", totals[3]),
+		fmt.Sprintf("× missed %d", totals[4]),
+	} {
+		if !strings.Contains(legend, want) {
+			t.Fatalf("legend %q missing %q", legend, want)
+		}
+	}
+	if narrow := stripANSI(app.taskTotals(30)); strings.Contains(narrow, "new") || !strings.Contains(narrow, "○ ") {
+		t.Fatalf("narrow legend should fall back to glyph and count: %q", narrow)
 	}
 }
 
