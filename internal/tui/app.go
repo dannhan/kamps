@@ -56,7 +56,7 @@ func (t Tab) String() string {
 	return "?"
 }
 
-// filters, cycled with "/".
+// filters, cycled with f. `/` is reserved for search.
 var filterNames = []string{"all", "undecided", "overdue", "tracked", "missed", "ignored"}
 var materialFilterNames = []string{"all", "new", "downloaded", "link"}
 
@@ -297,7 +297,7 @@ func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.enter()
 		}
-	case "/":
+	case "f":
 		m.cycleFilter()
 	case "s":
 		return m, m.startSync()
@@ -478,7 +478,7 @@ func (m *App) cycleFilter() {
 
 // clearFilter resets the active tab's filter to "all" and reports whether there
 // was one to clear. Esc uses it before falling back to dropping selections, so
-// a filter can be undone without cycling "/" all the way around.
+// a filter can be undone without cycling f all the way around.
 func (m *App) clearFilter() bool {
 	if m.tab != TabTasks && m.tab != TabMaterials {
 		return false
@@ -963,7 +963,7 @@ func (m *App) tabContent(width, height int) (string, string, []string, []string)
 		hint := scrollHint(len(nodes), m.taskCursor, height)
 		budget := maxInt(0, width-lipgloss.Width(title)-4)
 		right = rightAligned(m.taskTotals(maxInt(0, budget-lipgloss.Width(hint)-2)), hint)
-		filterHint := "/ filter"
+		filterHint := "f filter"
 		if m.filter != "all" {
 			filterHint = "esc clear"
 		}

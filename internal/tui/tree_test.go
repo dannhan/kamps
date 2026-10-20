@@ -162,7 +162,7 @@ func TestQuietTreeLineColorTracksForegroundAndBackground(t *testing.T) {
 
 func TestTaskFooterKeepsPriorityAndMoreHint(t *testing.T) {
 	full := taskFooterHints(200)
-	want := "↑↓ move · h/l fold · space select · t/m/i decide · c commit · / filter · ? more"
+	want := "↑↓ move · h/l fold · space select · t/m/i decide · c commit · f filter · ? more"
 	if got := stripANSI(full); got != want {
 		t.Fatalf("full footer = %q, want %q", got, want)
 	}
@@ -171,7 +171,7 @@ func TestTaskFooterKeepsPriorityAndMoreHint(t *testing.T) {
 		t.Fatalf("short footer = %q, want ? more", got)
 	}
 	medium := stripANSI(taskFooterHints(40))
-	if !strings.HasSuffix(medium, "? more") || strings.Contains(medium, "/ filter") {
+	if !strings.HasSuffix(medium, "? more") || strings.Contains(medium, "f filter") {
 		t.Fatalf("short footer did not drop hints from the right: %q", medium)
 	}
 }
@@ -196,7 +196,7 @@ func TestTaskFooterKeepsQueueAtRightEdge(t *testing.T) {
 func TestSharedFooterKeepsQueueWhenHintsDoNotFit(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabTasks
-	line := stripANSI(app.sharedFooter(24, []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", "c commit", "/ filter"}))
+	line := stripANSI(app.sharedFooter(24, []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", "c commit", "f filter"}))
 	if !strings.HasSuffix(line, "queue empty") {
 		t.Fatalf("shared footer dropped queue: %q", line)
 	}

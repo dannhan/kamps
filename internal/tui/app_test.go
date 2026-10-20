@@ -40,6 +40,21 @@ func TestEscapeClearsFilterBeforeSelections(t *testing.T) {
 	}
 }
 
+func TestFilterCyclesOnFAndNotSlash(t *testing.T) {
+	app := demoApp(t)
+	app.tab = TabTasks
+
+	app.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	if app.filter != "undecided" {
+		t.Fatalf("f should advance the filter, got %q", app.filter)
+	}
+
+	app.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	if app.filter != "undecided" {
+		t.Fatalf("slash should be reserved for search, got filter %q", app.filter)
+	}
+}
+
 func TestScrollHintReportsHiddenRows(t *testing.T) {
 	cases := []struct {
 		total, cursor, height int

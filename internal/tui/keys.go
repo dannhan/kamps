@@ -43,7 +43,7 @@ func DefaultKeys() KeyMap {
 		Undecide: key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "undecided")),
 		All:      key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "select all")),
 		Commit:   key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "commit tab")),
-		Filter:   key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),
+		Filter:   key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter")),
 		Sync:     key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sync")),
 		Download: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "download")),
 		Confirm:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "confirm")),
