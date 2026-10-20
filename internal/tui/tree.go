@@ -479,6 +479,11 @@ func treeGuides(nodes []node, index int) string {
 	return guides.String()
 }
 
+// taskRowRightPad keeps the tree's right edge (course counts, state labels)
+// off the pane divider and the terminal edge. The padding is painted with the
+// row highlight, so a cursor row still reaches the edge as one band.
+const taskRowRightPad = 2
+
 func (m *App) taskTreeRow(nodes []node, index, width int) string {
 	n := nodes[index]
 	selected := false
@@ -490,7 +495,7 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 	h := rowHighlight{cursor: index == m.taskCursor, mark: selected}
 	background := h.style
 	prefix := h.gutter() + background(stFaint).Render(treeGuides(nodes, index))
-	available := maxInt(1, width-lipgloss.Width(prefix))
+	available := maxInt(1, width-lipgloss.Width(prefix)-taskRowRightPad)
 	group := m.isTaskGroup(n)
 	open := group && m.taskIsOpen(n.key, taskNodeDefaultOpen(n))
 	content := ""
