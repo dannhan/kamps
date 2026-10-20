@@ -352,7 +352,7 @@ func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		if m.tab == TabCommit {
 			m.closeCommit()
-		} else {
+		} else if !m.clearFilter() {
 			m.back()
 		}
 	case "enter":
@@ -562,6 +562,28 @@ func (m *App) cycleFilter() {
 	}
 	m.toast = "filter: " + m.filter
 	m.toastTicks = 20
+}
+
+// clearFilter resets the active tab's filter to "all" and reports whether there
+// was one to clear. Esc uses it before falling back to dropping selections, so
+// a filter can be undone without cycling "/" all the way around.
+func (m *App) clearFilter() bool {
+	if m.tab != TabTasks && m.tab != TabMaterials {
+		return false
+	}
+	if m.filter == "" || m.filter == "all" {
+		return false
+	}
+	m.filter = "all"
+	m.tabFilters[m.tab] = "all"
+	if m.tab == TabTasks {
+		m.taskCursor = 0
+	} else {
+		m.matCursor = 0
+	}
+	m.toast = "filter: all"
+	m.toastTicks = 20
+	return true
 }
 
 // ---- task data ----
@@ -1226,11 +1248,18 @@ func (m *App) tabContent(width, height int) (string, string, []string, []string)
 	case TabTasks:
 		title = fmt.Sprintf("courses · %s · %d assignments", m.filter, len(m.visible()))
 		right = m.taskTotals(maxInt(0, width-lipgloss.Width(title)-4))
-		hints = []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", "/ filter", "c commit"}
+		filterHint := "/ filter"
+		if m.filter != "all" {
+			filterHint = "esc clear"
+		}
+		hints = []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", filterHint, "c commit"}
 		rows = m.taskBody(width, height)
 	case TabMaterials:
 		title = fmt.Sprintf("materials · %d files · %d local", len(m.materials), m.downloadedMaterials())
 		hints = []string{"↑↓ move", "h/l fold", "space select", "d download"}
+		if m.filter != "all" {
+			hints = append(hints, "esc clear")
+		}
 		rows = m.materialBody(width, height)
 	case TabSync:
 		title = "sync status · " + m.src.Label()
