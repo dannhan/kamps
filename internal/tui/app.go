@@ -56,56 +56,6 @@ func (t Tab) String() string {
 	return "?"
 }
 
-// Layout is how the Tasks screen is drawn. All four share the same data and
-// keys; they are just different ways of looking at the same backlog.
-type Layout int
-
-const (
-	LayList      Layout = iota // two-pane: list + detail (the default)
-	LayDashboard               // backlog overview: counts, per-course, oldest first
-	LayBoard                   // 2x2 buckets by decision
-	LayWizard                  // guided review & commit
-	layCount
-)
-
-func (l Layout) String() string {
-	switch l {
-	case LayList:
-		return "list"
-	case LayDashboard:
-		return "dashboard"
-	case LayBoard:
-		return "board"
-	case LayWizard:
-		return "wizard"
-	}
-	return "?"
-}
-
-// viewCycle is what `v` steps through. The board and the wizard are not in the
-// daily rotation: the wizard opens with `c`, the board is parked for now.
-var viewCycle = []Layout{LayDashboard, LayList}
-
-// nextLayout returns the view `v` should switch to from the current one.
-func (l Layout) next() Layout {
-	for i, cand := range viewCycle {
-		if cand == l {
-			return viewCycle[(i+1)%len(viewCycle)]
-		}
-	}
-	return viewCycle[0]
-}
-
-// inViewCycle reports whether a layout is reachable with `v`.
-func (l Layout) inViewCycle() bool {
-	for _, cand := range viewCycle {
-		if cand == l {
-			return true
-		}
-	}
-	return false
-}
-
 // filters, cycled with "/".
 var filterNames = []string{"all", "undecided", "overdue", "tracked", "missed", "ignored"}
 var materialFilterNames = []string{"all", "new", "downloaded", "link"}
@@ -127,15 +77,12 @@ type App struct {
 	loadError   string
 
 	tab    Tab
-	layout Layout
 	filter string
 
 	taskCursor   int
 	matCursor    int
 	syncCursor   int
 	commitCursor int
-	boardCol     int
-	boardCursor  [4]int // per triage column
 
 	tabFilters  [tabCount]string
 	tabExpanded [tabCount]map[string]bool
@@ -149,13 +96,6 @@ type App struct {
 	selectedM map[string]bool // material id -> checked
 	pending   map[string]model.Triage
 
-	// wizard
-	wizStep   int // 0 select, 1 action, 2 review, 3 done
-	wizAction model.Triage
-
-	// returnLayout is where `esc` goes back to when the wizard closes.
-	returnLayout Layout
-
 	spinner    spinner.Model
 	syncing    bool
 	syncTicks  int
@@ -165,7 +105,6 @@ type App struct {
 	width  int
 	height int
 	helpOn bool
-	dryRun bool
 	noAnim bool
 }
 
@@ -178,27 +117,23 @@ func New(src source.Source, cfg config.Config, version string) *App {
 	h := help.New()
 
 	return &App{
-		src:          src,
-		cfg:          cfg,
-		ver:          version,
-		keys:         DefaultKeys(),
-		help:         h,
-		filter:       "all",
-		layout:       LayList,
-		returnTab:    TabTasks,
-		tabFilters:   [tabCount]string{"all", "all", "all", "all"},
-		tabExpanded:  [tabCount]map[string]bool{0: {}, 1: {}, 2: {}, 3: {}},
-		returnLayout: LayList,
-		expanded:     map[string]bool{},
-		selected:     map[string]bool{},
-		selectedM:    map[string]bool{},
-		pending:      map[string]model.Triage{},
-		spinner:      sp,
-		wizAction:    model.Tracked,
-		width:        100,
-		height:       30,
-		dryRun:       true,
-		noAnim:       cfg.NoAnim,
+		src:         src,
+		cfg:         cfg,
+		ver:         version,
+		keys:        DefaultKeys(),
+		help:        h,
+		filter:      "all",
+		returnTab:   TabTasks,
+		tabFilters:  [tabCount]string{"all", "all", "all", "all"},
+		tabExpanded: [tabCount]map[string]bool{0: {}, 1: {}, 2: {}, 3: {}},
+		expanded:    map[string]bool{},
+		selected:    map[string]bool{},
+		selectedM:   map[string]bool{},
+		pending:     map[string]model.Triage{},
+		spinner:     sp,
+		width:       100,
+		height:      30,
+		noAnim:      cfg.NoAnim,
 	}
 }
 
@@ -377,16 +312,7 @@ func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *App) move(delta int) {
 	switch m.tab {
 	case TabTasks:
-		if m.layout == LayBoard {
-			items := m.boardItems(m.boardCol)
-			m.boardCursor[m.boardCol] = clampInt(m.boardCursor[m.boardCol]+delta, 0, maxInt(0, len(items)-1))
-			return
-		}
-		n := len(m.focusedList())
-		if m.layout == LayList {
-			n = len(m.taskNodes())
-		}
-		m.taskCursor = clampInt(m.taskCursor+delta, 0, maxInt(0, n-1))
+		m.taskCursor = clampInt(m.taskCursor+delta, 0, maxInt(0, len(m.taskNodes())-1))
 	case TabMaterials:
 		m.matCursor = clampInt(m.matCursor+delta, 0, maxInt(0, len(m.matNodes())-1))
 	case TabSync:
@@ -396,17 +322,14 @@ func (m *App) move(delta int) {
 	}
 }
 
-// clampCursor keeps the per-tab cursors inside whatever the current view draws.
-// Views with different row models — dashboard items, tree nodes — share the
-// same cursor, and a stale index must never point past the end.
+// clampCursor keeps the per-tab cursors inside whatever the tree currently
+// draws, so a stale index never points past the end.
 func (m *App) clampCursor() {
 	switch {
-	case m.tab == TabTasks && m.layout == LayList:
+	case m.tab == TabTasks:
 		m.taskCursor = clampInt(m.taskCursor, 0, maxInt(0, len(m.taskNodes())-1))
 	case m.tab == TabMaterials:
 		m.matCursor = clampInt(m.matCursor, 0, maxInt(0, len(m.matNodes())-1))
-	case m.tab == TabTasks && m.layout != LayBoard:
-		m.taskCursor = clampInt(m.taskCursor, 0, maxInt(0, len(m.focusedList())-1))
 	case m.tab == TabSync:
 		m.syncCursor = clampInt(m.syncCursor, 0, 5)
 	case m.tab == TabCommit:
@@ -414,20 +337,13 @@ func (m *App) clampCursor() {
 	}
 }
 
-// moveX is horizontal: board columns on the Tasks board, folding everywhere the
-// trees are. `l` opens the cursor's container, `h` closes it.
+// moveX is horizontal: folding everywhere the trees are. `l` opens the cursor's
+// container, `h` closes it.
 func (m *App) moveX(delta int) {
 	var nodes []node
 	var cursor *int
 	switch m.tab {
 	case TabTasks:
-		if m.layout == LayBoard {
-			m.boardCol = clampInt(m.boardCol+delta, 0, len(boardOrder)-1)
-			return
-		}
-		if m.layout != LayList {
-			return
-		}
 		nodes, cursor = m.taskNodes(), &m.taskCursor
 	case TabMaterials:
 		nodes, cursor = m.matNodes(), &m.matCursor
@@ -482,25 +398,19 @@ func hasVisibleChildren(nodes []node, key string) bool {
 func (m *App) toggleSelect() {
 	switch m.tab {
 	case TabTasks:
-		if m.layout == LayList {
-			nodes := m.taskNodes()
-			if m.taskCursor < 0 || m.taskCursor >= len(nodes) {
-				return
-			}
-			n := nodes[m.taskCursor]
-			if n.kind == nodeTaskMaterial {
-				return
-			}
-			if n.kind == nodeTask {
-				toggleSet(m.selected, []string{n.task.ID})
-				return
-			}
-			toggleSet(m.selected, m.taskGroupIDs(n))
+		nodes := m.taskNodes()
+		if m.taskCursor < 0 || m.taskCursor >= len(nodes) {
 			return
 		}
-		if id := m.cursorAssignmentID(); id != "" {
-			toggleSet(m.selected, []string{id})
+		n := nodes[m.taskCursor]
+		if n.kind == nodeTaskMaterial {
+			return
 		}
+		if n.kind == nodeTask {
+			toggleSet(m.selected, []string{n.task.ID})
+			return
+		}
+		toggleSet(m.selected, m.taskGroupIDs(n))
 	case TabMaterials:
 		nodes := m.matNodes()
 		if m.matCursor < 0 || m.matCursor >= len(nodes) {
@@ -527,8 +437,10 @@ func (m *App) toggleSelect() {
 func (m *App) selectAll() {
 	switch m.tab {
 	case TabTasks:
-		for _, a := range m.focusedList() {
-			m.selected[a.ID] = true
+		for _, n := range m.taskNodes() {
+			if n.kind == nodeTask {
+				m.selected[n.task.ID] = true
+			}
 		}
 	case TabMaterials:
 		for _, mt := range m.materials {
@@ -588,8 +500,6 @@ func (m *App) clearFilter() bool {
 
 // ---- task data ----
 
-var boardOrder = []model.Triage{model.Undecided, model.Tracked, model.Missed, model.Ignored}
-
 // visible returns the Tasks-tab assignments after the active filter, sorted.
 func (m *App) visible() []model.Assignment {
 	now := time.Now()
@@ -620,136 +530,15 @@ func (m *App) matchesFilter(a model.Assignment, now time.Time) bool {
 	return true
 }
 
-// boardItems returns the assignments in one triage column, sorted.
-func (m *App) boardItems(col int) []model.Assignment {
-	if col < 0 || col >= len(boardOrder) {
-		return nil
-	}
-	want := boardOrder[col]
-	out := make([]model.Assignment, 0, 4)
-	for _, a := range m.assignments {
-		if a.Triage == want {
-			out = append(out, a)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return lessAssignment(out[i], out[j]) })
-	return out
-}
-
-// ---- dashboard (today) data ----
-
-// dashContentHeight is how many rows the dashboard's today pane has to show
-// items in. dashAlloc and the renderer both read it, so what is drawn and what
-// the keyboard walks can never disagree.
-func (m *App) dashContentHeight() int {
-	return clampInt(m.boxHeight()-6, 5, 40) // tab bar + pane chrome
-}
-
-// dashAlloc decides how many items each today section shows. Every non-empty
-// section is guaranteed a row, then whatever is left goes to the most urgent
-// section first — so a pile of overdue work can never hide what is coming up.
-func (m *App) dashAlloc(overdue, dueToday, soon []model.Assignment) [3]int {
-	items := [3][]model.Assignment{overdue, dueToday, soon}
-
-	content := m.dashContentHeight()
-	left := maxInt(3, content-5) // three section headers + two spacer lines
-
-	var alloc [3]int
-	for i := range items {
-		if len(items[i]) > 0 && left > 0 {
-			alloc[i] = 1
-			left--
-		}
-	}
-	for i := range items {
-		if grow := minInt(len(items[i])-alloc[i], left); grow > 0 {
-			alloc[i] += grow
-			left -= grow
-		}
-	}
-	return alloc
-}
-
-// todayBuckets classifies the still-undecided assignments the dashboard shows:
-// past due, due today, and the next three days. Decided items are deliberately
-// absent — the dashboard is about what still needs you.
-func (m *App) todayBuckets() (overdue, dueToday, soon []model.Assignment) {
-	now := time.Now()
-	for _, a := range m.assignments {
-		switch {
-		case a.Overdue(now):
-			overdue = append(overdue, a)
-		case a.Triage != model.Undecided:
-			// decided: not the dashboard's business
-		case a.HasDue && sameDay(a.Due, now):
-			dueToday = append(dueToday, a)
-		case a.HasDue && a.Due.After(now) && a.Due.Before(now.AddDate(0, 0, 4)):
-			soon = append(soon, a)
-		}
-	}
-	sortSlice(overdue)
-	sortSlice(dueToday)
-	sortSlice(soon)
-	return
-}
-
-// dashShown is the ordered list of items the dashboard cursor walks, matching
-// exactly what the today panel draws.
-func (m *App) dashShown() []model.Assignment {
-	overdue, dueToday, soon := m.todayBuckets()
-	alloc := m.dashAlloc(overdue, dueToday, soon)
-	out := []model.Assignment{}
-	for i, items := range [3][]model.Assignment{overdue, dueToday, soon} {
-		out = append(out, items[:shownCount(alloc[i], len(items))]...)
-	}
-	return out
-}
-
-// focusedList is the assignment list the keyboard is currently driving. Every
-// Tasks layout exposes its rows through this, so Up/Down, space and t/m/i/u
-// behave the same everywhere.
-func (m *App) focusedList() []model.Assignment {
-	if m.tab != TabTasks {
-		return nil
-	}
-	switch m.layout {
-	case LayBoard:
-		return m.boardItems(m.boardCol)
-	case LayDashboard:
-		return m.dashShown()
-	case LayList:
-		var out []model.Assignment
-		for _, n := range m.taskNodes() {
-			if n.kind == nodeTask {
-				out = append(out, n.task)
-			}
-		}
-		return out
-	default:
-		return m.visible()
-	}
-}
-
 // cursorAssignmentID is the item the keyboard is pointing at, or "". On the
 // tree, the cursor may rest on a course row — that is no single assignment.
 func (m *App) cursorAssignmentID() string {
 	if m.tab != TabTasks {
 		return ""
 	}
-	if m.layout == LayList {
-		nodes := m.taskNodes()
-		if m.taskCursor >= 0 && m.taskCursor < len(nodes) && nodes[m.taskCursor].kind == nodeTask {
-			return nodes[m.taskCursor].task.ID
-		}
-		return ""
-	}
-	items := m.focusedList()
-	cursor := m.taskCursor
-	if m.layout == LayBoard && m.tab == TabTasks {
-		cursor = m.boardCursor[m.boardCol]
-	}
-	if cursor >= 0 && cursor < len(items) {
-		return items[cursor].ID
+	nodes := m.taskNodes()
+	if m.taskCursor >= 0 && m.taskCursor < len(nodes) && nodes[m.taskCursor].kind == nodeTask {
+		return nodes[m.taskCursor].task.ID
 	}
 	return ""
 }
@@ -766,7 +555,7 @@ func (m *App) targetIDs() []string {
 	if len(ids) > 0 {
 		return ids
 	}
-	if m.tab == TabTasks && m.layout == LayList {
+	if m.tab == TabTasks {
 		if id := m.cursorAssignmentID(); id != "" {
 			return []string{id}
 		}
@@ -915,7 +704,7 @@ func (m *App) download() {
 	m.toastTicks = 24
 }
 
-// ---- commit / wizard ----
+// ---- commit ----
 
 func (m *App) openCommit() {
 	m.switchTab(TabCommit)
@@ -925,65 +714,6 @@ func (m *App) closeCommit() {
 	if m.tab == TabCommit {
 		m.switchTab(m.returnTab)
 	}
-}
-
-func (m *App) wizardKey(msg tea.KeyMsg) (tea.Cmd, bool) {
-	switch msg.String() {
-	case "esc":
-		switch m.wizStep {
-		case 0, 3:
-			m.layout = m.returnLayout
-			m.wizStep = 0
-		default:
-			m.wizStep--
-		}
-		return nil, true
-	case "enter":
-		switch m.wizStep {
-		case 0:
-			m.wizStep = 1
-		case 1:
-			if len(m.selected) == 0 {
-				m.toast = "select at least one assignment"
-				m.toastTicks = 20
-				return nil, true
-			}
-			for id := range m.selected {
-				if a := m.byID(id); a != nil {
-					a.Triage = m.wizAction
-				}
-				m.pending[id] = m.wizAction
-			}
-			m.selected = map[string]bool{}
-			m.wizStep = 2
-		case 2:
-			if m.dryRun {
-				m.toast = fmt.Sprintf("committed %d %s (dry-run: nothing written yet)", len(m.pending), plural(len(m.pending), "line", "lines"))
-			} else {
-				m.toast = fmt.Sprintf("committed %d %s", len(m.pending), plural(len(m.pending), "line", "lines"))
-			}
-			m.pending = map[string]model.Triage{}
-			m.toastTicks = 30
-			m.wizStep = 3
-		default:
-			m.layout = m.returnLayout
-			m.wizStep = 0
-		}
-		return nil, true
-	case "t":
-		m.wizAction = model.Tracked
-		return nil, true
-	case "m":
-		m.wizAction = model.Missed
-		return nil, true
-	case "i":
-		m.wizAction = model.Ignored
-		return nil, true
-	case "u":
-		m.wizAction = model.Undecided
-		return nil, true
-	}
-	return nil, false
 }
 
 func (m *App) enter() {
@@ -1037,22 +767,6 @@ func (m *App) advance() {
 }
 
 // ---- view ----
-
-func (m *App) boxWidth() int {
-	w := m.width
-	if w <= 0 {
-		w = 100
-	}
-	return clampInt(w, 40, 400)
-}
-
-func (m *App) boxHeight() int {
-	h := m.height
-	if h <= 0 {
-		h = 30
-	}
-	return clampInt(h, 10, 200)
-}
 
 func (m *App) View() string {
 	w, h := m.width, m.height
@@ -1146,7 +860,7 @@ func (m *App) sharedFooter(w int, items []string) string {
 // commit queue — or whatever the app just did — on the right.
 func (m *App) helpBar(w int) string {
 	inner := w - 1
-	if m.tab == TabTasks && m.layout == LayList {
+	if m.tab == TabTasks {
 		return " " + m.taskFooter(inner)
 	}
 	right := m.queueLabel()
@@ -1233,8 +947,6 @@ func (m *App) helpWhere() string {
 		return "materials"
 	case m.tab == TabSync:
 		return "sync"
-	case m.layout == LayWizard:
-		return "wizard"
 	default:
 		return "tasks"
 	}

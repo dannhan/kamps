@@ -105,51 +105,6 @@ func paneLine(content string, w int, focused bool) string {
 		strings.Repeat(" ", gap) + paneBorder(focused).Render("│")
 }
 
-// panel draws a bordered pane of width w. An empty title skips the title row.
-// The height follows the content, so pair panels with sideBySide, which pads
-// the shorter one.
-func panel(title string, w int, rows []string, focused bool) []string {
-	return panelWithTitle(title, nil, w, rows, focused)
-}
-
-func panelWithTitle(title string, titleRight func(int) string, w int, rows []string, focused bool) []string {
-	inner := maxInt(1, w-2)
-	content := make([]string, 0, len(rows)+2)
-	if title != "" {
-		line := " " + stPaneTitle.Render(truncate(title, inner-1))
-		if titleRight != nil {
-			line = titleRight(inner)
-		}
-		content = append(content, line, rule(inner))
-	}
-	content = append(content, rows...)
-
-	out := make([]string, 0, len(content)+2)
-	out = append(out, paneTop(w, focused))
-	for _, c := range content {
-		out = append(out, paneLine(c, w, focused))
-	}
-	return append(out, paneBottom(w, focused))
-}
-
-// sideBySide joins two panes, padding the shorter one with blank pane lines so
-// both borders line up.
-func sideBySide(left []string, lw int, lFocused bool, right []string, rw int, rFocused bool) []string {
-	n := maxInt(len(left), len(right))
-	out := make([]string, n)
-	for i := 0; i < n; i++ {
-		l, r := paneLine("", lw, lFocused), paneLine("", rw, rFocused)
-		if i < len(left) {
-			l = left[i]
-		}
-		if i < len(right) {
-			r = right[i]
-		}
-		out[i] = l + " " + r
-	}
-	return out
-}
-
 // hintsFit drops items from the end until they fit in w columns.
 func hintsFit(items []string, w int) []string {
 	out := make([]string, 0, len(items))

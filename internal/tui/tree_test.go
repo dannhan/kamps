@@ -135,7 +135,6 @@ func TestCoursesTreeViewsAt100And80Columns(t *testing.T) {
 		app := demoApp(t)
 		app.width = width
 		app.height = 40
-		app.layout = LayList
 		app.taskCursor = 0
 		view := app.View()
 		for i, line := range strings.Split(view, "\n") {
@@ -333,7 +332,6 @@ func TestTabSwitchRestoresPerTabCursorAndFilter(t *testing.T) {
 
 func TestFoldingOpenGroupKeepsCursorOnIt(t *testing.T) {
 	app := demoApp(t)
-	app.layout = LayList
 	app.tab = TabTasks
 
 	nodes := app.taskNodes()
@@ -353,7 +351,6 @@ func TestFoldingOpenGroupKeepsCursorOnIt(t *testing.T) {
 
 func TestFoldOnLeafMovesCursorToParent(t *testing.T) {
 	app := demoApp(t)
-	app.layout = LayList
 	app.tab = TabTasks
 
 	nodes := app.taskNodes()
@@ -371,7 +368,6 @@ func TestFoldOnLeafMovesCursorToParent(t *testing.T) {
 
 func TestFoldOnAlreadyFoldedGroupMovesCursorToParent(t *testing.T) {
 	app := demoApp(t)
-	app.layout = LayList
 	app.tab = TabTasks
 
 	app.expanded[courseKey(18515)] = false
@@ -390,7 +386,6 @@ func TestFoldOnAlreadyFoldedGroupMovesCursorToParent(t *testing.T) {
 
 func TestCursorAndMarksAreVisuallyDistinct(t *testing.T) {
 	app := demoApp(t)
-	app.layout = LayList
 	app.tab = TabTasks
 
 	nodes := app.taskNodes()
@@ -445,7 +440,6 @@ func TestMaterialRowsShowMarkState(t *testing.T) {
 
 func TestParentRowsShowCaretAndMark(t *testing.T) {
 	app := demoApp(t)
-	app.layout = LayList
 	app.tab = TabTasks
 
 	nodes := app.taskNodes()
@@ -533,7 +527,6 @@ func TestCourseCountsKeepTheCursorBand(t *testing.T) {
 	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
 
 	app := demoApp(t)
-	app.layout = LayList
 	app.tab = TabTasks
 	nodes := app.taskNodes()
 	course := findTaskNode(nodes, nodeCourse, "")
