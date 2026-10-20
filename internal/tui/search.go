@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -79,6 +80,21 @@ func (m *App) matchesMaterialSearch(material model.Material) bool {
 		material.CourseCode, course.Name, course.Code, course.Short)
 }
 
+// deleteLastSearchWord mirrors readline's ctrl+w: drop trailing whitespace and
+// the word before it, leaving the space that separated it from the previous
+// word. A query that is only whitespace becomes empty.
+func deleteLastSearchWord(query string) string {
+	runes := []rune(query)
+	i := len(runes)
+	for i > 0 && unicode.IsSpace(runes[i-1]) {
+		i--
+	}
+	for i > 0 && !unicode.IsSpace(runes[i-1]) {
+		i--
+	}
+	return string(runes[:i])
+}
+
 // handleSearchKey owns every key while the query is being typed: printable
 // runes append, arrows still move the result cursor, enter keeps the query and
 // esc throws it away.
@@ -98,6 +114,9 @@ func (m *App) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.search = string(runes[:len(runes)-1])
 			m.resetTreeCursor()
 		}
+	case "ctrl+w", "alt+backspace", "ctrl+backspace":
+		m.search = deleteLastSearchWord(m.search)
+		m.resetTreeCursor()
 	case "ctrl+u":
 		m.search = ""
 		m.resetTreeCursor()

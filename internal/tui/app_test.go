@@ -371,6 +371,26 @@ func TestSearchKeepsCompoundInputAndBackspace(t *testing.T) {
 	}
 }
 
+func TestSearchCtrlWDeletesWords(t *testing.T) {
+	app := demoApp(t)
+	app.tab = TabTasks
+	app.searching = true
+	app.search = "quiz basis data"
+
+	for i, want := range []string{"quiz basis ", "quiz ", ""} {
+		app.handleKey(tea.KeyMsg{Type: tea.KeyCtrlW})
+		if app.search != want {
+			t.Fatalf("ctrl+w #%d = %q, want %q", i+1, app.search, want)
+		}
+	}
+
+	app.search = "quiz basis"
+	app.handleKey(tea.KeyMsg{Type: tea.KeyBackspace, Alt: true})
+	if app.search != "quiz " {
+		t.Fatalf("alt+backspace = %q, want %q", app.search, "quiz ")
+	}
+}
+
 func TestSearchEnterKeepsQueryAndEscClearsItFirst(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabTasks
