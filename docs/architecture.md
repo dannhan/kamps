@@ -252,5 +252,4 @@ These are current limitations, not mysteries:
 - **Downloads do not transfer bytes.** `d` flips the flag and saves it.
 - **Sync is simulated.** `s` runs an animation and a toast; it does not reload the source.
 - **The commit writer does not exist.** The queue copies text to the clipboard.
-- **`nodeWeek` is unused scaffolding.** Materials are grouped by course and download state, not by week.
 - **`similarManualTask` is a demo stand-in** for a future working-directory cross-check.

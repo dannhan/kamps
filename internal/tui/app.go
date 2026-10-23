@@ -1,15 +1,3 @@
-// Package tui is the Bubble Tea application: a small, cheerful terminal UI
-// over a source.Source.
-//
-// Architecture (The Elm Architecture):
-//
-//	Init   -> kick off async work (load data, start animations)
-//	Update -> react to messages (keys, window resize, ticks, loaded data)
-//	View   -> render the model to a string
-//
-// The screen is deliberately NOT full-screen: it renders inline, capped at
-// maxBoxW x maxBoxH and shrinking to fit smaller terminals, so your shell
-// history stays visible above it.
 package tui
 
 import (
@@ -98,8 +86,8 @@ type App struct {
 	tabExpanded [tabCount]map[string]bool
 	returnTab   Tab
 
-	// expanded holds the fold state of the tree panes, keyed by courseKey /
-	// weekKey. A missing key means open — collapsing is the explicit act.
+	// expanded holds the fold state of the tree panes, keyed by stable tree
+	// keys. A missing key means open — collapsing is the explicit act.
 	expanded map[string]bool
 
 	selected  map[string]bool // assignment id -> checked

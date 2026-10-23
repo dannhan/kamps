@@ -95,7 +95,7 @@ Important details:
 | [`plain.go`](../internal/tui/plain.go) | You are changing the non-TTY snapshot |
 | [`views.go`](../internal/tui/views.go) | You need shared formatting helpers such as `taskLine`, `shortCode`, or `lastSyncLine` |
 
-`nodeWeek` still exists in `tree.go` but is not emitted by either tree builder. Treat it as dead scaffolding until a week-grouped Materials view is implemented.
+`nodeWeek` has been removed; neither tree builder emits week rows today.
 
 ---
 
@@ -103,7 +103,7 @@ Important details:
 
 Both tree tabs render a flat `[]node`. A node carries:
 
-- `kind` — `nodeTerm`, `nodeCourse`, `nodeBucket`, `nodeTask`, `nodeTaskMaterial`, `nodeMaterialBucket`, `nodeFile`, `nodeMaterialAssignment`, or the unused `nodeWeek`;
+- `kind` — `nodeTerm`, `nodeCourse`, `nodeBucket`, `nodeTask`, `nodeTaskMaterial`, `nodeMaterialBucket`, `nodeFile`, or `nodeMaterialAssignment`;
 - `key` — stable identity for folding;
 - `parents` — ancestor keys, also used to compute depth;
 - `courseID`, `term`, `bucket`;
@@ -292,7 +292,7 @@ Useful checks:
 | Commit writer | Not implemented; `y`/`enter` copies OSC 52 |
 | Commit queue persistence | Not implemented; session-only by design |
 | Attachment → assignment linking | Implemented for the `K…` / `M…:` ID convention |
-| Week-grouped materials | Not implemented; `nodeWeek` is unused |
+| Week-grouped materials | Not implemented; no week rows are emitted |
 | Working-directory cross-check | Demo stand-in (`similarManualTask`) |
 
 When documenting a change, keep this table honest. The fastest way for docs to rot is to describe planned behavior as shipped behavior.

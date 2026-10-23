@@ -47,7 +47,8 @@ The documentation is organized progressively from high-level architecture down t
 | [2. Execution Flow](execution-flow.md) | How code executes at runtime | Startup, TTY detection, async data loading, keyboard event cycle, state persistence, rendering sequence |
 | [3. TUI Fundamentals](tui-fundamentals.md) | How terminal UIs work in Go | The Elm Architecture (Bubble Tea Model-Update-View), Msgs, Cmds, Bubbles widgets, Lip Gloss styling, full-width row banding |
 | [4. Source Code Tour](code-tour.md) | Where to find things and how to change them | File directory, reading order, investigation recipes, testing guide, verified vs future behavior |
-| [5. Kulon2 / Moodle Recon](kulon2.md) | Platform notes for live LMS integration | Real LMS endpoints, session cookie auth, AJAX formats, verified scraping constraints |
+| [5. Learning Path](learning-path.md) | A guided route for a Go newcomer | 30/60/120-minute tours, Go concepts mapped to files, four small exercises |
+| [6. Kulon2 / Moodle Recon](kulon2.md) | Platform notes for live LMS integration | Real LMS endpoints, session cookie auth, AJAX formats, verified scraping constraints |
 
 Appendix: [TUI research](../TUI_RESEARCH.md) records the design comparison that informed the tree, row, and theme work. Some ideas there are proposals rather than current behavior; the code tour marks the boundary.
 

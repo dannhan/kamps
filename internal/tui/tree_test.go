@@ -11,22 +11,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
-	"github.com/ruyam/kamps/internal/config"
 	"github.com/ruyam/kamps/internal/model"
-	"github.com/ruyam/kamps/internal/source"
 )
-
-func demoApp(t *testing.T) *App {
-	t.Helper()
-	return newDemoApp(t, config.Config{StateDir: t.TempDir()})
-}
-
-func newDemoApp(t *testing.T, cfg config.Config) *App {
-	t.Helper()
-	app := New(source.NewDemo(), cfg, "test")
-	app.Update(app.Init()())
-	return app
-}
 
 func findTaskNode(nodes []node, kind nodeKind, value string) int {
 	for i, n := range nodes {

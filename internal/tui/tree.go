@@ -27,7 +27,6 @@ type nodeKind uint8
 const (
 	nodeCourse nodeKind = iota
 	nodeTask
-	nodeWeek
 	nodeFile
 	nodeTerm
 	nodeBucket
@@ -52,7 +51,7 @@ func (n node) depth() int {
 		return len(n.parents)
 	}
 	switch n.kind {
-	case nodeTask, nodeWeek, nodeMaterialBucket:
+	case nodeTask, nodeMaterialBucket:
 		return 1
 	case nodeFile:
 		return 2
@@ -61,8 +60,6 @@ func (n node) depth() int {
 }
 
 func courseKey(id int) string { return fmt.Sprintf("c:%d", id) }
-
-func weekKey(id int, section string) string { return fmt.Sprintf("w:%d:%s", id, section) }
 
 func bucketKey(id int, bucket string) string { return fmt.Sprintf("b:%d:%s", id, bucket) }
 
@@ -410,8 +407,6 @@ func (m *App) materialNodeFiles(n node) []model.Material {
 			}
 		}
 		return files
-	case nodeWeek:
-		return m.sectionFiles(n.courseID, n.mat.Section)
 	case nodeCourse:
 		return m.courseFiles(n.courseID)
 	}
@@ -447,16 +442,6 @@ func (m *App) courseFiles(courseID int) []model.Material {
 	out := []model.Material{}
 	for _, mt := range m.materials {
 		if mt.CourseID == courseID {
-			out = append(out, mt)
-		}
-	}
-	return out
-}
-
-func (m *App) sectionFiles(courseID int, section string) []model.Material {
-	out := []model.Material{}
-	for _, mt := range m.courseFiles(courseID) {
-		if mt.Section == section {
 			out = append(out, mt)
 		}
 	}
@@ -719,8 +704,6 @@ func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 			background(stRow).Render(" ") + h.markCell(selected) + background(stRow).Render(" ") + caret +
 			background(stRow).Render(ansi.Truncate(n.mat.Name, nameWidth, "…")) +
 			background(stateStyle).Render(" "+glyph)
-	case nodeWeek:
-		content = lead + background(stCode.Bold(true)).Render(sectionLabel(n.mat.Section))
 	case nodeMaterialAssignment:
 		content = background(triageStyle(n.task.Triage)).Render(flagChar(n.task.Triage)) + background(stFaint).Render(" ⁝ ") + background(stRow).Render("assignment: "+n.task.Name) + background(stRowDim).Render(" · "+n.task.ID)
 	}

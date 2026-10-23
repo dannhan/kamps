@@ -21,7 +21,9 @@ func (m *App) shortCode(courseID int) string {
 	return "—"
 }
 
-// similarManualTask is a demo stand-in for the future working/ cross-check.
+// similarManualTask is a demo-only stand-in for the future working/ cross-check.
+// It intentionally recognizes one hard-coded task title; replace it with real
+// data instead of growing this heuristic.
 func (m *App) similarManualTask(a model.Assignment) string {
 	if !strings.Contains(strings.ToLower(a.Name), "progress report 5") {
 		return ""
