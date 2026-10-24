@@ -272,8 +272,8 @@ Both tree tabs render a flat `[]node` list. [`node`](../internal/tui/tree.go) st
 
 These are current limitations, not mysteries:
 
-- **There is no `config.toml` loader yet.** [`config.Default`](../internal/config/config.go) only computes paths and defaults.
-- **The demo source ignores its context and never fails.** A live source must honor cancellation as well as return one coherent snapshot.
+- **Config supports only site URL and library directory.** Login/session verification is implemented, but no Kulon2 coursework fetcher consumes the session yet.
+- **The live source is not implemented.** Login verifies a manually supplied session cookie, but the UI still loads `source.Demo`; future HTTP loads must honor cancellation and return one coherent snapshot.
 - **The demo source seeds triage values.** They are useful for screenshots but are not user state; real sources should return `Undecided`.
 - **Downloads do not transfer bytes.** `d` flips the flag and saves it.
 - **Sync is simulated.** `s` runs an animation and a toast; it does not reload the source.

@@ -5,7 +5,8 @@
 *.out
 
 # local config & secrets (never commit)
-config.toml
+/config.toml
+/kamps.toml
 *.cookie
 cookie
 token*

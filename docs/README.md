@@ -33,7 +33,7 @@ LMS / lab drive data (read-only)
   Commit preview ──▶ OSC 52 clipboard
 ```
 
-The current build ships with an in-memory demo source. The Moodle source is planned but not implemented yet; see [Kulon2 / Moodle notes](kulon2.md).
+The UI still ships with an in-memory demo source. `kamps login` can now verify and securely save a Kulon2 session, but the Moodle data source and actual downloads are not implemented yet; see [Kulon2 / Moodle notes](kulon2.md).
 
 ---
 
@@ -73,13 +73,13 @@ Appendix: [TUI research](../TUI_RESEARCH.md) records the design comparison that 
 
 | Area | Implemented today | Notes |
 |---|---|---|
-| Data source | `source.Demo` only | Bundled data; no network calls |
+| Data source | `source.Demo` only | Login verifies a Kulon2 session; no coursework fetches yet |
 | Persistence | Decisions and download flags | Atomic `state.json`; corrupt file falls back to empty with a footer warning |
 | Tasks tree | Term → course → state bucket → task → attached material | Folding is per tab; assignments identify attachments by the `K…`/`M…:` convention |
 | Materials tree | Course → downloaded/new bucket → file → linked assignment | Attachments can link back to an assignment |
 | Search | Live, case-insensitive, composes with `f` | `ctrl+w`, `alt+backspace`, and `ctrl+backspace` delete a word |
 | Detail pane | Auto-opens at ≥ 100 columns; `enter` pins it | 62/38 split with a 24-column detail minimum |
-| Downloads | Marks material as downloaded and persists it | Does not fetch bytes yet |
+| Downloads | Marks material as downloaded and persists it | Does not fetch bytes yet; default future library is `~/Documents/kamps` |
 | Sync | Animated status and toast | Simulated; does not reload the source |
 | Commit | Preview + copy via OSC 52 (`y` or `enter`) | `x` drops a queue item; the stored decision remains |
 | Plain mode | Non-TTY snapshot | Applies saved state; source errors exit non-zero |

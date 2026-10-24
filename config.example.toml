@@ -1,0 +1,6 @@
+# Kulon2 URL. This is the default, shown here for clarity.
+site_url = "https://kulon2.undip.ac.id/"
+
+# Default: ~/Documents/kamps. Set this to ~/projects/university to use an
+# existing course workspace once workspace mapping is implemented.
+# library_dir = "~/Documents/kamps"

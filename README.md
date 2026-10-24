@@ -38,9 +38,30 @@ go build -o kamps ./cmd/kamps
 
 ```sh
 ./kamps              # launch the app
+./kamps login        # sign in through your browser, then paste MoodleSession
+./kamps logout       # remove the saved session
 ./kamps version      # print the version
 kamps | less         # no TTY? prints a plain-text snapshot instead
 ```
+
+Login requires `site_url` in `~/.config/kamps/config.toml` (or the XDG config
+path). The default is Kulon2. Kamps does not automate UNDIP SSO: sign in with
+your browser, copy the `MoodleSession` cookie value, and paste it at the hidden
+prompt. The verified session is stored privately at
+`$XDG_STATE_HOME/kamps/session.json` (normally `~/.local/state/kamps/session.json`);
+`logout` removes it.
+
+The default material library is `~/Documents/kamps`. You can override it:
+
+```toml
+# ~/.config/kamps/config.toml
+site_url = "https://kulon2.undip.ac.id/"
+library_dir = "~/projects/university"
+```
+
+The `~/projects/university` mapping is **not implemented yet**: current login
+only prepares the session for the live source; the UI and downloads still use
+demo behavior. No files are downloaded by this milestone.
 
 Handy keys:
 
@@ -86,10 +107,11 @@ anything else.
 
 ## Status & roadmap
 
-Early days: the UI is complete and runs against demo data. Next up, in order:
+Early days: the UI is complete and runs against demo data. The first auth/config milestone is in place; next up, in order:
 
-1. Real Moodle source: cookie auth, course list, HTML parsing. See `docs/kulon2.md`.
-2. A real commit writer behind the queue preview (today `y` copies the lines).
-3. Downloads with progress and a configurable library directory.
+1. Read-only Kulon2 source: course list and course-page HTML parsing. See `docs/kulon2.md`.
+2. Optional mapping to `course.json` in a user's workspace, without making that layout a requirement.
+3. Real downloads with progress and safe, no-delete behavior under the configured library directory.
+4. A real commit writer behind the queue preview (today `y` copies the lines).
 
 Later, not now: bulk actions and a plugin surface for new sources.

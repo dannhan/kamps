@@ -25,9 +25,11 @@ verified by hand against the live site (first recon 2026-10-17) unless it says
   (`"sesskey":"..."`) which later AJAX calls need.
 
 `kamps` must never automate the SSO login. The user logs in with a browser and
-pastes only the cookie value. The tool stores that cookie with `0600` in its
-own state directory and reports expiry crisply (a login form in a response, or
-a missing user id, means "session expired — log in again").
+pastes only the cookie value. `kamps login` verifies the cookie against `/my/`
+and stores it with `0600` in its own state directory; `kamps logout` removes
+it. Session expiry is reported crisply (a login redirect or missing authenticated
+page data means "session expired — log in again"). The live coursework source
+is not implemented yet.
 
 ## Data routes that work with a session cookie
 
@@ -74,7 +76,7 @@ IMK is not on Kulon2 at all (it lives on WhatsApp), so it has no LMS course.
 
 ## Implications for the client
 
-- **Auth:** cookie only; detect expiry and say so plainly.
+- **Auth:** cookie only; `kamps login` and `kamps logout` are implemented. Coursework fetching and expiry checks during normal source loads remain future work.
 - **Due dates:** parse `/course/view.php?id=<id>`; a reliable due date may need a
   follow-up fetch of `/mod/assign/view.php?id=<cmid>` (**unverified** — confirm
   the date is rendered there).

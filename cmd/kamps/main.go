@@ -2,9 +2,8 @@
 // courses, assignments and materials pulled from an LMS (Moodle/Kulon2) plus
 // lab drives, synced and stored locally.
 //
-// This build ships with a demo source so the UI can be used before any
-// networking exists. The real Moodle source implements the same interface and
-// slots in without touching the UI.
+// The UI can run against bundled demo data. `kamps login` stores a verified
+// Kulon2 session for the next source integration step.
 package main
 
 import (
@@ -46,8 +45,30 @@ func main() {
 		}
 	}
 
-	cfg := config.Default()
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "kamps:", err)
+		os.Exit(1)
+	}
 	cfg.NoAnim = noAnim
+
+	if len(rest) > 0 {
+		switch rest[0] {
+		case "login":
+			if err := login(cfg); err != nil {
+				fmt.Fprintln(os.Stderr, "kamps:", err)
+				os.Exit(1)
+			}
+			return
+		case "logout":
+			if err := logout(cfg); err != nil {
+				fmt.Fprintln(os.Stderr, "kamps:", err)
+				os.Exit(1)
+			}
+			return
+		}
+	}
+
 	src := source.NewDemo()
 
 	// Non-interactive fallback: piping `kamps | less` should still work.
@@ -80,11 +101,18 @@ func printHelp() {
 
 USAGE
   kamps            launch the interactive UI
+  kamps login      verify and save a Moodle session cookie
+  kamps logout     remove the saved session
   kamps version    print the version
   kamps help       print this help
 
 FLAGS
   --no-anim        no spinner or progress motion
+
+CONFIG
+  ~/.config/kamps/config.toml
+    site_url = "https://kulon2.undip.ac.id/"
+    library_dir = "~/Documents/kamps"
 
 SCREENS
   1 Tasks       2 Materials       3 Sync       4 Commit
@@ -103,6 +131,6 @@ KEYS
   f          filter          ?       help
   q          quit
 
-Demo data is bundled for now; the Moodle source is next.
+Demo data is bundled for now; login is prepared, but Moodle coursework loading is not implemented.
 `)
 }
