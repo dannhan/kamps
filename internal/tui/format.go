@@ -2,11 +2,76 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/ruyam/kamps/internal/model"
 )
+
+func humanSize(n int64) string {
+	if n <= 0 {
+		return "—"
+	}
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	units := []string{"KB", "MB", "GB"}
+	f := float64(n)
+	i := -1
+	for f >= unit && i < len(units)-1 {
+		f /= unit
+		i++
+	}
+	return fmt.Sprintf("%.1f %s", f, units[i])
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
+}
+
+func lessAssignment(a, b model.Assignment) bool {
+	if a.HasDue != b.HasDue {
+		return a.HasDue // dated items first
+	}
+	if a.HasDue && !a.Due.Equal(b.Due) {
+		return a.Due.Before(b.Due)
+	}
+	return a.ID < b.ID
+}
+
+func sortSlice(s []model.Assignment) {
+	sort.Slice(s, func(i, j int) bool { return lessAssignment(s[i], s[j]) })
+}
+
+func flagChar(t model.Triage) string {
+	switch t {
+	case model.Tracked:
+		return "◐"
+	case model.Missed:
+		return "×"
+	case model.Ignored:
+		return "◆"
+	}
+	return "○"
+}
+
+func triageStyle(t model.Triage) lipgloss.Style {
+	switch t {
+	case model.Tracked:
+		return stFlagT
+	case model.Missed:
+		return stFlagM
+	case model.Ignored:
+		return stFlagI
+	}
+	return stFlagNew
+}
 
 // shortCode maps a course id to its short label ("ppl", "metnum", …).
 func (m *App) shortCode(courseID int) string {
@@ -53,40 +118,4 @@ func (m *App) lastSyncLine() string {
 	}
 	stamp := time.Now().Add(-20 * time.Hour).Format("2006-01-02 15:04")
 	return fmt.Sprintf("%s · %s (+%d materials)", stamp, name, fresh)
-}
-
-// wrapCell soft-wraps plain text to width, on spaces where possible.
-func wrapCell(s string, w int) []string {
-	if w < 8 {
-		w = 8
-	}
-	var out []string
-	for len(s) > w {
-		cut := w
-		for cut > 0 && s[cut] != ' ' {
-			cut--
-		}
-		if cut <= 0 {
-			cut = w
-		}
-		out = append(out, s[:cut])
-		s = strings.TrimLeft(s[cut:], " ")
-	}
-	return append(out, s)
-}
-
-func stripANSI(s string) string {
-	var b strings.Builder
-	inEsc := false
-	for _, r := range s {
-		switch {
-		case r == 0x1b:
-			inEsc = true
-		case inEsc && r == 'm':
-			inEsc = false
-		case !inEsc:
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
 }

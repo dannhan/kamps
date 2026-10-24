@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/charmbracelet/bubbles/key"
+import (
+	"github.com/charmbracelet/bubbles/key"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/ruyam/kamps/internal/model"
+)
 
 // KeyMap is the single source of truth for keybindings. The footer hints are
 // built by hand (see hints in frame.go); this drives the "?" overlay.
@@ -72,4 +76,88 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 		{k.Search, k.Filter, k.Commit, k.Copy, k.Drop, k.Sync, k.Download},
 		{k.Back, k.Help, k.Quit},
 	}
+}
+
+func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.helpOn {
+		switch msg.String() {
+		case "?", "esc", "q":
+			m.helpOn = false
+			return m, nil
+		case "ctrl+c":
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
+	if m.searching {
+		return m.handleSearchKey(msg)
+	}
+
+	switch msg.String() {
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	case "?":
+		m.helpOn = true
+	case "tab":
+		m.switchTab((m.tab + 1) % tabCount)
+	case "shift+tab":
+		m.switchTab((m.tab + tabCount - 1) % tabCount)
+	case "1", "2", "3", "4":
+		m.switchTab(Tab(msg.String()[0] - '1'))
+	case "up", "k":
+		m.move(-1)
+	case "down", "j":
+		m.move(1)
+	case "left", "h":
+		m.moveX(-1)
+	case "right", "l":
+		m.moveX(1)
+	case " ":
+		m.toggleSelect()
+	case "a":
+		m.selectAll()
+	case "t":
+		m.applyTriage(model.Tracked)
+	case "m":
+		m.applyTriage(model.Missed)
+	case "i":
+		m.applyTriage(model.Ignored)
+	case "u":
+		m.applyTriage(model.Undecided)
+	case "c":
+		m.openCommit()
+	case "esc":
+		if m.tab == TabCommit {
+			m.closeCommit()
+		} else if !m.clearSearch() && !m.clearFilter() {
+			m.back()
+		}
+	case "enter":
+		if m.tab == TabCommit {
+			return m, m.copyCommitPreview()
+		}
+		m.enter()
+	case "f":
+		m.cycleFilter()
+	case "/":
+		if m.tab == TabTasks || m.tab == TabMaterials {
+			m.searching = true
+			m.search = ""
+			m.resetTreeCursor()
+		}
+	case "s":
+		return m, m.startSync()
+	case "d":
+		m.download()
+	case "y":
+		if m.tab == TabCommit {
+			return m, m.copyCommitPreview()
+		}
+	case "x":
+		if m.tab == TabCommit {
+			m.dropCommitItem()
+		}
+	}
+	return m, nil
 }

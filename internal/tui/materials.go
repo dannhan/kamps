@@ -1,0 +1,214 @@
+package tui
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/ruyam/kamps/internal/model"
+)
+
+// visibleMaterials returns the Materials-tab files after the active filter and
+// search. The tree, counters and cursor all read this one list.
+func (m *App) visibleMaterials() []model.Material {
+	out := make([]model.Material, 0, len(m.materials))
+	for _, material := range m.materials {
+		if !m.matchesMaterialFilter(material) || !m.matchesMaterialSearch(material) {
+			continue
+		}
+		out = append(out, material)
+	}
+	return out
+}
+
+func (m *App) matchesMaterialFilter(material model.Material) bool {
+	switch m.filter {
+	case "new":
+		return !material.Downloaded
+	case "downloaded":
+		return material.Downloaded
+	case "link":
+		return material.Kind == "url"
+	}
+	return true
+}
+
+// matNodes is the Materials pane: course ▸ state bucket ▸ file. Weeks keep the
+// source's own label; an empty section shows as "general".
+func (m *App) matNodes() []node {
+	byCourse := map[int][]model.Material{}
+	for _, material := range m.visibleMaterials() {
+		byCourse[material.CourseID] = append(byCourse[material.CourseID], material)
+	}
+	courseIDs := make([]int, 0, len(byCourse))
+	for id := range byCourse {
+		courseIDs = append(courseIDs, id)
+	}
+	sort.Ints(courseIDs)
+	out := []node{}
+	for _, courseID := range courseIDs {
+		course := node{kind: nodeCourse, courseID: courseID, key: courseKey(courseID)}
+		out = append(out, course)
+		if !m.isOpen(course.key) {
+			continue
+		}
+		buckets := []struct {
+			label string
+			keep  func(model.Material) bool
+		}{{"downloaded", func(mt model.Material) bool { return mt.Downloaded }}, {"new", func(mt model.Material) bool { return !mt.Downloaded }}}
+		for _, bucket := range buckets {
+			var files []model.Material
+			for _, material := range byCourse[courseID] {
+				if bucket.keep(material) {
+					files = append(files, material)
+				}
+			}
+			if len(files) == 0 {
+				continue
+			}
+			key := materialBucketKey(courseID, bucket.label)
+			parents := []string{course.key}
+			out = append(out, node{kind: nodeMaterialBucket, courseID: courseID, bucket: bucket.label, key: key, parents: parents})
+			if !m.isOpen(key) {
+				continue
+			}
+			sort.Slice(files, func(i, j int) bool { return files[i].Name < files[j].Name })
+			for _, file := range files {
+				fileNode := node{kind: nodeFile, courseID: courseID, mat: file, key: materialKey(file.ID), parents: []string{course.key, key}}
+				out = append(out, fileNode)
+				if assignment := m.assignmentForMaterial(file); assignment != nil && m.isOpen(fileNode.key) {
+					out = append(out, node{kind: nodeMaterialAssignment, courseID: courseID, task: *assignment, key: "ma:" + assignment.ID + ":" + file.ID, parents: []string{course.key, key, fileNode.key}})
+				}
+			}
+		}
+	}
+	return out
+}
+
+func materialBucketKey(courseID int, bucket string) string {
+	return fmt.Sprintf("mb:%d:%s", courseID, bucket)
+}
+
+// materialNodeFiles lists the materials a row stands for: the file itself,
+// every file in a state bucket, every file in a week, or every file in a
+// course.
+func (m *App) materialNodeFiles(n node) []model.Material {
+	switch n.kind {
+	case nodeFile:
+		return []model.Material{n.mat}
+	case nodeMaterialBucket:
+		files := []model.Material{}
+		for _, material := range m.courseFiles(n.courseID) {
+			if n.bucket == "downloaded" && material.Downloaded || n.bucket == "new" && !material.Downloaded {
+				files = append(files, material)
+			}
+		}
+		return files
+	case nodeCourse:
+		return m.courseFiles(n.courseID)
+	}
+	return nil
+}
+
+// materialNodeIDs lists the material IDs a row stands for: the file itself,
+// every file in a state bucket, or every file in a course/week.
+func (m *App) materialNodeIDs(n node) []string {
+	return idsOf(m.materialNodeFiles(n))
+}
+
+// materialNodeSelected reports whether every material behind a row is marked,
+// so group rows show the same mark state as their file rows.
+func (m *App) materialNodeSelected(n node) bool {
+	if n.kind == nodeFile {
+		return m.selectedM[n.mat.ID]
+	}
+	return allSelected(m.selectedM, m.materialNodeIDs(n))
+}
+
+func materialKey(id string) string { return "material:" + id }
+
+func (m *App) assignmentForMaterial(material model.Material) *model.Assignment {
+	if material.Kind != "attachment" || !strings.HasPrefix(material.ID, "M") {
+		return nil
+	}
+	id := strings.TrimPrefix(strings.SplitN(material.ID, ":", 2)[0], "M")
+	return m.byID("K" + id)
+}
+
+func (m *App) courseFiles(courseID int) []model.Material {
+	out := []model.Material{}
+	for _, mt := range m.materials {
+		if mt.CourseID == courseID {
+			out = append(out, mt)
+		}
+	}
+	return out
+}
+
+func (m *App) download() {
+	if m.tab != TabMaterials {
+		m.toast = "switch to Materials to download"
+		m.toastTicks = 20
+		return
+	}
+	// The selection first; with nothing selected, the cursor does the work —
+	// on a course or week row, d fetches everything underneath it.
+	var targets []string
+	for _, mt := range m.materials {
+		if m.selectedM[mt.ID] {
+			targets = append(targets, mt.ID)
+		}
+	}
+	if len(targets) == 0 {
+		nodes := m.matNodes()
+		if m.matCursor >= 0 && m.matCursor < len(nodes) {
+			var files []model.Material
+			n := nodes[m.matCursor]
+			switch n.kind {
+			case nodeFile:
+				files = []model.Material{n.mat}
+			case nodeMaterialBucket:
+				for _, material := range m.courseFiles(n.courseID) {
+					if n.bucket == "downloaded" && material.Downloaded || n.bucket == "new" && !material.Downloaded {
+						files = append(files, material)
+					}
+				}
+			case nodeCourse:
+				files = m.courseFiles(n.courseID)
+			}
+			for _, f := range files {
+				if !f.Downloaded {
+					targets = append(targets, f.ID)
+				}
+			}
+		}
+	}
+	if len(targets) == 0 {
+		m.toast = "nothing new to download"
+		m.toastTicks = 20
+		return
+	}
+	for i := range m.materials {
+		for _, id := range targets {
+			if m.materials[i].ID == id && !m.materials[i].Downloaded {
+				m.materials[i].Downloaded = true
+				m.state.SetDownloaded(m.materials[i].ID, true)
+				break
+			}
+		}
+	}
+	m.selectedM = map[string]bool{}
+	m.toast = fmt.Sprintf("downloaded %d %s", len(targets), plural(len(targets), "file", "files"))
+	m.toastTicks = 24
+	m.saveState()
+}
+
+func (m *App) downloadedMaterials() int {
+	n := 0
+	for _, material := range m.materials {
+		if material.Downloaded {
+			n++
+		}
+	}
+	return n
+}

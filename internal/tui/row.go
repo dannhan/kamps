@@ -85,3 +85,13 @@ func (h rowHighlight) markCell(marked bool) string {
 	}
 	return h.style(stFaint).Render(markEmpty)
 }
+
+func sharedFocusRow(content string, width int, focused bool) string {
+	content = ansiTruncate(content, maxInt(0, width))
+	padding := strings.Repeat(" ", maxInt(0, width-lipgloss.Width(content)))
+	if focused {
+		content = lipgloss.NewStyle().Background(themeTokens.Surface).Render(content)
+		padding = stRow.Background(themeTokens.Surface).Render(padding)
+	}
+	return content + padding
+}

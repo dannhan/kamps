@@ -18,3 +18,41 @@ func newDemoApp(t *testing.T, cfg config.Config) *App {
 	app.Update(app.Init()())
 	return app
 }
+
+func findTaskNode(nodes []node, kind nodeKind, value string) int {
+	for i, n := range nodes {
+		if n.kind != kind {
+			continue
+		}
+		switch kind {
+		case nodeTerm:
+			if n.term == value {
+				return i
+			}
+		case nodeCourse:
+			if n.courseID == 18515 {
+				return i
+			}
+		case nodeBucket:
+			if n.bucket == value && n.courseID == 18515 {
+				return i
+			}
+		case nodeTask:
+			if n.task.ID == value {
+				return i
+			}
+		case nodeTaskMaterial:
+			if n.mat.ID == value {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+func taskTreeRowForTest(t *testing.T) string {
+	t.Helper()
+	app := demoApp(t)
+	app.taskCursor = findTaskNode(app.taskNodes(), nodeTask, "K901013")
+	return app.taskTreeRow(app.taskNodes(), app.taskCursor, 98)
+}
