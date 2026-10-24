@@ -17,12 +17,15 @@ import (
 
 // PrintPlain writes a plain-text snapshot of the source. It is used when
 // stdout is not a terminal (pipes, files, CI) so `kamps` is still useful in
-// scripts. No ANSI, no animation.
-func PrintPlain(w io.Writer, src source.Source, cfg config.Config) {
+// scripts. No ANSI, no animation. A source-load error is returned before any
+// output is written.
+func PrintPlain(w io.Writer, src source.Source, cfg config.Config) error {
 	ctx := context.Background()
-	courses, _ := src.Courses(ctx)
-	assignments, _ := src.Assignments(ctx)
-	materials, _ := src.Materials(ctx)
+	snapshot, err := src.Load(ctx)
+	if err != nil {
+		return fmt.Errorf("load %s: %w", src.Label(), err)
+	}
+	courses, assignments, materials := snapshot.Courses, snapshot.Assignments, snapshot.Materials
 	if path := cfg.StatePath(); path != "" {
 		if state, err := store.Load(path); err == nil {
 			state.Apply(assignments, materials)
@@ -58,6 +61,7 @@ func PrintPlain(w io.Writer, src source.Source, cfg config.Config) {
 		}
 		fmt.Fprintf(w, "  %-8s %-6s %-40s %s\n", sectionOr(mt.Section), state, mt.Name, format.HumanSize(mt.Size))
 	}
+	return nil
 }
 
 func shortOf(courses []model.Course, id int) string {

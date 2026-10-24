@@ -136,16 +136,14 @@ func NewDemo() *Demo {
 
 func (d *Demo) Label() string { return "demo (no network)" }
 
-func (d *Demo) Courses(ctx context.Context) ([]model.Course, error) {
-	return append([]model.Course(nil), d.courses...), nil
-}
-
-func (d *Demo) Assignments(ctx context.Context) ([]model.Assignment, error) {
-	return append([]model.Assignment(nil), d.assignments...), nil
-}
-
-func (d *Demo) Materials(ctx context.Context) ([]model.Material, error) {
-	return append([]model.Material(nil), d.materials...), nil
+// Load returns a copy of the demo dataset so callers can sort and mutate it
+// without touching the source.
+func (d *Demo) Load(ctx context.Context) (Snapshot, error) {
+	return Snapshot{
+		Courses:     append([]model.Course(nil), d.courses...),
+		Assignments: append([]model.Assignment(nil), d.assignments...),
+		Materials:   append([]model.Material(nil), d.materials...),
+	}, nil
 }
 
 var _ Source = (*Demo)(nil)

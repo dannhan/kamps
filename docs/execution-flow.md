@@ -66,12 +66,10 @@ This guide traces the runtime execution of Kamps from binary invocation to shutd
 
 - Bubble Tea calls [`App.Init()`](../internal/tui/app.go), which returns [`loadCmd(m.src)`](../internal/tui/app.go).
 - Bubble Tea runs this command in a goroutine, so the UI remains responsive.
-- Inside `loadCmd`, the three source methods run **sequentially**:
-  1. `src.Courses(ctx)`
-  2. `src.Assignments(ctx)`
-  3. `src.Materials(ctx)`
-- The first error aborts the remaining calls and returns [`errMsg`](../internal/tui/app.go).
-- On success, it returns [`loadedMsg`](../internal/tui/app.go) with all three slices.
+- Inside `loadCmd`, one source call returns the whole snapshot:
+  1. `src.Load(ctx)` returns a [`source.Snapshot`](../internal/source/source.go) with courses, assignments, and materials.
+- Any error returns [`errMsg`](../internal/tui/app.go).
+- On success, it returns [`loadedMsg`](../internal/tui/app.go) with the snapshot.
 
 While loading, `View` renders `loading…`. If loading fails, the body shows `error · …`.
 
@@ -287,7 +285,7 @@ sequenceDiagram
 
 When stdout is not a terminal, [`PrintPlain`](../internal/plain/plain.go) bypasses Bubble Tea entirely:
 
-1. Calls `src.Courses`, `src.Assignments`, and `src.Materials` sequentially.
+1. Calls `src.Load(ctx)` once and returns immediately on a source error.
 2. If `cfg.StatePath()` is set, loads state and applies decisions/downloads.
 3. Sorts assignments by due date, then ID.
 4. Prints:
@@ -295,4 +293,4 @@ When stdout is not a terminal, [`PrintPlain`](../internal/plain/plain.go) bypass
    - assignment rows with flag, due date, course, state, and name;
    - material rows with section, local/new state, name, and size.
 
-It emits no ANSI and no animation. Current caveats: source errors are ignored and a corrupt state file is silently skipped.
+It emits no ANSI and no animation. Source errors are returned to the CLI, which prints them to stderr and exits non-zero; a corrupt state file is still skipped.

@@ -103,19 +103,16 @@ A command is a function with the signature `type Cmd func() Msg`.
    ```go
    func loadCmd(src source.Source) tea.Cmd {
        return func() tea.Msg {
-           ctx := context.Background()
-           cs, err := src.Courses(ctx)
-           if err != nil { return errMsg{err} }
-           as, err := src.Assignments(ctx)
-           if err != nil { return errMsg{err} }
-           ms, err := src.Materials(ctx)
-           if err != nil { return errMsg{err} }
-           return loadedMsg{cs, as, ms}
+           snapshot, err := src.Load(context.Background())
+           if err != nil {
+               return errMsg{err}
+           }
+           return loadedMsg{snapshot}
        }
    }
    ```
 
-   The command is asynchronous from Bubble Tea's point of view, but the three source calls are **sequential** inside it. A network source should keep that in mind.
+   The command is asynchronous from Bubble Tea's point of view, but `Load` runs synchronously inside it. A network source should honor the context and do its fetching there.
 
 2. **OSC 52 terminal clipboard:** [`clipboardCmd()`](../internal/tui/commit.go) copies Markdown task lines through standard ANSI OSC 52 escape sequences:
 

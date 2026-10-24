@@ -52,7 +52,10 @@ func main() {
 
 	// Non-interactive fallback: piping `kamps | less` should still work.
 	if !isTTY(os.Stdout) {
-		plain.PrintPlain(os.Stdout, src, cfg)
+		if err := plain.PrintPlain(os.Stdout, src, cfg); err != nil {
+			fmt.Fprintln(os.Stderr, "kamps:", err)
+			os.Exit(1)
+		}
 		return
 	}
 

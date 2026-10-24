@@ -3,6 +3,7 @@ package plain
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -16,8 +17,11 @@ func TestPrintPlainAppliesSavedState(t *testing.T) {
 	cfg := config.Config{StateDir: t.TempDir()}
 	src := source.NewDemo()
 	ctx := context.Background()
-	assignments, _ := src.Assignments(ctx)
-	materials, _ := src.Materials(ctx)
+	snapshot, err := src.Load(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assignments, materials := snapshot.Assignments, snapshot.Materials
 
 	assignment := assignments[0]
 	materialID := ""
@@ -41,7 +45,9 @@ func TestPrintPlainAppliesSavedState(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	PrintPlain(&buf, src, cfg)
+	if err := PrintPlain(&buf, src, cfg); err != nil {
+		t.Fatal(err)
+	}
 	out := buf.String()
 
 	if line := lineContaining(out, assignment.Name); !strings.Contains(line, "tracked") {
@@ -59,4 +65,26 @@ func lineContaining(text, needle string) string {
 		}
 	}
 	return ""
+}
+
+type failingSource struct{}
+
+func (failingSource) Label() string { return "failing" }
+
+func (failingSource) Load(context.Context) (source.Snapshot, error) {
+	return source.Snapshot{}, errors.New("network down")
+}
+
+func TestPrintPlainReturnsSourceError(t *testing.T) {
+	var buf bytes.Buffer
+	err := PrintPlain(&buf, failingSource{}, config.Config{})
+	if err == nil {
+		t.Fatal("expected a source error")
+	}
+	if !strings.Contains(err.Error(), "network down") {
+		t.Fatalf("error lost the source cause: %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("printed a partial snapshot after a load failure: %q", buf.String())
+	}
 }

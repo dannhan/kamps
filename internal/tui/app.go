@@ -144,30 +144,17 @@ func New(src source.Source, cfg config.Config, version string) *App {
 	}
 }
 
-type loadedMsg struct {
-	courses     []model.Course
-	assignments []model.Assignment
-	materials   []model.Material
-}
+type loadedMsg struct{ source.Snapshot }
 
 type errMsg struct{ err error }
 
 func loadCmd(src source.Source) tea.Cmd {
 	return func() tea.Msg {
-		ctx := context.Background()
-		cs, err := src.Courses(ctx)
+		snapshot, err := src.Load(context.Background())
 		if err != nil {
 			return errMsg{err}
 		}
-		as, err := src.Assignments(ctx)
-		if err != nil {
-			return errMsg{err}
-		}
-		ms, err := src.Materials(ctx)
-		if err != nil {
-			return errMsg{err}
-		}
-		return loadedMsg{cs, as, ms}
+		return loadedMsg{snapshot}
 	}
 }
 
@@ -183,9 +170,9 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case loadedMsg:
 		m.loaded = true
 		m.loadError = ""
-		m.courses = msg.courses
-		m.assignments = msg.assignments
-		m.materials = msg.materials
+		m.courses = msg.Courses
+		m.assignments = msg.Assignments
+		m.materials = msg.Materials
 		sort.Slice(m.courses, func(i, j int) bool { return m.courses[i].Name < m.courses[j].Name })
 		sort.Slice(m.materials, func(i, j int) bool {
 			a, b := m.materials[i], m.materials[j]

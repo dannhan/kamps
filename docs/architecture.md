@@ -106,7 +106,7 @@ There is no HTTP server, database, or daemon. Kamps is a single local binary.
 | `main` | [`cmd/kamps`](../cmd/kamps/main.go) | CLI entry point, flag parsing (`--no-anim`, `version`, `help`), TTY detection, runtime mode selection. | [`main()`](../cmd/kamps/main.go), [`isTTY()`](../cmd/kamps/main.go), [`printHelp()`](../cmd/kamps/main.go) |
 | `config` | [`internal/config`](../internal/config/config.go) | Resolve XDG state/config directories, define defaults, return the state file path. There is no config-file loader yet. | [`Config`](../internal/config/config.go), [`Default()`](../internal/config/config.go), [`Config.StatePath()`](../internal/config/config.go) |
 | `model` | [`internal/model`](../internal/model/model.go) | Pure domain types. Defines courses, assignments, materials, and the triage enum. | [`Course`](../internal/model/model.go), [`Assignment`](../internal/model/model.go), [`Material`](../internal/model/model.go), [`Triage`](../internal/model/model.go) |
-| `source` | [`internal/source`](../internal/source/source.go) | Abstract data-provider interface (`Source`) and the bundled demo implementation (`Demo`). | [`Source`](../internal/source/source.go), [`Demo`](../internal/source/demo.go), [`NewDemo()`](../internal/source/demo.go) |
+| `source` | [`internal/source`](../internal/source/source.go) | Abstract snapshot provider (`Source`) and the bundled demo implementation (`Demo`). | [`Source`](../internal/source/source.go), [`Snapshot`](../internal/source/source.go), [`Demo`](../internal/source/demo.go), [`NewDemo()`](../internal/source/demo.go) |
 | `store` | [`internal/store`](../internal/store/store.go) | Atomically persist triage decisions and download flags to JSON; load and apply them over fresh source data. | [`State`](../internal/store/store.go), [`Load()`](../internal/store/store.go), [`State.Save()`](../internal/store/store.go), [`State.Apply()`](../internal/store/store.go) |
 | `format` | [`internal/format`](../internal/format/format.go) | Shared display formatting and assignment ordering for both UI modes. | [`HumanSize()`](../internal/format/format.go), [`LessAssignment()`](../internal/format/format.go), [`SortAssignments()`](../internal/format/format.go) |
 | `plain` | [`internal/plain`](../internal/plain/plain.go) | Non-interactive snapshot for pipes, files, and CI. Shares source/store with the TUI but has no Bubble Tea dependency. | [`PrintPlain()`](../internal/plain/plain.go) |
@@ -193,7 +193,7 @@ From [`go.mod`](../go.mod) and direct code imports:
        TUI trees, detail pane, commit preview
 ```
 
-1. **Source data is read-only in practice:** [`source.Source`](../internal/source/source.go) exposes `Label`, `Courses`, `Assignments`, and `Materials`. `Demo` returns copies of its slices, so UI mutations cannot corrupt the dataset.
+1. **Source data is read-only in practice:** [`source.Source`](../internal/source/source.go) exposes `Label` and `Load`. `Load` returns one [`source.Snapshot`](../internal/source/source.go) with courses, assignments, and materials, and the demo returns copies of its slices so UI mutations cannot corrupt the dataset.
 2. **Saved state is an overlay:** when a decision exists in the store, [`store.State.Apply`](../internal/store/store.go) writes it over the source value. If there is no stored entry, the source's `Triage` value remains. Real sources should therefore return `Undecided`; the demo deliberately seeds a few states to make its screens realistic.
 3. **Undecided deletes the entry:** storing `Undecided` removes the decision instead of writing noise.
 4. **Atomic writes:** decisions are saved immediately through a temporary file in the same directory, `Sync()`, `chmod 0600`, and an atomic rename.
@@ -210,12 +210,12 @@ From [`go.mod`](../go.mod) and direct code imports:
 
 [`plain.PrintPlain`](../internal/plain/plain.go) uses the same source and store, but no Bubble Tea loop:
 
-1. Call `Courses`, `Assignments`, and `Materials` synchronously.
+1. Call `Load` synchronously and return immediately on a source error.
 2. Load and apply saved state when a state path is configured.
 3. Sort assignments by due date (dated first, oldest first, then ID).
 4. Print a plain-text snapshot.
 
-Plain mode is deliberately best-effort: source errors are currently ignored, and a corrupt state file is silently skipped.
+Source errors are returned to the caller, so the CLI can print them to stderr and exit non-zero. A corrupt state file is still skipped, matching the TUI's best-effort behavior.
 
 ---
 
@@ -272,8 +272,8 @@ Both tree tabs render a flat `[]node` list. [`node`](../internal/tui/tree.go) st
 
 These are current limitations, not mysteries:
 
-- **The source interface has three data methods.** A network source would have to fetch the same course pages three times unless it caches internally. A future refactor may replace this with one snapshot call.
 - **There is no `config.toml` loader yet.** [`config.Default`](../internal/config/config.go) only computes paths and defaults.
+- **The demo source ignores its context and never fails.** A live source must honor cancellation as well as return one coherent snapshot.
 - **The demo source seeds triage values.** They are useful for screenshots but are not user state; real sources should return `Undecided`.
 - **Downloads do not transfer bytes.** `d` flips the flag and saves it.
 - **Sync is simulated.** `s` runs an animation and a toast; it does not reload the source.

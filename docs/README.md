@@ -57,7 +57,7 @@ Appendix: [TUI research](../TUI_RESEARCH.md) records the design comparison that 
 ## Core Mental Model & Terminology
 
 - **Triage decision:** The user's local verdict on an assignment ([`model.Triage`](../internal/model/model.go)). Not fetched from the LMS. Options are `Undecided` (default), `Tracked` (handled or submitted), `Missed` (deadline passed), and `Ignored` (optional or outdated materials). The demo dataset seeds some of these values so the UI has realistic counts; saved local state wins when it has an entry for that assignment.
-- **The source:** The read-only data provider ([`source.Source`](../internal/source/source.go)). Today it is satisfied by the in-memory [`source.Demo`](../internal/source/demo.go). A future Moodle client will implement the same `Label`, `Courses`, `Assignments`, and `Materials` methods.
+- **The source:** The read-only data provider ([`source.Source`](../internal/source/source.go)). Today it is satisfied by the in-memory [`source.Demo`](../internal/source/demo.go). A future Moodle client will implement the same `Label` and `Load` methods.
 - **The store:** Atomically persisted user state ([`store.State`](../internal/store/store.go)) saved to `$XDG_STATE_HOME/kamps/state.json` (`~/.local/state/kamps/state.json` when the variable is unset). It holds assignment triage decisions and downloaded-material flags. Missing entries mean `undecided` and `not downloaded`.
 - **The commit queue:** The list of decisions changed during this process, held only in `App.pending`. Decisions are saved to disk immediately; the queue is the export step. Restarting Kamps does not restore the queue.
 - **The Elm Architecture (TEA):** The design pattern powering Bubble Tea:
@@ -82,7 +82,7 @@ Appendix: [TUI research](../TUI_RESEARCH.md) records the design comparison that 
 | Downloads | Marks material as downloaded and persists it | Does not fetch bytes yet |
 | Sync | Animated status and toast | Simulated; does not reload the source |
 | Commit | Preview + copy via OSC 52 (`y` or `enter`) | `x` drops a queue item; the stored decision remains |
-| Plain mode | Non-TTY snapshot | Applies saved state; source errors are ignored |
+| Plain mode | Non-TTY snapshot | Applies saved state; source errors exit non-zero |
 
 ---
 

@@ -58,9 +58,9 @@ A non-empty `gofmt -l .` output means a file needs formatting. The repository's 
 
 ```
 source.Source
-    │  Courses / Assignments / Materials
+    │  Load(ctx) -> source.Snapshot
     ▼
-loadCmd (tea.Cmd, sequential calls)
+loadCmd (tea.Cmd, one call)
     │  loadedMsg or errMsg
     ▼
 App.Update
@@ -74,11 +74,11 @@ View (trees, detail, commit, footer)
 
 Important details:
 
-- `loadCmd` is asynchronous from Bubble Tea's perspective but calls the three source methods sequentially. The first error aborts the rest.
+- `loadCmd` is asynchronous from Bubble Tea's perspective but makes one `Load` call. The snapshot contains courses, assignments, and materials; any error aborts the load.
 - Courses are sorted by name; materials by course code, section, then name. Assignments are sorted only when the visible Tasks list is built: dated items first, oldest first, then by ID.
 - `store.State.Apply` overlays saved decisions and download flags. Saved decisions win where they exist; otherwise the source's `Triage` value remains.
 - `pending` is the session-only export queue. Decisions are saved immediately; the queue is not restored after restart.
-- Plain mode uses the same source and store but skips Bubble Tea. It applies saved state and ignores source errors; its code lives in [`internal/plain`](../internal/plain/plain.go).
+- Plain mode uses the same source and store but skips Bubble Tea. It returns source errors to the CLI instead of printing a partial snapshot; its code lives in [`internal/plain`](../internal/plain/plain.go).
 
 ---
 
@@ -196,11 +196,11 @@ Connectors are produced by `treeGuides` from the flat list and fall back to ASCI
 
 ### Add a source
 
-1. Implement `Label`, `Courses`, `Assignments`, and `Materials` from [`source.Source`](../internal/source/source.go).
-2. Return copies, as `Demo` does, or otherwise guarantee the UI cannot mutate shared state.
-3. Select the source in `main.go`; the UI should not need changes.
-4. Keep the three calls consistent. The current interface makes that awkward for a network source; a cached snapshot inside the source is the simplest fix until the interface is refactored.
-5. Remember plain mode calls the same methods sequentially.
+1. Implement `Label` and `Load` from [`source.Source`](../internal/source/source.go).
+2. Return a [`source.Snapshot`](../internal/source/source.go) with courses, assignments, and materials. Return copies, as `Demo` does, or otherwise guarantee the UI cannot mutate shared state.
+3. Respect `ctx` so cancellation stops network work promptly.
+4. Select the source in `main.go`; the UI and plain mode should not need changes.
+5. Keep the snapshot internally consistent. Fetching shared LMS pages once inside `Load` is the point of the interface.
 6. Add tests with `httptest` or fixtures; never require a live session for `go test ./...`.
 
 ### Change persisted state
