@@ -27,7 +27,7 @@ func TestMaterialsTreeHasStateBucketsAndAttachedAssignments(t *testing.T) {
 	}
 }
 
-func TestMaterialRowsKeepRightPadding(t *testing.T) {
+func TestMaterialRowsFillTheAvailableWidth(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabMaterials
 	nodes := app.matNodes()

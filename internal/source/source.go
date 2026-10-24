@@ -16,6 +16,9 @@ type Snapshot struct {
 	Courses     []model.Course
 	Assignments []model.Assignment
 	Materials   []model.Material
+	// Notice explains intentional partial data, such as a source milestone
+	// that can load courses but not yet assignments or materials.
+	Notice string
 }
 
 // Source is a read-only view of a person's courses, assignments and materials.

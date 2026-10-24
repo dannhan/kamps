@@ -1,6 +1,9 @@
 package tui
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+)
 
 func (m *App) startSync() tea.Cmd {
 	if m.syncing {
@@ -48,13 +51,13 @@ func (m *App) syncBody(width, height int) []string {
 	start, end := windowRange(len(values), m.syncCursor, height)
 	rows := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
-		label := stDim.Render(pad(values[i][0], 10, false))
-		marker := "  "
-		if i == m.syncCursor {
-			marker = "▌ "
-		}
-		row := marker + label + " " + stPrimary.Render(values[i][1])
-		rows = append(rows, sharedFocusRow(row, width, i == m.syncCursor))
+		focused := i == m.syncCursor
+		highlight := rowHighlight{cursor: focused}
+		background := highlight.style
+		label := background(stDim).Render(pad(values[i][0], 10, false))
+		value := background(stPrimary).Render(values[i][1])
+		row := highlight.gutter() + label + highlight.gap() + value
+		rows = append(rows, row+highlight.blanks(maxInt(0, width-lipgloss.Width(row))))
 	}
 	return rows
 }

@@ -53,6 +53,7 @@ type App struct {
 	materials   []model.Material
 	loaded      bool
 	loadError   string
+	loadNotice  string
 
 	tab    Tab
 	filter string
@@ -170,6 +171,7 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case loadedMsg:
 		m.loaded = true
 		m.loadError = ""
+		m.loadNotice = msg.Notice
 		m.courses = msg.Courses
 		m.assignments = msg.Assignments
 		m.materials = msg.Materials

@@ -68,11 +68,7 @@ func login(cfg config.Config) error {
 		return fmt.Errorf("save session: %w", err)
 	}
 
-	if identity.UserID != 0 {
-		fmt.Fprintf(os.Stdout, "✓ signed in as user %d\n", identity.UserID)
-	} else {
-		fmt.Fprintln(os.Stdout, "✓ session verified")
-	}
+	fmt.Fprintf(os.Stdout, "✓ signed in as user %d\n", identity.UserID)
 	fmt.Fprintf(os.Stdout, "Session saved to %s\n", cfg.SessionPath())
 	return nil
 }

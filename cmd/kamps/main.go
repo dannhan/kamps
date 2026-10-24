@@ -2,8 +2,8 @@
 // courses, assignments and materials pulled from an LMS (Moodle/Kulon2) plus
 // lab drives, synced and stored locally.
 //
-// The UI can run against bundled demo data. `kamps login` stores a verified
-// Kulon2 session for the next source integration step.
+// The UI can run against bundled demo data or a live Kulon2 course list.
+// `kamps login` stores a verified session cookie for live mode.
 package main
 
 import (
@@ -14,6 +14,7 @@ import (
 	xterm "github.com/charmbracelet/x/term"
 
 	"github.com/ruyam/kamps/internal/config"
+	"github.com/ruyam/kamps/internal/kulon2"
 	"github.com/ruyam/kamps/internal/plain"
 	"github.com/ruyam/kamps/internal/source"
 	"github.com/ruyam/kamps/internal/tui"
@@ -25,10 +26,15 @@ var version = "0.1.0-dev"
 func main() {
 	args := os.Args[1:]
 	noAnim := false
+	demoMode := false
 	var rest []string
 	for _, a := range args {
 		if a == "--no-anim" || a == "--noanim" {
 			noAnim = true
+			continue
+		}
+		if a == "--demo" {
+			demoMode = true
 			continue
 		}
 		rest = append(rest, a)
@@ -69,7 +75,17 @@ func main() {
 		}
 	}
 
-	src := source.NewDemo()
+	var src source.Source
+	if demoMode {
+		src = source.NewDemo()
+	} else {
+		liveSource, sourceErr := kulon2.NewSource(cfg.SiteURL, cfg.SessionPath())
+		if sourceErr != nil {
+			fmt.Fprintln(os.Stderr, "kamps:", sourceErr)
+			os.Exit(1)
+		}
+		src = liveSource
+	}
 
 	// Non-interactive fallback: piping `kamps | less` should still work.
 	if !isTTY(os.Stdout) {
@@ -100,7 +116,8 @@ func printHelp() {
 	fmt.Print(`kamps — college coursework, in your terminal
 
 USAGE
-  kamps            launch the interactive UI
+  kamps            launch with live Kulon2 course list (requires login)
+  kamps --demo     launch using bundled demo data
   kamps login      verify and save a Moodle session cookie
   kamps logout     remove the saved session
   kamps version    print the version
@@ -108,6 +125,7 @@ USAGE
 
 FLAGS
   --no-anim        no spinner or progress motion
+  --demo           use bundled demo data instead of Kulon2 (before the command)
 
 CONFIG
   ~/.config/kamps/config.toml
@@ -115,7 +133,7 @@ CONFIG
     library_dir = "~/Documents/kamps"
 
 SCREENS
-  1 Tasks       2 Materials       3 Sync       4 Commit
+  1 Tasks       2 Materials       3 Courses     4 Sync       5 Commit
   c  open the commit queue
   enter  toggle the detail pane (Tasks, Materials); copy the queue (Commit)
   /  search     f  filter     esc  clear search/filter
@@ -131,6 +149,6 @@ KEYS
   f          filter          ?       help
   q          quit
 
-Demo data is bundled for now; login is prepared, but Moodle coursework loading is not implemented.
+Live mode currently loads the Kulon2 course list only; assignments and materials remain unavailable. Use --demo to see the complete bundled example.
 `)
 }

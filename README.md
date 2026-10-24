@@ -37,7 +37,8 @@ go build -o kamps ./cmd/kamps
 ## Usage
 
 ```sh
-./kamps              # launch the app
+./kamps              # launch live mode (requires login)
+./kamps --demo       # launch using bundled demo data
 ./kamps login        # sign in through your browser, then paste MoodleSession
 ./kamps logout       # remove the saved session
 ./kamps version      # print the version
@@ -59,9 +60,7 @@ site_url = "https://kulon2.undip.ac.id/"
 library_dir = "~/projects/university"
 ```
 
-The `~/projects/university` mapping is **not implemented yet**: current login
-only prepares the session for the live source; the UI and downloads still use
-demo behavior. No files are downloaded by this milestone.
+The `~/projects/university` mapping is **not implemented yet**. Live mode shows the in-progress course list and parses course pages into assignments and materials; assignment due dates, attachments, and downloads are not available yet. Use `./kamps --demo` for the complete bundled UI.
 
 Handy keys:
 
@@ -69,7 +68,7 @@ Handy keys:
 |---|---|
 | `↑↓` / `jk` | move |
 | `hl` | fold / open (courses, weeks) |
-| `tab`, `1`–`4` | switch tabs |
+| `tab`, `1`–`5` | switch tabs |
 | `enter` | open / close the detail pane (Tasks, Materials); copy the queue (Commit) |
 | `space`, `a` | select item / select all |
 | `t` / `m` / `i` / `u` | decide: track / missed / ignore / undecided |
@@ -94,24 +93,24 @@ matches.
 ```
 cmd/kamps/        entry point
 internal/model/   Course, Assignment, Material — data types
-internal/source/  the Source interface + the demo data source
+internal/source/  Source interface, live source, and demo data source
 internal/store/   local state: decisions and download flags
 internal/tui/     the terminal UI
 internal/config/  paths and settings
 docs/             developer guides and Kulon2 notes
 ```
 
-Everything is built against one interface, `source.Source`. Today it is filled
-by a bundled demo dataset; a real Moodle client fills it later without changing
-anything else.
+Everything is built against one interface, `source.Source`. Choose the bundled
+demo dataset with `--demo`, or use the live Kulon2 course-list source after
+logging in. The Courses tab displays fetched course names and IDs. Course pages currently supply activity names and sections; assignment due dates, attachment parsing, and downloads remain future work.
 
 ## Status & roadmap
 
-Early days: the UI is complete and runs against demo data. The first auth/config milestone is in place; next up, in order:
+Early days: the UI is complete and runs against demo data; live Kulon2 mode currently loads courses only. Next up, in order:
 
-1. Read-only Kulon2 source: course list and course-page HTML parsing. See `docs/kulon2.md`.
-2. Optional mapping to `course.json` in a user's workspace, without making that layout a requirement.
-3. Real downloads with progress and safe, no-delete behavior under the configured library directory.
-4. A real commit writer behind the queue preview (today `y` copies the lines).
+1. Parse course pages into assignments and materials. See `docs/kulon2.md`.
+2. Optionally map LMS courses to `course.json` in a user's workspace, without requiring that layout.
+3. Add real downloads with progress and safe, no-delete behavior under the configured library directory.
+4. Add a real commit writer behind the queue preview (today `y` copies the lines).
 
 Later, not now: bulk actions and a plugin surface for new sources.

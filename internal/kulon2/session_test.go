@@ -20,7 +20,7 @@ func TestVerifySession(t *testing.T) {
 			http.Error(w, "missing cookie", http.StatusUnauthorized)
 			return
 		}
-		fmt.Fprint(w, `<script>M.cfg = {"sesskey":"key-123","userid":42};</script>`)
+		fmt.Fprint(w, `<script>M.cfg = {"sesskey":"key-123","userId":42};</script>`)
 	}))
 	defer srv.Close()
 

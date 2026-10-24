@@ -16,9 +16,8 @@ func materialTreeState(material model.Material) (string, lipgloss.Style) {
 	return "new", stFlagNew
 }
 
-// matRowRightPad mirrors taskRowRightPad: the status labels and long names
-// stop two columns short of the divider and the terminal edge. The final pad
-// carries the row band, so a cursor row stays one continuous strip.
+// matRowRightPad reserves a small gap before the terminal edge. The row-band
+// fill beyond the content keeps the cursor highlight visually continuous.
 const matRowRightPad = 2
 
 func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {

@@ -34,6 +34,9 @@ func PrintPlain(w io.Writer, src source.Source, cfg config.Config) error {
 	format.SortAssignments(assignments)
 
 	fmt.Fprintf(w, "kamps (plain mode) — source: %s\n", src.Label())
+	if snapshot.Notice != "" {
+		fmt.Fprintf(w, "notice: %s\n", snapshot.Notice)
+	}
 	fmt.Fprintf(w, "%d courses · %d assignments · %d materials\n", len(courses), len(assignments), len(materials))
 
 	fmt.Fprintf(w, "\nASSIGNMENTS\n")

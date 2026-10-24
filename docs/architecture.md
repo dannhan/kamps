@@ -272,8 +272,8 @@ Both tree tabs render a flat `[]node` list. [`node`](../internal/tui/tree.go) st
 
 These are current limitations, not mysteries:
 
-- **Config supports only site URL and library directory.** Login/session verification is implemented, but no Kulon2 coursework fetcher consumes the session yet.
-- **The live source is not implemented.** Login verifies a manually supplied session cookie, but the UI still loads `source.Demo`; future HTTP loads must honor cancellation and return one coherent snapshot.
+- **Config supports site URL and library directory.** Login/session verification and live course-list retrieval are implemented; course-page parsing and downloads are not.
+- **The live source is partial.** It verifies the saved session, fetches in-progress courses, and parses course-page activities into assignments/materials. Due dates and assignment attachments are not yet parsed, and downloads are not implemented.
 - **The demo source seeds triage values.** They are useful for screenshots but are not user state; real sources should return `Undecided`.
 - **Downloads do not transfer bytes.** `d` flips the flag and saves it.
 - **Sync is simulated.** `s` runs an animation and a toast; it does not reload the source.

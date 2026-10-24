@@ -12,8 +12,8 @@ This guide traces the runtime execution of Kamps from binary invocation to shutd
                     └────────────┬────────────┘
                                  │
                      Parse --no-anim / version / help
-                     config.Default()
-                     source.NewDemo()
+                     config.Load()
+                     source.NewDemo() or kulon2.NewSource()
                                  │
                        isTTY(os.Stdout)?
                                  │
@@ -39,12 +39,12 @@ This guide traces the runtime execution of Kamps from binary invocation to shutd
 
 - **Entry point:** [`main()`](../cmd/kamps/main.go) in `cmd/kamps/main.go`.
 - Arguments are scanned for `--no-anim` / `--noanim`. Remaining arguments are checked for `version`/`--version`/`-v` and `help`/`--help`/`-h`.
-- Default configuration is built via [`config.Default()`](../internal/config/config.go). It resolves:
-  - `$XDG_STATE_HOME/kamps/state.json` (or `~/.local/state/kamps/state.json`)
-  - `$XDG_CONFIG_HOME/kamps` (or `~/.config/kamps`)
-  - `~/Documents/kamps` as the future download library
-- There is no config-file loader and no authentication step yet.
-- The data source is initialized via [`source.NewDemo()`](../internal/source/demo.go).
+- Configuration is loaded via [`config.Load()`](../internal/config/config.go), layering `config.toml` over defaults. It resolves:
+  - `$XDG_STATE_HOME/kamps/state.json` and `session.json` (or `~/.local/state/kamps/`)
+  - `$XDG_CONFIG_HOME/kamps/config.toml` (or `~/.config/kamps/config.toml`)
+  - `~/Documents/kamps` as the download-library default
+- `kamps login` verifies a manually pasted MoodleSession cookie; `kamps logout` removes it.
+- `--demo` selects [`source.NewDemo()`](../internal/source/demo.go); otherwise `kulon2.NewSource()` requires a saved session and loads the live course list.
 - **TTY check:** [`isTTY(os.Stdout)`](../cmd/kamps/main.go) uses `xterm.IsTerminal`:
   - **Non-TTY:** [`plain.PrintPlain()`](../internal/plain/plain.go) runs synchronously, prints a plain-text snapshot, and exits.
   - **TTY:** [`tui.New(src, cfg, version)`](../internal/tui/app.go) constructs the root model and `tea.NewProgram` starts it with `tea.WithAltScreen()`.
@@ -66,12 +66,13 @@ This guide traces the runtime execution of Kamps from binary invocation to shutd
 
 - Bubble Tea calls [`App.Init()`](../internal/tui/app.go), which returns [`loadCmd(m.src)`](../internal/tui/app.go).
 - Bubble Tea runs this command in a goroutine, so the UI remains responsive.
-- Inside `loadCmd`, one source call returns the whole snapshot:
-  1. `src.Load(ctx)` returns a [`source.Snapshot`](../internal/source/source.go) with courses, assignments, and materials.
+- Inside `loadCmd`, one source call returns the snapshot:
+  1. `src.Load(ctx)` returns courses, assignments, and materials for Demo.
+  2. Live Kulon2 mode currently returns courses only and sets `Snapshot.Notice`; assignments/materials are intentionally unavailable rather than silently presented as a complete empty result.
 - Any error returns [`errMsg`](../internal/tui/app.go).
 - On success, it returns [`loadedMsg`](../internal/tui/app.go) with the snapshot.
 
-While loading, `View` renders `loading…`. If loading fails, the body shows `error · …`.
+While loading, `View` renders `loading…`. If loading fails, the body shows `error · …`. A partial snapshot notice is shown above the available data.
 
 ### Step 4: State Reapplication
 

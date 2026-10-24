@@ -31,6 +31,9 @@ func (m *App) View() string {
 	if m.helpOn {
 		title, right, hints, rows = "help", "", []string{"↑↓ move", "tab switch", "? close"}, m.helpLines(maxInt(1, w))
 	}
+	if m.loadNotice != "" && !m.helpOn {
+		right = rightAligned(right, stDim.Render("partial · "+m.loadNotice))
+	}
 	if w < 80 || h < 24 {
 		title, right, rows = "terminal too small", "", []string{"terminal too small"}
 		hints = []string{"? more"}

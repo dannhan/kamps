@@ -33,7 +33,7 @@ LMS / lab drive data (read-only)
   Commit preview ──▶ OSC 52 clipboard
 ```
 
-The UI still ships with an in-memory demo source. `kamps login` can now verify and securely save a Kulon2 session, but the Moodle data source and actual downloads are not implemented yet; see [Kulon2 / Moodle notes](kulon2.md).
+The UI ships with both bundled demo data and an early live Kulon2 course-list source. `kamps login` verifies and securely saves a session; live mode fetches courses only. Assignments, materials, and actual downloads are not implemented yet; see [Kulon2 / Moodle notes](kulon2.md).
 
 ---
 
@@ -57,7 +57,7 @@ Appendix: [TUI research](../TUI_RESEARCH.md) records the design comparison that 
 ## Core Mental Model & Terminology
 
 - **Triage decision:** The user's local verdict on an assignment ([`model.Triage`](../internal/model/model.go)). Not fetched from the LMS. Options are `Undecided` (default), `Tracked` (handled or submitted), `Missed` (deadline passed), and `Ignored` (optional or outdated materials). The demo dataset seeds some of these values so the UI has realistic counts; saved local state wins when it has an entry for that assignment.
-- **The source:** The read-only data provider ([`source.Source`](../internal/source/source.go)). Today it is satisfied by the in-memory [`source.Demo`](../internal/source/demo.go). A future Moodle client will implement the same `Label` and `Load` methods.
+- **The source:** The read-only data provider ([`source.Source`](../internal/source/source.go)). It is satisfied by the in-memory [`source.Demo`](../internal/source/demo.go) or the Kulon2 source, which currently returns enrolled courses only.
 - **The store:** Atomically persisted user state ([`store.State`](../internal/store/store.go)) saved to `$XDG_STATE_HOME/kamps/state.json` (`~/.local/state/kamps/state.json` when the variable is unset). It holds assignment triage decisions and downloaded-material flags. Missing entries mean `undecided` and `not downloaded`.
 - **The commit queue:** The list of decisions changed during this process, held only in `App.pending`. Decisions are saved to disk immediately; the queue is the export step. Restarting Kamps does not restore the queue.
 - **The Elm Architecture (TEA):** The design pattern powering Bubble Tea:
@@ -73,7 +73,7 @@ Appendix: [TUI research](../TUI_RESEARCH.md) records the design comparison that 
 
 | Area | Implemented today | Notes |
 |---|---|---|
-| Data source | `source.Demo` only | Login verifies a Kulon2 session; no coursework fetches yet |
+| Data source | Demo or Kulon2 | Live mode fetches in-progress courses and parses course-page activities; dates/attachments are not yet parsed |
 | Persistence | Decisions and download flags | Atomic `state.json`; corrupt file falls back to empty with a footer warning |
 | Tasks tree | Term → course → state bucket → task → attached material | Folding is per tab; assignments identify attachments by the `K…`/`M…:` convention |
 | Materials tree | Course → downloaded/new bucket → file → linked assignment | Attachments can link back to an assignment |

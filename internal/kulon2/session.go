@@ -1,5 +1,5 @@
-// Package kulon2 talks to the Kulon2 Moodle instance. For now it only verifies
-// a manually supplied session cookie; the read-only source will grow here.
+// Package kulon2 talks to the Kulon2 Moodle instance using a manually supplied
+// session cookie and read-only Moodle endpoints.
 package kulon2
 
 import (
@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/cookiejar"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -22,7 +21,7 @@ var ErrSessionExpired = errors.New("session expired")
 
 var (
 	sessKeyPattern = regexp.MustCompile(`"sesskey"\s*:\s*"([^"]+)"`)
-	userIDPattern  = regexp.MustCompile(`"userid"\s*:\s*"?([0-9]+)"?`)
+	userIDPattern  = regexp.MustCompile(`(?i)"user(?:id|_id)"\s*:\s*"?([0-9]+)"?`)
 	loginPattern   = regexp.MustCompile(`(?i)(/login/index\.php|/auth/oidc)`)
 )
 
@@ -35,6 +34,10 @@ type Identity struct {
 // VerifySession checks a MoodleSession cookie against /my/. It returns
 // ErrSessionExpired when the site treats the cookie as logged out.
 func VerifySession(ctx context.Context, siteURL, cookie string) (Identity, error) {
+	return verifySessionWithClient(ctx, siteURL, cookie, nil)
+}
+
+func verifySessionWithClient(ctx context.Context, siteURL, cookie string, client *http.Client) (Identity, error) {
 	if strings.TrimSpace(cookie) == "" {
 		return Identity{}, errors.New("empty MoodleSession cookie")
 	}
@@ -43,18 +46,15 @@ func VerifySession(ctx context.Context, siteURL, cookie string) (Identity, error
 		return Identity{}, err
 	}
 
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		return Identity{}, err
+	client = cloneClientWithCookie(client, base, cookie, 20*time.Second)
+	if client.CheckRedirect == nil {
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			if len(via) > 0 && req.URL.Host != via[0].URL.Host {
+				return http.ErrUseLastResponse
+			}
+			return nil
+		}
 	}
-	jar.SetCookies(base, []*http.Cookie{{
-		Name:     "MoodleSession",
-		Value:    cookie,
-		Path:     "/",
-		HttpOnly: true,
-	}})
-
-	client := &http.Client{Jar: jar, Timeout: 20 * time.Second}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(base.String(), "/")+"/my/", nil)
 	if err != nil {
 		return Identity{}, err
@@ -72,29 +72,29 @@ func VerifySession(ctx context.Context, siteURL, cookie string) (Identity, error
 	if err != nil {
 		return Identity{}, fmt.Errorf("read /my/: %w", err)
 	}
+	if resp.Request.URL.Host != base.Host {
+		return Identity{}, ErrSessionExpired
+	}
 	if isLoginPage(resp.Request.URL) {
 		return Identity{}, ErrSessionExpired
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return Identity{}, fmt.Errorf("GET /my/: %s", resp.Status)
 	}
-	if resp.Request.URL.Host != base.Host {
-		return Identity{}, fmt.Errorf("session verification redirected to unexpected host %q", resp.Request.URL.Host)
-	}
 
 	sessKey := firstMatch(sessKeyPattern, body)
-	if sessKey == "" {
+	rawUserID := firstMatch(userIDPattern, body)
+	if sessKey == "" || rawUserID == "" {
 		if loginPattern.Match(body) {
 			return Identity{}, ErrSessionExpired
 		}
-		return Identity{}, errors.New("authenticated page has no sesskey")
+		return Identity{}, errors.New("authenticated page is missing sesskey or user id")
 	}
-
-	identity := Identity{SessKey: sessKey}
-	if raw := firstMatch(userIDPattern, body); raw != "" {
-		identity.UserID, _ = strconv.Atoi(raw)
+	userID, err := strconv.Atoi(rawUserID)
+	if err != nil || userID <= 0 {
+		return Identity{}, errors.New("authenticated page contains an invalid user id")
 	}
-	return identity, nil
+	return Identity{UserID: userID, SessKey: sessKey}, nil
 }
 
 func parseSiteURL(raw string) (*url.URL, error) {

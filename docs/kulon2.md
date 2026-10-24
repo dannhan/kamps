@@ -28,23 +28,23 @@ verified by hand against the live site (first recon 2026-10-17) unless it says
 pastes only the cookie value. `kamps login` verifies the cookie against `/my/`
 and stores it with `0600` in its own state directory; `kamps logout` removes
 it. Session expiry is reported crisply (a login redirect or missing authenticated
-page data means "session expired — log in again"). The live coursework source
-is not implemented yet.
+page data means "session expired — log in again"). The live source currently
+loads the enrolled course list; course pages and their coursework are not yet parsed.
 
 ## Data routes that work with a session cookie
 
-1. **Course list (JSON)** — AJAX:
+1. **Course list (JSON)** — AJAX (ported in `internal/kulon2`; tested with local service-response fixtures):
 
    ```text
    POST /lib/ajax/service.php?sesskey=<sesskey>&info=core_course_get_enrolled_courses_by_timeline_classification
    body: [{"index":0,
            "methodname":"core_course_get_enrolled_courses_by_timeline_classification",
-           "args":{"offset":0,"limit":0,"classification":"all","sort":"fullname"}}]
+           "args":{"offset":0,"limit":0,"classification":"inprogress","sort":"fullname"}}]
    ```
 
    Returns `data.courses[].{id, shortname, fullname}`. 29 enrolled at recon time.
 
-2. **Course page (HTML)** — `GET /course/view.php?id=<courseid>`:
+2. **Course page (HTML)** — `GET /course/view.php?id=<courseid>` (parsed by the current live source):
 
    - sections via `course/section.php?id=` with week labels
      (e.g. "18 September 2026 - 25 ...");
@@ -76,7 +76,7 @@ IMK is not on Kulon2 at all (it lives on WhatsApp), so it has no LMS course.
 
 ## Implications for the client
 
-- **Auth:** cookie only; `kamps login` and `kamps logout` are implemented. Coursework fetching and expiry checks during normal source loads remain future work.
+- **Auth:** cookie only; `kamps login` and `kamps logout` are implemented. Live mode verifies the saved session, fetches in-progress courses, and parses course pages into assignments and materials. Assignment due dates, attachments, and downloads are still future work.
 - **Due dates:** parse `/course/view.php?id=<id>`; a reliable due date may need a
   follow-up fetch of `/mod/assign/view.php?id=<cmid>` (**unverified** — confirm
   the date is rendered there).
