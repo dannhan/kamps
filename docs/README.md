@@ -63,7 +63,7 @@ Appendix: [TUI research](../TUI_RESEARCH.md) records the design comparison that 
 - **The Elm Architecture (TEA):** The design pattern powering Bubble Tea:
   - **Model:** A struct holding the complete application state ([`tui.App`](../internal/tui/app.go)).
   - **Update:** A pure function taking a message and returning an updated model plus an optional command ([`App.Update`](../internal/tui/app.go)).
-  - **View:** A pure function transforming the current model into a printable string rendered to the terminal ([`App.View`](../internal/tui/app.go)).
+  - **View:** A pure function transforming the current model into a printable string rendered to the terminal ([`App.View`](../internal/tui/chrome.go)).
 - **Tree nodes:** A flattened 1D slice of tree elements ([`node`](../internal/tui/tree.go)) recalculated dynamically. This unified slice guarantees that row rendering, cursor positioning, and selection operations always point to the same row.
 - **Search vs. filter:** `/` enters a live, case-insensitive text search over names, IDs, sections, kinds, and courses. `f` cycles the active tab's state filter. The two compose; switching tabs clears the search but restores that tab's filter.
 

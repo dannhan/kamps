@@ -48,7 +48,7 @@ flowchart TD
     subgraph TUIPkg["Terminal UI (internal/tui)"]
         TUIApp["tui.App (tea.Model)"]
         Search["search.go\nlive query + predicates"]
-        Tree["tree.go\nflattened nodes + rows"]
+        Tree["tree.go + task/material files\nflattened nodes + rows"]
         Detail["detail.go\nsplit pane"]
         Frame["frame.go / row.go\nshell, hints, bands"]
         PlainMode["plain.go\nPrintPlain()"]
@@ -105,16 +105,32 @@ There is no HTTP server, database, or daemon. Kamps is a single local binary.
 
 | File | Responsibility |
 |---|---|
-| [`app.go`](../internal/tui/app.go) | Root model, tabs, `Update`, key dispatch, triage, downloads, commit queue, shell rendering, footer |
-| [`search.go`](../internal/tui/search.go) | Search state, title, predicates, word deletion, search-mode key handling |
-| [`tree.go`](../internal/tui/tree.go) | Flattened `node` model, Tasks and Materials trees, filters, connectors, row rendering |
-| [`detail.go`](../internal/tui/detail.go) | Detail-pane visibility, split widths, per-node detail content |
-| [`frame.go`](../internal/tui/frame.go) | Title line, body clamping, tab cells, rules, footer hint fitting |
+| [`app.go`](../internal/tui/app.go) | Root model, tabs, messages, `Update`, app construction |
+| [`keys.go`](../internal/tui/keys.go) | Key bindings, key dispatch, `?` overlay data |
+| [`navigation.go`](../internal/tui/navigation.go) | Tab switching, cursors, folding, selection |
+| [`filters.go`](../internal/tui/filters.go) | Filter names, cycling, clearing |
+| [`tasks.go`](../internal/tui/tasks.go) | Task filtering, target resolution, triage, task footer |
+| [`task_tree.go`](../internal/tui/task_tree.go) | Flattened task hierarchy and grouping |
+| [`task_rows.go`](../internal/tui/task_rows.go) | Task rows, counts, totals, Tasks tab body |
+| [`detail_tasks.go`](../internal/tui/detail_tasks.go) | Task detail content |
+| [`materials.go`](../internal/tui/materials.go) | Material filtering, tree data, downloads, attachment links |
+| [`material_rows.go`](../internal/tui/material_rows.go) | Material rows and Materials tab body |
+| [`detail_materials.go`](../internal/tui/detail_materials.go) | Material detail content |
+| [`commit.go`](../internal/tui/commit.go) | Session queue, preview, clipboard, Commit tab |
+| [`sync.go`](../internal/tui/sync.go) | Simulated sync state and Sync tab |
+| [`chrome.go`](../internal/tui/chrome.go) | Shell, tab bar, footer, help overlay |
+| [`detail.go`](../internal/tui/detail.go) | Split-pane visibility, widths, clipping |
+| [`search.go`](../internal/tui/search.go) | Search state, title, predicates, search-mode keys |
+| [`state.go`](../internal/tui/state.go) | App-to-store apply/save bridge |
+| [`tree.go`](../internal/tui/tree.go) | Shared node contract, fold keys, connectors |
+| [`frame.go`](../internal/tui/frame.go) | Title line, body clamping, tab cells, rules, footer hints |
 | [`row.go`](../internal/tui/row.go) | Cursor/mark bands, gutters, carets, selection cells |
-| [`keys.go`](../internal/tui/keys.go) | Declarative key bindings for the `?` overlay |
 | [`theme.go`](../internal/tui/theme.go) | Semantic color tokens and reusable Lip Gloss styles |
+| [`text.go`](../internal/tui/text.go) | Width, padding, truncation, wrapping |
+| [`window.go`](../internal/tui/window.go) | Viewport windows and scroll hints |
+| [`format.go`](../internal/tui/format.go) | Shared formatting helpers such as `taskLine`, `shortCode`, `lastSyncLine` |
+| [`numbers.go`](../internal/tui/numbers.go) | Small integer helpers |
 | [`plain.go`](../internal/tui/plain.go) | Non-TTY snapshot with saved state applied |
-| [`views.go`](../internal/tui/views.go) | Shared formatting helpers such as `taskLine`, `shortCode`, and `lastSyncLine` |
 
 ---
 
@@ -143,7 +159,7 @@ From [`go.mod`](../go.mod) and direct code imports:
 ### Auxiliary / Indirect Libraries
 
 - **`github.com/charmbracelet/x/ansi`**
-  - Used by [`ansiTruncate`](../internal/tui/util.go) and tree rows to truncate styled strings without cutting ANSI escapes or multi-byte runes.
+  - Used by [`ansiTruncate`](../internal/tui/text.go) and tree rows to truncate styled strings without cutting ANSI escapes or multi-byte runes.
 
 ---
 

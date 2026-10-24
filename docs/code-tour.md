@@ -44,11 +44,12 @@ A non-empty `gofmt -l .` output means a file needs formatting. The repository's 
 4. [`internal/model/model.go`](../internal/model/model.go) — the domain types and triage values.
 5. [`internal/store/store.go`](../internal/store/store.go) — local state and atomic writes.
 6. [`internal/tui/app.go`](../internal/tui/app.go) — the root model and event loop.
-7. [`internal/tui/tree.go`](../internal/tui/tree.go) — the flat node contract and row rendering.
-8. [`internal/tui/search.go`](../internal/tui/search.go) — search mode and predicates.
-9. [`internal/tui/detail.go`](../internal/tui/detail.go) — split pane and detail content.
-10. The remaining TUI files: `frame.go`, `row.go`, `keys.go`, `theme.go`, `plain.go`, `views.go`.
-11. Tests in `internal/tui`, `internal/store`, and `internal/tui/plain_test.go`.
+7. [`internal/tui/task_tree.go`](../internal/tui/task_tree.go) and [`materials.go`](../internal/tui/materials.go) — the two flattened trees.
+8. [`internal/tui/task_rows.go`](../internal/tui/task_rows.go) and [`material_rows.go`](../internal/tui/material_rows.go) — row rendering and tab bodies.
+9. [`internal/tui/search.go`](../internal/tui/search.go) and [`filters.go`](../internal/tui/filters.go) — narrowing the trees.
+10. [`internal/tui/detail.go`](../internal/tui/detail.go), [`detail_tasks.go`](../internal/tui/detail_tasks.go), and [`detail_materials.go`](../internal/tui/detail_materials.go) — the split pane.
+11. [`internal/tui/commit.go`](../internal/tui/commit.go), [`sync.go`](../internal/tui/sync.go), and [`chrome.go`](../internal/tui/chrome.go) — the other tabs and the shell.
+12. Tests next to the feature they cover, starting with [`testhelpers_test.go`](../internal/tui/testhelpers_test.go).
 
 ---
 
@@ -84,16 +85,32 @@ Important details:
 
 | File | Read this when… |
 |---|---|
-| [`app.go`](../internal/tui/app.go) | You need the `App` struct, tabs, key dispatch, triage, downloads, the commit queue, `View`, the shell, or the footer |
+| [`app.go`](../internal/tui/app.go) | You need the `App` struct, construction, messages, `Update`, or `Tab` |
+| [`keys.go`](../internal/tui/keys.go) | You are adding a key, changing dispatch, or updating the `?` overlay |
+| [`navigation.go`](../internal/tui/navigation.go) | You are changing tab switching, cursors, folding, or selection |
+| [`filters.go`](../internal/tui/filters.go) | You are adding or cycling a state filter |
+| [`tasks.go`](../internal/tui/tasks.go) | You are changing task filtering, target resolution, triage, or the task footer |
+| [`task_tree.go`](../internal/tui/task_tree.go) | You are changing the task hierarchy, grouping, or attachment association |
+| [`task_rows.go`](../internal/tui/task_rows.go) | You are changing a task row, count, total, or the Tasks tab body |
+| [`detail_tasks.go`](../internal/tui/detail_tasks.go) | You are changing task detail content |
+| [`materials.go`](../internal/tui/materials.go) | You are changing material filtering, tree data, downloads, or attachment links |
+| [`material_rows.go`](../internal/tui/material_rows.go) | You are changing a material row or the Materials tab body |
+| [`detail_materials.go`](../internal/tui/detail_materials.go) | You are changing material detail content |
+| [`commit.go`](../internal/tui/commit.go) | You are changing the session queue, preview, clipboard, or Commit tab |
+| [`sync.go`](../internal/tui/sync.go) | You are changing the simulated sync state or Sync tab |
+| [`chrome.go`](../internal/tui/chrome.go) | You are changing the shell, tab bar, footer, or help overlay |
+| [`detail.go`](../internal/tui/detail.go) | You are changing split-pane visibility, widths, or clipping |
 | [`search.go`](../internal/tui/search.go) | You are changing query behavior, match fields, or search-mode keys |
-| [`tree.go`](../internal/tui/tree.go) | You are changing tree structure, folding, connectors, row layout, filters, or counts |
-| [`detail.go`](../internal/tui/detail.go) | You are changing the split pane, detail fields, or clipping |
+| [`state.go`](../internal/tui/state.go) | You are changing how App applies or saves local state |
+| [`tree.go`](../internal/tui/tree.go) | You are changing the shared node contract, fold keys, or connectors |
 | [`frame.go`](../internal/tui/frame.go) | You are changing the title row, rules, body height, tab cells, or hint fitting |
 | [`row.go`](../internal/tui/row.go) | You are changing cursor/mark bands, gutters, carets, or selection cells |
-| [`keys.go`](../internal/tui/keys.go) | You are adding or renaming a key that should appear in the `?` overlay |
 | [`theme.go`](../internal/tui/theme.go) | You are adding a semantic color or reusable style |
+| [`text.go`](../internal/tui/text.go) | You are changing width handling, padding, truncation, or wrapping |
+| [`window.go`](../internal/tui/window.go) | You are changing viewport windows or scroll hints |
+| [`format.go`](../internal/tui/format.go) | You need shared formatting helpers such as `taskLine`, `shortCode`, or `lastSyncLine` |
+| [`numbers.go`](../internal/tui/numbers.go) | You need a small integer helper |
 | [`plain.go`](../internal/tui/plain.go) | You are changing the non-TTY snapshot |
-| [`views.go`](../internal/tui/views.go) | You need shared formatting helpers such as `taskLine`, `shortCode`, or `lastSyncLine` |
 
 `nodeWeek` has been removed; neither tree builder emits week rows today.
 
@@ -152,26 +169,26 @@ Connectors are produced by `treeGuides` from the flat list and fall back to ASCI
 
 1. Add a `key.Binding` in [`DefaultKeys`](../internal/tui/keys.go), including `key.WithHelp`.
 2. Add it to `ShortHelp` and/or `FullHelp` if it belongs in the overlay.
-3. Handle `msg.String()` in the normal-mode switch in [`handleKey`](../internal/tui/app.go).
+3. Handle `msg.String()` in the normal-mode switch in [`handleKey`](../internal/tui/keys.go).
 4. If it should be captured while typing, add it to [`handleSearchKey`](../internal/tui/search.go) instead.
-5. Update the relevant footer hints: `taskFooterHints` in `frame.go` or the `hints` slice in `tabContent`.
-6. Add a test in `internal/tui/app_test.go` or `tree_test.go`.
+5. Update the relevant footer hints: `taskFooterHints` in `frame.go` or the `hints` slice in the tab content function.
+6. Add a test in the feature file, such as `search_test.go`, `navigation_test.go`, or `task_rows_test.go`.
 7. Update `README.md` and `kamps help` if the key is user-facing.
 
 ### Add a filter
 
-1. Append the name to `filterNames` (Tasks) or `materialFilterNames` (Materials) in [`app.go`](../internal/tui/app.go).
-2. Teach `matchesFilter` or `matchesMaterialFilter` the new case.
+1. Append the name to `filterNames` (Tasks) or `materialFilterNames` (Materials) in [`filters.go`](../internal/tui/filters.go).
+2. Teach `matchesFilter` (in `tasks.go`) or `matchesMaterialFilter` (in `materials.go`) the new case.
 3. Check `clearFilter` and `cycleFilter` behavior.
 4. Add a test covering the filter alone and composed with search.
 5. Confirm the title line and footer still fit at 80 columns.
 
 ### Add a tab
 
-1. Add a constant before `tabCount` in `app.go` and a case in `Tab.String`.
-2. Extend `tabBar` labels and counts.
-3. Add a `tabContent` case for title, hints, and rows.
-4. Update `move` and `clampCursor`.
+1. Add a constant before `tabCount` in [`app.go`](../internal/tui/app.go) and a case in `Tab.String`.
+2. Extend `tabBar` in [`chrome.go`](../internal/tui/chrome.go).
+3. Add a tab content function next to the feature (for example `tasksContent`), and wire it into `tabContent`.
+4. Update `move` and `clampCursor` in [`navigation.go`](../internal/tui/navigation.go).
 5. Update the number-key handling if the tab exceeds four.
 6. Add tests for shell width and tab switching.
 
@@ -194,14 +211,14 @@ Connectors are produced by `treeGuides` from the flat list and fall back to ASCI
 
 ### Add detail content
 
-1. Add fields to `detailLines` (Tasks) or `materialDetailLines` (Materials) in [`detail.go`](../internal/tui/detail.go).
+1. Add fields to `detailLines` in [`detail_tasks.go`](../internal/tui/detail_tasks.go) or `materialDetailLines` in [`detail_materials.go`](../internal/tui/detail_materials.go).
 2. Use `addKV` for label/value rows and `addWrapped` for prose.
 3. Keep every line inside `width`; `detailRows` clips at pane height and appends `…`.
 4. Add a rendering test asserting width and content.
 
 ### Add an export format
 
-The commit preview is built in [`commitPreviewText`](../internal/tui/app.go) and each line comes from [`taskLine`](../internal/tui/views.go). If you add a real writer, keep the preview and the written output identical; otherwise the “review before write” promise is broken.
+The commit preview is built in [`commitPreviewText`](../internal/tui/commit.go) and each line comes from [`taskLine`](../internal/tui/format.go). If you add a real writer, keep the preview and the written output identical; otherwise the “review before write” promise is broken.
 
 ---
 
@@ -217,7 +234,7 @@ go test -count=1 ./...
 
 ### Test helpers
 
-[`demoApp`](../internal/tui/tree_test.go) builds an app against the demo source with a temporary state directory:
+[`demoApp`](../internal/tui/testhelpers_test.go) builds an app against the demo source with a temporary state directory:
 
 ```go
 func demoApp(t *testing.T) *App {

@@ -84,13 +84,13 @@ When `loadedMsg` arrives in [`App.Update`](../internal/tui/app.go):
    - Courses by `Name`.
    - Materials by course code, then section, then name.
    - Assignments are left in source order here; the visible Tasks list sorts them later.
-3. [`App.applyState()`](../internal/tui/app.go) calls [`store.State.Apply`](../internal/store/store.go), overlaying saved decisions and download flags.
-4. [`App.clampCursor()`](../internal/tui/app.go) keeps every tab cursor inside its current row list.
+3. [`App.applyState()`](../internal/tui/state.go) calls [`store.State.Apply`](../internal/store/store.go), overlaying saved decisions and download flags.
+4. [`App.clampCursor()`](../internal/tui/navigation.go) keeps every tab cursor inside its current row list.
 5. If state loading failed earlier, a footer toast reports it once.
 
 ### Step 5: Keyboard Event Loop
 
-Every keystroke arrives as a `tea.KeyMsg` and goes through [`App.handleKey`](../internal/tui/app.go) in this order:
+Every keystroke arrives as a `tea.KeyMsg` and goes through [`App.handleKey`](../internal/tui/keys.go) in this order:
 
 1. **Help overlay (`?`):** only `?`, `esc`, `q`, and `ctrl+c` are handled; everything else is swallowed until it closes.
 2. **Search mode:** while `m.searching`, all keys go to [`handleSearchKey`](../internal/tui/search.go).
@@ -137,9 +137,9 @@ Every keystroke arrives as a `tea.KeyMsg` and goes through [`App.handleKey`](../
 
 #### Triage
 
-[`App.applyTriage(t)`](../internal/tui/app.go) only acts on the Tasks tab:
+[`App.applyTriage(t)`](../internal/tui/tasks.go) only acts on the Tasks tab:
 
-1. [`targetIDs()`](../internal/tui/app.go) resolves targets in this order:
+1. [`targetIDs()`](../internal/tui/tasks.go) resolves targets in this order:
    - checked assignments, if any;
    - the focused assignment;
    - all visible children when the cursor is on a group row.
@@ -147,11 +147,11 @@ Every keystroke arrives as a `tea.KeyMsg` and goes through [`App.handleKey`](../
 3. [`State.SetDecision(id, t)`](../internal/store/store.go) updates the persisted map. `Undecided` deletes the entry.
 4. The item is added to or removed from the session-only `pending` queue.
 5. Selections are cleared and a toast is shown.
-6. [`App.saveState()`](../internal/tui/app.go) writes synchronously. A failure becomes a toast; the action is not rolled back.
+6. [`App.saveState()`](../internal/tui/state.go) writes synchronously. A failure becomes a toast; the action is not rolled back.
 
 #### Downloads
 
-[`App.download()`](../internal/tui/app.go) only acts on Materials. It prefers checked files; with no selection it uses the focused file, bucket, or course row. It marks each target `Downloaded`, records it in the store, clears selections, shows a toast, and saves. No bytes are transferred yet.
+[`App.download()`](../internal/tui/materials.go) only acts on Materials. It prefers checked files; with no selection it uses the focused file, bucket, or course row. It marks each target `Downloaded`, records it in the store, clears selections, shows a toast, and saves. No bytes are transferred yet.
 
 #### Commit queue
 
@@ -177,7 +177,7 @@ A crash mid-write leaves either the old file or the new file, never a half-writt
 
 ### Step 7: Rendering Pipeline
 
-[`App.View()`](../internal/tui/app.go) composes a fixed shell:
+[`App.View()`](../internal/tui/chrome.go) composes a fixed shell:
 
 1. Defaults width/height to 100×30 if unknown, then clamps to at least 1.
 2. Calls `tabContent(width, height-5)` to get the title, right-hand status, footer hints, and body rows.
@@ -209,7 +209,7 @@ A crash mid-write leaves either the old file or the new file, never a half-writt
 
 #### Footer
 
-[`helpBar`](../internal/tui/app.go) is the single footer path:
+[`helpBar`](../internal/tui/chrome.go) is the single footer path:
 
 - Search mode shows search keys.
 - Tasks uses `taskFooter`, which preserves the queue/toast on the right and drops hints that no longer fit.

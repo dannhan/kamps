@@ -65,7 +65,7 @@ Kamps uses [**Bubble Tea**](https://github.com/charmbracelet/bubbletea), which i
    }
    ```
 
-3. **[`View() string`](../internal/tui/app.go):**
+3. **[`View() string`](../internal/tui/chrome.go):**
    A pure function that converts the model's current state into a single formatted string representing the full terminal frame. `View` never modifies state; it only formats text and ANSI styles.
 
 ---
@@ -85,7 +85,7 @@ A message is an arbitrary Go value (`any`) representing an event that occurred.
 
 - [`loadedMsg`](../internal/tui/app.go): carries courses, assignments, and materials from background loading.
 - [`errMsg`](../internal/tui/app.go): wraps background errors so they can be rendered without crashing.
-- [`clipboardMsg`](../internal/tui/app.go): reports how many lines were copied and whether the OSC 52 write failed.
+- [`clipboardMsg`](../internal/tui/commit.go): reports how many lines were copied and whether the OSC 52 write failed.
 - [`spinner.TickMsg`](../internal/tui/app.go): drives the sync spinner and toast lifetime.
 
 ### Commands (`tea.Cmd`)
@@ -117,7 +117,7 @@ A command is a function with the signature `type Cmd func() Msg`.
 
    The command is asynchronous from Bubble Tea's point of view, but the three source calls are **sequential** inside it. A network source should keep that in mind.
 
-2. **OSC 52 terminal clipboard:** [`clipboardCmd()`](../internal/tui/app.go) copies Markdown task lines through standard ANSI OSC 52 escape sequences:
+2. **OSC 52 terminal clipboard:** [`clipboardCmd()`](../internal/tui/commit.go) copies Markdown task lines through standard ANSI OSC 52 escape sequences:
 
    ```go
    func clipboardCmd(text string) tea.Cmd {
@@ -158,7 +158,7 @@ Commit:   key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "commit tab")),
 
 ### 3. Help overlay: [`help.Model`](../internal/tui/app.go)
 
-- When the user presses `?`, [`App.helpLines()`](../internal/tui/app.go) renders `m.help.FullHelpView(m.keys.FullHelp())` plus a state legend and a note about mouse selection.
+- When the user presses `?`, [`App.helpLines()`](../internal/tui/chrome.go) renders `m.help.FullHelpView(m.keys.FullHelp())` plus a state legend and a note about mouse selection.
 
 ---
 
@@ -244,10 +244,10 @@ Naive Go slicing (`str[:30]`) breaks when a string contains:
 
 Kamps uses:
 
-- [`lipgloss.Width`](../internal/tui/util.go) to measure visible columns;
-- [`ansi.Truncate`](../internal/tui/util.go) via `truncate` to cut to width with `…` while preserving escapes;
-- [`ansiTruncate`](../internal/tui/util.go) via `lipgloss.MaxWidth` for styled content;
-- [`fitLine`](../internal/tui/util.go) to clamp every emitted line to exactly the requested width.
+- [`lipgloss.Width`](../internal/tui/text.go) to measure visible columns;
+- [`ansi.Truncate`](../internal/tui/text.go) via `truncate` to cut to width with `…` while preserving escapes;
+- [`ansiTruncate`](../internal/tui/text.go) via `lipgloss.MaxWidth` for styled content;
+- [`fitLine`](../internal/tui/text.go) to clamp every emitted line to exactly the requested width.
 
 Normal text is truncated with `…`; tree rows reserve a two-column right inset so metadata never touches the terminal edge or the split divider.
 

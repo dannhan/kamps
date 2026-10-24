@@ -37,24 +37,26 @@ to fix. Start with [Source Code Tour](code-tour.md).
 
 Trace a triage decision end to end:
 
-1. In [`internal/tui/app.go`](../internal/tui/app.go), find `handleKey` and the
+1. In [`internal/tui/keys.go`](../internal/tui/keys.go), find `handleKey` and the
    `t`/`m`/`i`/`u` cases.
-2. Follow `applyTriage`.
+2. Follow `applyTriage` in [`tasks.go`](../internal/tui/tasks.go).
 3. Notice the three separate things it does:
    - changes the in-memory assignment;
    - records the decision in `store.State`;
    - adds or removes the item from the session-only `pending` queue.
-4. Follow `saveState` into `store.State.Save`.
-5. Open `commitPreviewText` and `taskLine` to see how a queued decision becomes
-   exported text.
+4. Follow `saveState` in [`state.go`](../internal/tui/state.go) into `store.State.Save`.
+5. Open `commitPreviewText` in [`commit.go`](../internal/tui/commit.go) and
+   `taskLine` in [`format.go`](../internal/tui/format.go) to see how a queued
+   decision becomes exported text.
 
 Now trace a search:
 
 1. `handleKey` sends keys to `handleSearchKey` while `searching` is true.
 2. Search state is just two fields: `searching` and `search`.
 3. `visible()` asks both the filter and the search predicate.
-4. `taskNodes()` builds the rows from that filtered list. The cursor indexes
-   the same list, which is why the highlight and the keys cannot disagree.
+4. `taskNodes()` in [`task_tree.go`](../internal/tui/task_tree.go) builds the
+   rows from that filtered list. The cursor indexes the same list, which is why
+   the highlight and the keys cannot disagree.
 
 This is the central design idea: **derive the visible rows once, then let
 rendering and input share them**.
@@ -71,8 +73,8 @@ Add an `undated` (or `dated`) filter for tasks.
 
 Files:
 
-- `filterNames` and `matchesFilter` in the TUI package
-- a test in `app_test.go` or a new feature test file
+- `filterNames` in [`filters.go`](../internal/tui/filters.go) and `matchesFilter` in [`tasks.go`](../internal/tui/tasks.go)
+- a test in `search_test.go` or `task_rows_test.go`
 
 Acceptance:
 
@@ -87,8 +89,8 @@ Show the course term in the task detail pane.
 
 Files:
 
-- `detailLines` in `internal/tui/detail.go`
-- a rendering test in `app_test.go`
+- `detailLines` in [`internal/tui/detail_tasks.go`](../internal/tui/detail_tasks.go)
+- a rendering test in `detail_test.go`
 
 Acceptance:
 
