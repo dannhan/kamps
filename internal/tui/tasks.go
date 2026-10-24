@@ -2,11 +2,11 @@ package tui
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/ruyam/kamps/internal/format"
 	"github.com/ruyam/kamps/internal/model"
 )
 
@@ -21,7 +21,7 @@ func (m *App) visible() []model.Assignment {
 		}
 		out = append(out, a)
 	}
-	sort.Slice(out, func(i, j int) bool { return lessAssignment(out[i], out[j]) })
+	format.SortAssignments(out)
 	return out
 }
 

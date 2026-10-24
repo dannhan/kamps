@@ -49,7 +49,8 @@ A non-empty `gofmt -l .` output means a file needs formatting. The repository's 
 9. [`internal/tui/search.go`](../internal/tui/search.go) and [`filters.go`](../internal/tui/filters.go) — narrowing the trees.
 10. [`internal/tui/detail.go`](../internal/tui/detail.go), [`detail_tasks.go`](../internal/tui/detail_tasks.go), and [`detail_materials.go`](../internal/tui/detail_materials.go) — the split pane.
 11. [`internal/tui/commit.go`](../internal/tui/commit.go), [`sync.go`](../internal/tui/sync.go), and [`chrome.go`](../internal/tui/chrome.go) — the other tabs and the shell.
-12. Tests next to the feature they cover, starting with [`testhelpers_test.go`](../internal/tui/testhelpers_test.go).
+12. [`internal/plain/plain.go`](../internal/plain/plain.go) and [`internal/format/format.go`](../internal/format/format.go) — the non-TTY snapshot and the formatting it shares with the TUI.
+13. Tests next to the feature they cover, starting with [`testhelpers_test.go`](../internal/tui/testhelpers_test.go).
 
 ---
 
@@ -77,7 +78,7 @@ Important details:
 - Courses are sorted by name; materials by course code, section, then name. Assignments are sorted only when the visible Tasks list is built: dated items first, oldest first, then by ID.
 - `store.State.Apply` overlays saved decisions and download flags. Saved decisions win where they exist; otherwise the source's `Triage` value remains.
 - `pending` is the session-only export queue. Decisions are saved immediately; the queue is not restored after restart.
-- Plain mode uses the same source and store but skips Bubble Tea. It applies saved state and ignores source errors.
+- Plain mode uses the same source and store but skips Bubble Tea. It applies saved state and ignores source errors; its code lives in [`internal/plain`](../internal/plain/plain.go).
 
 ---
 
@@ -110,7 +111,8 @@ Important details:
 | [`window.go`](../internal/tui/window.go) | You are changing viewport windows or scroll hints |
 | [`format.go`](../internal/tui/format.go) | You need shared formatting helpers such as `taskLine`, `shortCode`, or `lastSyncLine` |
 | [`numbers.go`](../internal/tui/numbers.go) | You need a small integer helper |
-| [`plain.go`](../internal/tui/plain.go) | You are changing the non-TTY snapshot |
+
+Plain mode lives outside this package in [`internal/plain/plain.go`](../internal/plain/plain.go). Shared byte-size formatting and assignment ordering live in [`internal/format/format.go`](../internal/format/format.go), so plain mode never imports Bubble Tea.
 
 `nodeWeek` has been removed; neither tree builder emits week rows today.
 

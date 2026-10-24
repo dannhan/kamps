@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/ruyam/kamps/internal/format"
 	"github.com/ruyam/kamps/internal/model"
 )
 
@@ -113,7 +114,7 @@ func (m *App) detailLines(n node, width int) []string {
 			addKV("section", material.Section, stRow)
 		}
 		if material.Size > 0 {
-			addKV("size", humanSize(material.Size), stRow)
+			addKV("size", format.HumanSize(material.Size), stRow)
 		}
 		if material.URL != "" {
 			add("")

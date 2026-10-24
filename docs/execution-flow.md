@@ -20,7 +20,7 @@ This guide traces the runtime execution of Kamps from binary invocation to shutd
                ┌─────────────────┴─────────────────┐
        No (pipe / file)                    Yes (interactive)
                │                                   │
-       tui.PrintPlain()                    tea.NewProgram()
+       plain.PrintPlain()                 tea.NewProgram()
    synchronous stdout snapshot             tea.WithAltScreen()
                │                                   │
              Exit                            tea.Model loop
@@ -46,7 +46,7 @@ This guide traces the runtime execution of Kamps from binary invocation to shutd
 - There is no config-file loader and no authentication step yet.
 - The data source is initialized via [`source.NewDemo()`](../internal/source/demo.go).
 - **TTY check:** [`isTTY(os.Stdout)`](../cmd/kamps/main.go) uses `xterm.IsTerminal`:
-  - **Non-TTY:** [`tui.PrintPlain()`](../internal/tui/plain.go) runs synchronously, prints a plain-text snapshot, and exits.
+  - **Non-TTY:** [`plain.PrintPlain()`](../internal/plain/plain.go) runs synchronously, prints a plain-text snapshot, and exits.
   - **TTY:** [`tui.New(src, cfg, version)`](../internal/tui/app.go) constructs the root model and `tea.NewProgram` starts it with `tea.WithAltScreen()`.
 
 ### Step 2: Model Construction & State Load
@@ -285,7 +285,7 @@ sequenceDiagram
 
 ## 4. Plain Mode
 
-When stdout is not a terminal, [`PrintPlain`](../internal/tui/plain.go) bypasses Bubble Tea entirely:
+When stdout is not a terminal, [`PrintPlain`](../internal/plain/plain.go) bypasses Bubble Tea entirely:
 
 1. Calls `src.Courses`, `src.Assignments`, and `src.Materials` sequentially.
 2. If `cfg.StatePath()` is set, loads state and applies decisions/downloads.

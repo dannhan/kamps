@@ -1,4 +1,6 @@
-package tui
+// Package plain renders a non-interactive snapshot for pipes, files, and CI.
+// It shares the source and store with the TUI but has no Bubble Tea dependency.
+package plain
 
 import (
 	"context"
@@ -7,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ruyam/kamps/internal/config"
+	"github.com/ruyam/kamps/internal/format"
 	"github.com/ruyam/kamps/internal/model"
 	"github.com/ruyam/kamps/internal/source"
 	"github.com/ruyam/kamps/internal/store"
@@ -25,7 +28,7 @@ func PrintPlain(w io.Writer, src source.Source, cfg config.Config) {
 			state.Apply(assignments, materials)
 		}
 	}
-	sortSlice(assignments)
+	format.SortAssignments(assignments)
 
 	fmt.Fprintf(w, "kamps (plain mode) — source: %s\n", src.Label())
 	fmt.Fprintf(w, "%d courses · %d assignments · %d materials\n", len(courses), len(assignments), len(materials))
@@ -53,7 +56,7 @@ func PrintPlain(w io.Writer, src source.Source, cfg config.Config) {
 		if mt.Downloaded {
 			state = "local"
 		}
-		fmt.Fprintf(w, "  %-8s %-6s %-40s %s\n", sectionOr(mt.Section), state, mt.Name, humanSize(mt.Size))
+		fmt.Fprintf(w, "  %-8s %-6s %-40s %s\n", sectionOr(mt.Section), state, mt.Name, format.HumanSize(mt.Size))
 	}
 }
 

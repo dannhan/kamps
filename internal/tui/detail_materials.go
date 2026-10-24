@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/ruyam/kamps/internal/format"
 	"github.com/ruyam/kamps/internal/model"
 )
 
@@ -64,7 +65,7 @@ func (m *App) materialDetailLines(n node, width int) []string {
 			addKV("kind", material.Kind, stRow)
 		}
 		if material.Size > 0 {
-			addKV("size", humanSize(material.Size), stRow)
+			addKV("size", format.HumanSize(material.Size), stRow)
 		}
 		state, style := materialTreeState(material)
 		addKV("state", state, style)
@@ -118,7 +119,7 @@ func materialSizeSummary(files []model.Material) string {
 	}
 	parts := []string{}
 	if total > 0 {
-		parts = append(parts, humanSize(total))
+		parts = append(parts, format.HumanSize(total))
 	}
 	if unknown > 0 {
 		parts = append(parts, fmt.Sprintf("%d unknown", unknown))

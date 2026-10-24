@@ -48,7 +48,9 @@
 //	window.go       viewport windows and scroll hints
 //	format.go       shared formatting helpers
 //	numbers.go      small integer helpers
-//	plain.go        non-TTY snapshot (also reachable without Bubble Tea)
+//
+// The non-TTY snapshot lives in internal/plain and does not import this
+// package.
 //
 // Tests live next to the feature they cover: task_tree_test.go,
 // task_rows_test.go, materials_tree_test.go, search_test.go, detail_test.go,

@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -10,43 +9,11 @@ import (
 	"github.com/ruyam/kamps/internal/model"
 )
 
-func humanSize(n int64) string {
-	if n <= 0 {
-		return "—"
-	}
-	const unit = 1024
-	if n < unit {
-		return fmt.Sprintf("%d B", n)
-	}
-	units := []string{"KB", "MB", "GB"}
-	f := float64(n)
-	i := -1
-	for f >= unit && i < len(units)-1 {
-		f /= unit
-		i++
-	}
-	return fmt.Sprintf("%.1f %s", f, units[i])
-}
-
 func plural(n int, one, many string) string {
 	if n == 1 {
 		return one
 	}
 	return many
-}
-
-func lessAssignment(a, b model.Assignment) bool {
-	if a.HasDue != b.HasDue {
-		return a.HasDue // dated items first
-	}
-	if a.HasDue && !a.Due.Equal(b.Due) {
-		return a.Due.Before(b.Due)
-	}
-	return a.ID < b.ID
-}
-
-func sortSlice(s []model.Assignment) {
-	sort.Slice(s, func(i, j int) bool { return lessAssignment(s[i], s[j]) })
 }
 
 func flagChar(t model.Triage) string {

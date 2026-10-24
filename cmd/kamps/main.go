@@ -15,6 +15,7 @@ import (
 	xterm "github.com/charmbracelet/x/term"
 
 	"github.com/ruyam/kamps/internal/config"
+	"github.com/ruyam/kamps/internal/plain"
 	"github.com/ruyam/kamps/internal/source"
 	"github.com/ruyam/kamps/internal/tui"
 )
@@ -51,7 +52,7 @@ func main() {
 
 	// Non-interactive fallback: piping `kamps | less` should still work.
 	if !isTTY(os.Stdout) {
-		tui.PrintPlain(os.Stdout, src, cfg)
+		plain.PrintPlain(os.Stdout, src, cfg)
 		return
 	}
 

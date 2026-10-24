@@ -51,7 +51,14 @@ flowchart TD
         Tree["tree.go + task/material files\nflattened nodes + rows"]
         Detail["detail.go\nsplit pane"]
         Frame["frame.go / row.go\nshell, hints, bands"]
-        PlainMode["plain.go\nPrintPlain()"]
+    end
+
+    subgraph PlainPkg["Plain output (internal/plain)"]
+        PlainMode["plain.PrintPlain()"]
+    end
+
+    subgraph FormatPkg["Formatting (internal/format)"]
+        Formatter["HumanSize / SortAssignments"]
     end
 
     subgraph External["Terminal & Clipboard"]
@@ -77,8 +84,10 @@ flowchart TD
     TUIApp --> Tree
     TUIApp --> Detail
     TUIApp --> Frame
+    TUIApp --> Formatter
     TUIApp --> AltScreen
     TUIApp -. "y / enter (commit preview)" .-> OSC52
+    PlainMode --> Formatter
 
     SourceInterface --> ModelPkg
     StoreState --> ModelPkg
@@ -99,7 +108,9 @@ There is no HTTP server, database, or daemon. Kamps is a single local binary.
 | `model` | [`internal/model`](../internal/model/model.go) | Pure domain types. Defines courses, assignments, materials, and the triage enum. | [`Course`](../internal/model/model.go), [`Assignment`](../internal/model/model.go), [`Material`](../internal/model/model.go), [`Triage`](../internal/model/model.go) |
 | `source` | [`internal/source`](../internal/source/source.go) | Abstract data-provider interface (`Source`) and the bundled demo implementation (`Demo`). | [`Source`](../internal/source/source.go), [`Demo`](../internal/source/demo.go), [`NewDemo()`](../internal/source/demo.go) |
 | `store` | [`internal/store`](../internal/store/store.go) | Atomically persist triage decisions and download flags to JSON; load and apply them over fresh source data. | [`State`](../internal/store/store.go), [`Load()`](../internal/store/store.go), [`State.Save()`](../internal/store/store.go), [`State.Apply()`](../internal/store/store.go) |
-| `tui` | [`internal/tui`](../internal/tui/app.go) | Full Bubble Tea user interface: screen management, navigation, tree flattening, search, detail pane, styling, keyboard dispatch, and plain-mode rendering. | [`App`](../internal/tui/app.go), [`New()`](../internal/tui/app.go), [`PrintPlain()`](../internal/tui/plain.go) |
+| `format` | [`internal/format`](../internal/format/format.go) | Shared display formatting and assignment ordering for both UI modes. | [`HumanSize()`](../internal/format/format.go), [`LessAssignment()`](../internal/format/format.go), [`SortAssignments()`](../internal/format/format.go) |
+| `plain` | [`internal/plain`](../internal/plain/plain.go) | Non-interactive snapshot for pipes, files, and CI. Shares source/store with the TUI but has no Bubble Tea dependency. | [`PrintPlain()`](../internal/plain/plain.go) |
+| `tui` | [`internal/tui`](../internal/tui/app.go) | Full Bubble Tea user interface: screen management, navigation, tree flattening, search, detail pane, styling, and keyboard dispatch. | [`App`](../internal/tui/app.go), [`New()`](../internal/tui/app.go) |
 
 ### TUI file map
 
@@ -130,7 +141,6 @@ There is no HTTP server, database, or daemon. Kamps is a single local binary.
 | [`window.go`](../internal/tui/window.go) | Viewport windows and scroll hints |
 | [`format.go`](../internal/tui/format.go) | Shared formatting helpers such as `taskLine`, `shortCode`, `lastSyncLine` |
 | [`numbers.go`](../internal/tui/numbers.go) | Small integer helpers |
-| [`plain.go`](../internal/tui/plain.go) | Non-TTY snapshot with saved state applied |
 
 ---
 
@@ -198,7 +208,7 @@ From [`go.mod`](../go.mod) and direct code imports:
 
 ### Plain mode
 
-[`tui.PrintPlain`](../internal/tui/plain.go) uses the same source and store, but no Bubble Tea loop:
+[`plain.PrintPlain`](../internal/plain/plain.go) uses the same source and store, but no Bubble Tea loop:
 
 1. Call `Courses`, `Assignments`, and `Materials` synchronously.
 2. Load and apply saved state when a state path is configured.
