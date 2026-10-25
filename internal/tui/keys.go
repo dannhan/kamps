@@ -20,9 +20,14 @@ type KeyMap struct {
 	Ignore      key.Binding
 	Undecide    key.Binding
 	All         key.Binding
+	Range       key.Binding
+	Invert      key.Binding
+	Undo        key.Binding
 	Commit      key.Binding
+	Write       key.Binding
 	Copy        key.Binding
 	Drop        key.Binding
+	DropAll     key.Binding
 	Search      key.Binding
 	Filter      key.Binding
 	Sync        key.Binding
@@ -50,15 +55,20 @@ func DefaultKeys() KeyMap {
 		Ignore:   key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "ignore")),
 		Undecide: key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "undecided")),
 		All:      key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "select all")),
+		Range:    key.NewBinding(key.WithKeys("V"), key.WithHelp("V", "range select")),
+		Invert:   key.NewBinding(key.WithKeys("*"), key.WithHelp("*", "invert visible")),
+		Undo:     key.NewBinding(key.WithKeys("ctrl+z"), key.WithHelp("ctrl+z", "undo triage")),
 		Commit:   key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "commit tab")),
+		Write:    key.NewBinding(key.WithKeys("w"), key.WithHelp("w", "write queue")),
 		Copy:     key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "copy preview")),
 		Drop:     key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "drop from queue")),
+		DropAll:  key.NewBinding(key.WithKeys("X"), key.WithHelp("X", "drop all queued")),
 		Search:   key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
 		Filter:   key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter")),
 		Sync:     key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sync")),
 		Download: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "download")),
 		Open:     key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open link")),
-		Confirm:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "detail / copy")),
+		Confirm:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "detail / write")),
 		Back:     key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		Help:     key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "more")),
 		Quit:     key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
@@ -74,8 +84,8 @@ func (k KeyMap) ShortHelp() []key.Binding {
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right, k.NextTab, k.PrevTab, k.Tabs},
-		{k.Select, k.All, k.Track, k.Missed, k.Ignore, k.Undecide},
-		{k.Search, k.Filter, k.Commit, k.Copy, k.Drop, k.Sync, k.Download, k.Open},
+		{k.Select, k.All, k.Range, k.Invert, k.Track, k.Missed, k.Ignore, k.Undecide, k.Undo},
+		{k.Search, k.Filter, k.Commit, k.Write, k.Copy, k.Drop, k.DropAll, k.Sync, k.Download, k.Open},
 		{k.Back, k.Help, k.Quit},
 	}
 }
@@ -119,6 +129,12 @@ func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.toggleSelect()
 	case "a":
 		m.selectAll()
+	case "V":
+		m.startRange()
+	case "*":
+		m.invertVisible()
+	case "ctrl+z":
+		m.undoTriage()
 	case "t":
 		m.applyTriage(model.Tracked)
 	case "m":
@@ -130,13 +146,18 @@ func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "c":
 		m.openCommit()
 	case "esc":
-		if m.tab == TabCommit {
+		if m.visual {
+			m.back()
+		} else if m.tab == TabCommit {
 			m.closeCommit()
 		} else if !m.clearSearch() && !m.clearFilter() {
 			m.back()
 		}
 	case "enter":
 		if m.tab == TabCommit {
+			if m.cfg.CommitFile != "" || m.cfg.ExportFormat == "taskwarrior" {
+				return m, m.writeCommitPreview()
+			}
 			return m, m.copyCommitPreview()
 		}
 		m.enter()
@@ -154,6 +175,10 @@ func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.download()
 	case "o":
 		return m, m.openExternal()
+	case "w":
+		if m.tab == TabCommit {
+			return m, m.writeCommitPreview()
+		}
 	case "y":
 		if m.tab == TabCommit {
 			return m, m.copyCommitPreview()
@@ -161,6 +186,10 @@ func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "x":
 		if m.tab == TabCommit {
 			m.dropCommitItem()
+		}
+	case "X":
+		if m.tab == TabCommit {
+			m.dropAllCommit()
 		}
 	}
 	return m, nil

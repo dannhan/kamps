@@ -13,7 +13,8 @@ func TestCommitPreviewAndDrop(t *testing.T) {
 	app.pending = map[string]model.Triage{"K901000": model.Tracked, "K901001": model.Missed}
 	app.byID("K901000").Triage = model.Tracked
 
-	want := app.taskLine(*app.byID("K901000")) + "\n" + app.taskLine(*app.byID("K901001"))
+	closed := strings.Replace(app.taskLine(*app.byID("K901001")), "- [ ]", "- [x]", 1) + " #missed"
+	want := app.taskLine(*app.byID("K901000")) + "\n" + closed
 	if got := app.commitPreviewText(); got != want {
 		t.Fatalf("preview = %q, want %q", got, want)
 	}

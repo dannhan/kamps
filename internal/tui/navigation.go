@@ -4,6 +4,8 @@ func (m *App) switchTab(tab Tab) {
 	if tab < 0 || tab >= tabCount {
 		return
 	}
+	m.visual = false
+	m.dropAllArmed = false
 	m.searching = false
 	m.search = ""
 	m.tabFilters[m.tab] = m.filter
@@ -28,8 +30,10 @@ func (m *App) move(delta int) {
 	switch m.tab {
 	case TabTasks:
 		m.taskCursor = clampInt(m.taskCursor+delta, 0, maxInt(0, len(m.taskNodes())-1))
+		m.extendRange()
 	case TabMaterials:
 		m.matCursor = clampInt(m.matCursor+delta, 0, maxInt(0, len(m.matNodes())-1))
+		m.extendRange()
 	case TabSync:
 		m.syncCursor = clampInt(m.syncCursor+delta, 0, 5)
 	case TabCommit:
@@ -132,18 +136,11 @@ func (m *App) toggleSelect() {
 			return
 		}
 		n := nodes[m.matCursor]
-		ids := []string{}
-		switch n.kind {
-		case nodeFile:
+		var ids []string
+		if n.kind == nodeFile {
 			ids = []string{n.mat.ID}
-		case nodeMaterialBucket:
-			for _, material := range m.courseFiles(n.courseID) {
-				if n.bucket == "downloaded" && material.Downloaded || n.bucket == "new" && !material.Downloaded {
-					ids = append(ids, material.ID)
-				}
-			}
-		case nodeCourse:
-			ids = idsOf(m.courseFiles(n.courseID))
+		} else {
+			ids = idsOf(m.materialNodeFiles(n))
 		}
 		toggleSet(m.selectedM, ids)
 	}
@@ -167,4 +164,5 @@ func (m *App) selectAll() {
 func (m *App) back() {
 	m.selected = map[string]bool{}
 	m.selectedM = map[string]bool{}
+	m.visual = false
 }

@@ -1,0 +1,158 @@
+package tui
+
+import (
+	"fmt"
+
+	"github.com/ruyam/kamps/internal/model"
+	"github.com/ruyam/kamps/internal/store"
+)
+
+func (m *App) selectionSet() map[string]bool {
+	if m.tab == TabTasks {
+		return m.selected
+	}
+	return m.selectedM
+}
+
+func (m *App) selectionNodes() ([]node, int) {
+	if m.tab == TabTasks {
+		return m.taskNodes(), m.taskCursor
+	}
+	if m.tab == TabMaterials {
+		return m.matNodes(), m.matCursor
+	}
+	return nil, 0
+}
+
+// nodeSelectionIDs resolves the assignment/material IDs a row stands for.
+func (m *App) nodeSelectionIDs(n node) []string {
+	switch n.kind {
+	case nodeTask:
+		return []string{n.task.ID}
+	case nodeTaskMaterial:
+		return []string{n.task.ID}
+	case nodeFile:
+		return []string{n.mat.ID}
+	case nodeCourse, nodeBucket:
+		if m.tab == TabTasks {
+			return m.taskGroupIDs(n)
+		}
+		return idsOf(m.materialNodeFiles(n))
+	case nodeMaterialBucket, nodeMaterialSection, nodeMaterialFolder:
+		return idsOf(m.materialNodeFiles(n))
+	}
+	return nil
+}
+
+func (m *App) startRange() {
+	nodes, cursor := m.selectionNodes()
+	if cursor < 0 || cursor >= len(nodes) {
+		return
+	}
+	m.visual = true
+	m.rangeAnchor = cursor
+	m.selectionSet() // ensure non-nil
+	for id := range m.selectionSet() {
+		delete(m.selectionSet(), id)
+	}
+	for _, id := range m.nodeSelectionIDs(nodes[cursor]) {
+		m.selectionSet()[id] = true
+	}
+	m.toast = "range select · j/k extend · esc clear"
+	m.toastTicks = 24
+}
+
+func (m *App) extendRange() {
+	if !m.visual {
+		return
+	}
+	nodes, cursor := m.selectionNodes()
+	if cursor < 0 || cursor >= len(nodes) || m.rangeAnchor < 0 || m.rangeAnchor >= len(nodes) {
+		return
+	}
+	set := m.selectionSet()
+	for id := range set {
+		delete(set, id)
+	}
+	start, end := m.rangeAnchor, cursor
+	if start > end {
+		start, end = end, start
+	}
+	for i := start; i <= end; i++ {
+		for _, id := range m.nodeSelectionIDs(nodes[i]) {
+			set[id] = true
+		}
+	}
+}
+
+func (m *App) invertVisible() {
+	if m.tab == TabTasks {
+		for _, a := range m.visible() {
+			if m.selected[a.ID] {
+				delete(m.selected, a.ID)
+			} else {
+				m.selected[a.ID] = true
+			}
+		}
+		return
+	}
+	if m.tab == TabMaterials {
+		for _, material := range m.visibleMaterials() {
+			if m.selectedM[material.ID] {
+				delete(m.selectedM, material.ID)
+			} else {
+				m.selectedM[material.ID] = true
+			}
+		}
+	}
+}
+
+// undoTriage restores the triage values from the last applyTriage call.
+func (m *App) undoTriage() {
+	if m.tab != TabTasks || len(m.undoDecisions) == 0 {
+		m.toast = "nothing to undo"
+		m.toastTicks = 20
+		return
+	}
+	ids := make([]string, 0, len(m.undoDecisions))
+	for id, previous := range m.undoDecisions {
+		ids = append(ids, id)
+		if a := m.byID(id); a != nil {
+			a.Triage = previous
+		}
+		if previous == model.Undecided {
+			delete(m.pending, id)
+		} else {
+			m.pending[id] = previous
+		}
+	}
+	m.updateState(func(s *store.State) {
+		for id, previous := range m.undoDecisions {
+			s.SetDecision(id, previous)
+		}
+	})
+	m.undoDecisions = map[string]model.Triage{}
+	m.toast = fmt.Sprintf("undid %d %s", len(ids), plural(len(ids), "decision", "decisions"))
+	m.toastTicks = 24
+}
+
+// dropAllCommit requires a second press so a stray key cannot empty the queue.
+func (m *App) dropAllCommit() {
+	count := len(m.pending)
+	if count == 0 {
+		m.toast = "queue empty"
+		m.toastTicks = 20
+		return
+	}
+	if !m.dropAllArmed {
+		m.dropAllArmed = true
+		m.toast = fmt.Sprintf("press X again to drop %d queued %s", count, plural(count, "item", "items"))
+		m.toastTicks = 40
+		return
+	}
+	m.pending = map[string]model.Triage{}
+	m.dropAllArmed = false
+	m.clampCursor()
+	m.toast = fmt.Sprintf("dropped %d queued %s", count, plural(count, "item", "items"))
+	m.toastTicks = 24
+}

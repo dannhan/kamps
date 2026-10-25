@@ -22,6 +22,8 @@ const (
 	nodeBucket
 	nodeTaskMaterial
 	nodeMaterialBucket
+	nodeMaterialSection
+	nodeMaterialFolder
 	nodeMaterialAssignment
 )
 
@@ -29,6 +31,7 @@ type node struct {
 	kind     nodeKind
 	courseID int
 	bucket   string
+	section  string
 	key      string
 	parents  []string
 	task     model.Assignment
@@ -53,6 +56,14 @@ func (n node) depth() int {
 func courseKey(id int) string { return fmt.Sprintf("c:%d", id) }
 
 func bucketKey(id int, bucket string) string { return fmt.Sprintf("b:%d:%s", id, bucket) }
+
+func materialSectionKey(courseID int, bucket, section string) string {
+	return fmt.Sprintf("ms:%d:%s:%s", courseID, bucket, section)
+}
+
+func materialFolderKey(courseID int, bucket, section, folder string) string {
+	return fmt.Sprintf("mf:%d:%s:%s:%s", courseID, bucket, section, folder)
+}
 
 func taskKey(id string) string { return "a:" + id }
 

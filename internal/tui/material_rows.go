@@ -48,6 +48,10 @@ func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 			}
 		}
 		content = lead + background(stRow).Render(fmt.Sprintf("%s (%d)", n.bucket, count))
+	case nodeMaterialSection:
+		content = lead + background(stRow).Render(fmt.Sprintf("%s (%d)", n.section, len(m.materialNodeFiles(n))))
+	case nodeMaterialFolder:
+		content = lead + background(stRow).Render(fmt.Sprintf("%s/ (%d)", n.mat.Folder, len(m.materialNodeFiles(n))))
 	case nodeFile:
 		glyph, stateStyle := materialTreeState(n.mat)
 		state := "○"
@@ -66,7 +70,7 @@ func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 	case nodeMaterialAssignment:
 		content = background(triageStyle(n.task.Triage)).Render(flagChar(n.task.Triage)) + background(stFaint).Render(" ⁝ ") + background(stRow).Render("assignment: "+n.task.Name) + background(stRowDim).Render(" · "+n.task.ID)
 	}
-	if (n.kind == nodeCourse || n.kind == nodeMaterialBucket || n.kind == nodeFile) && !open && parent {
+	if (n.kind == nodeCourse || n.kind == nodeMaterialBucket || n.kind == nodeMaterialSection || n.kind == nodeMaterialFolder || n.kind == nodeFile) && !open && parent {
 		content += background(stRowDim).Render("  ⋯")
 	}
 	row := prefix + content
@@ -80,10 +84,12 @@ func (m *App) materialHasChildren(n node) bool {
 		return len(m.courseFiles(n.courseID)) > 0
 	case nodeMaterialBucket:
 		for _, material := range m.courseFiles(n.courseID) {
-			if n.bucket == "downloaded" && material.Downloaded || n.bucket == "new" && !material.Downloaded {
+			if materialBucketMatch(n.bucket, material) {
 				return true
 			}
 		}
+	case nodeMaterialSection, nodeMaterialFolder:
+		return len(m.materialNodeFiles(n)) > 0
 	case nodeFile:
 		return m.assignmentForMaterial(n.mat) != nil
 	}
@@ -106,7 +112,7 @@ func (m *App) materialsContent(width, height int) (string, string, []string, []s
 	if m.detailVisible() {
 		detailHint = "enter hide"
 	}
-	hints := []string{"↑↓ move", "h/l fold", "space select", detailHint, "d download", "o open"}
+	hints := []string{"↑↓ move", "h/l fold", "space select", "V range", detailHint, "d download", "o open"}
 	if m.filter != "all" {
 		hints = append(hints, "esc clear")
 	}

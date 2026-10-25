@@ -46,12 +46,7 @@ func clipboardCmd(text string) tea.Cmd {
 
 // commitPreviewText is exactly what the queue would hand to a todo list.
 func (m *App) commitPreviewText() string {
-	items := m.commitItems()
-	lines := make([]string, 0, len(items))
-	for _, item := range items {
-		lines = append(lines, m.taskLine(item.assignment))
-	}
-	return strings.Join(lines, "\n")
+	return m.commitPreviewTextForFormat()
 }
 
 // copyCommitPreview puts the preview lines on the clipboard, or explains that
@@ -195,5 +190,5 @@ func commitActionLabel(action model.Triage) (string, lipgloss.Style) {
 }
 
 func (m *App) commitContent(width, height int) (string, string, []string, []string) {
-	return "review & commit · y copies the preview", "", []string{"↑↓ move", "y copy", "x drop", "esc back"}, m.commitBody(width, height)
+	return "review & commit · " + m.exportStatusLine(), "", []string{"↑↓ move", "w write", "y copy", "x drop", "X drop all", "esc back"}, m.commitBody(width, height)
 }

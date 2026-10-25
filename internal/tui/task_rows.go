@@ -230,7 +230,7 @@ func (m *App) tasksContent(width, height int) (string, string, []string, []strin
 	if m.detailVisible() {
 		detailHint = "enter hide"
 	}
-	hints := []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", "c commit", filterHint, detailHint}
+	hints := []string{"↑↓ move", "h/l fold", "space select", "V range", "t/m/i decide", "c commit", filterHint, detailHint}
 	leftWidth := width
 	if m.detailVisible() {
 		leftWidth, _ = splitWidths(width)

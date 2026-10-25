@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/ruyam/kamps/internal/model"
@@ -71,18 +70,10 @@ func (m *App) taskLine(a model.Assignment) string {
 	return fmt.Sprintf("- [ ] [%s] %s (%s)%s", m.shortCode(a.CourseID), a.Name, a.ID, due)
 }
 
-// lastSyncLine summarises the last sync: when, what, and what came in.
+// lastSyncLine summarises the last successful load.
 func (m *App) lastSyncLine() string {
-	name := "—"
-	if len(m.courses) > 0 {
-		name = fmt.Sprintf("%d %s", m.courses[0].ID, m.courses[0].Name)
+	if m.lastSync.IsZero() {
+		return "never"
 	}
-	fresh := 0
-	for _, mt := range m.materials {
-		if !mt.Downloaded {
-			fresh++
-		}
-	}
-	stamp := time.Now().Add(-20 * time.Hour).Format("2006-01-02 15:04")
-	return fmt.Sprintf("%s · %s (+%d materials)", stamp, name, fresh)
+	return fmt.Sprintf("%s · %s", m.lastSync.Format("2006-01-02 15:04"), m.src.Label())
 }

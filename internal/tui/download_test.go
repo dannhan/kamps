@@ -108,7 +108,7 @@ func TestDownloadFetchesFileAndMarksDownloaded(t *testing.T) {
 	if !app.materialByID("M1").Downloaded {
 		t.Fatal("material was not marked downloaded")
 	}
-	if !app.state.Downloads["M1"] {
+	if _, ok := app.state.Downloads["M1"]; !ok {
 		t.Fatal("download was not persisted to state")
 	}
 }
@@ -124,7 +124,7 @@ func TestDownloadFailureLeavesFlagUnset(t *testing.T) {
 	if app.materialByID("M1").Downloaded {
 		t.Fatal("failed download must not be marked downloaded")
 	}
-	if app.state.Downloads["M1"] {
+	if _, ok := app.state.Downloads["M1"]; ok {
 		t.Fatal("failed download must not be persisted")
 	}
 	if got := app.toast; got == "" || !strings.Contains(got, "no longer available") {

@@ -14,6 +14,7 @@ import (
 	"github.com/ruyam/kamps/internal/library"
 	"github.com/ruyam/kamps/internal/model"
 	"github.com/ruyam/kamps/internal/source"
+	"github.com/ruyam/kamps/internal/store"
 )
 
 type downloadProgressMsg struct {
@@ -57,8 +58,17 @@ func (m *App) materialDestination(material model.Material) string {
 		} else if course.Code != "" {
 			courseName = course.Code
 		}
+		if course.WorkspacePath != "" {
+			if path, err := library.SubPath(course.WorkspacePath, material.Section, material.Folder, material.Name); err == nil {
+				return path
+			}
+		}
 	}
-	return library.SectionPath(m.cfg.LibraryDir, courseName, material.Section, material.Name)
+	path, err := library.MaterialPath(m.cfg.LibraryDir, courseName, material.Section, material.Folder, material.Name)
+	if err != nil {
+		return library.SectionPath(m.cfg.LibraryDir, courseName, material.Section, material.Name)
+	}
+	return path
 }
 
 func (m *App) materialByID(id string) *model.Material {
@@ -70,13 +80,15 @@ func (m *App) materialByID(id string) *model.Material {
 	return nil
 }
 
-func (m *App) markDownloaded(id string) {
+func (m *App) markDownloaded(id, path string) {
 	material := m.materialByID(id)
 	if material == nil {
 		return
 	}
 	material.Downloaded = true
-	m.state.SetDownloaded(id, true)
+	m.updateState(func(s *store.State) {
+		s.SetDownloadRecord(id, store.DownloadRecord{Path: path})
+	})
 }
 
 // startDownload runs one material download off the UI goroutine.

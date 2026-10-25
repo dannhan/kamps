@@ -13,7 +13,7 @@ import (
 
 func TestTaskFooterKeepsPriorityAndMoreHint(t *testing.T) {
 	full := taskFooterHints(200)
-	want := "↑↓ move · h/l fold · space select · t/m/i decide · c commit · f filter · enter detail · ? more"
+	want := "↑↓ move · h/l fold · space select · V range · t/m/i decide · c commit · f filter · enter detail · ? more"
 	if got := stripANSI(full); got != want {
 		t.Fatalf("full footer = %q, want %q", got, want)
 	}
