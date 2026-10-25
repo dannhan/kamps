@@ -23,7 +23,6 @@ const (
 	nodeFile
 	nodeBucket
 	nodeTaskMaterial
-	nodeMaterialBucket
 	nodeMaterialSection
 	nodeMaterialFolder
 	nodeMaterialAssignment
@@ -47,7 +46,7 @@ func (n node) depth() int {
 	switch n.kind {
 	case nodeCourse, nodeMaterialAssignment:
 		return 0
-	case nodeTask, nodeMaterialBucket:
+	case nodeTask:
 		return 1
 	case nodeFile:
 		return 2
@@ -59,12 +58,12 @@ func courseKey(id int) string { return fmt.Sprintf("c:%d", id) }
 
 func bucketKey(id int, bucket string) string { return fmt.Sprintf("b:%d:%s", id, bucket) }
 
-func materialSectionKey(courseID int, bucket, section string) string {
-	return fmt.Sprintf("ms:%d:%s:%s", courseID, bucket, section)
+func materialSectionKey(courseID int, section string) string {
+	return fmt.Sprintf("ms:%d:%s", courseID, section)
 }
 
-func materialFolderKey(courseID int, bucket, section, folder string) string {
-	return fmt.Sprintf("mf:%d:%s:%s:%s", courseID, bucket, section, folder)
+func materialFolderKey(courseID int, section, folder string) string {
+	return fmt.Sprintf("mf:%d:%s:%s", courseID, section, folder)
 }
 
 func taskKey(id string) string { return "a:" + id }

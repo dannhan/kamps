@@ -42,37 +42,28 @@ func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 			name = course.Name
 		}
 		content = lead + background(stCode.Bold(true)).Render(name)
-	case nodeMaterialBucket:
-		count := 0
-		for _, material := range m.courseFiles(n.courseID) {
-			if (n.bucket == "downloaded") == material.Downloaded {
-				count++
-			}
-		}
-		content = lead + background(stRow).Render(fmt.Sprintf("%s (%d)", n.bucket, count))
 	case nodeMaterialSection:
 		content = lead + background(stRow).Render(fmt.Sprintf("%s (%d)", n.section, len(m.materialNodeFiles(n))))
 	case nodeMaterialFolder:
 		content = lead + background(stRow).Render(fmt.Sprintf("%s/ (%d)", n.mat.Folder, len(m.materialNodeFiles(n))))
 	case nodeFile:
-		glyph, stateStyle := materialTreeState(n.mat)
+		_, stateStyle := materialTreeState(n.mat)
 		state := "○"
-		if glyph == "downloaded" {
+		if n.mat.Downloaded {
 			state = "●"
 		}
 		caret := ""
 		if parent {
 			caret = h.style(stFaint).Render(caretGlyph(open)) + h.style(stRow).Render(" ")
 		}
-		nameWidth := maxInt(1, inner-lipgloss.Width(prefix)-12-lipgloss.Width(caret))
+		nameWidth := maxInt(1, inner-lipgloss.Width(prefix)-6-lipgloss.Width(caret))
 		content = background(stateStyle).Render(state) +
 			background(stRow).Render(" ") + h.markCell(selected) + background(stRow).Render(" ") + caret +
-			background(stRow).Render(ansi.Truncate(n.mat.Name, nameWidth, "…")) +
-			background(stateStyle).Render(" "+glyph)
+			background(stRow).Render(ansi.Truncate(n.mat.Name, nameWidth, "…"))
 	case nodeMaterialAssignment:
 		content = background(triageStyle(n.task.Triage)).Render(flagChar(n.task.Triage)) + background(stFaint).Render(" ⁝ ") + background(stRow).Render("assignment: "+n.task.Name) + background(stRowDim).Render(" · "+n.task.ID)
 	}
-	if (n.kind == nodeCourse || n.kind == nodeMaterialBucket || n.kind == nodeMaterialSection || n.kind == nodeMaterialFolder || n.kind == nodeFile) && !open && parent {
+	if (n.kind == nodeCourse || n.kind == nodeMaterialSection || n.kind == nodeMaterialFolder || n.kind == nodeFile) && !open && parent {
 		content += background(stRowDim).Render("  ⋯")
 	}
 	row := prefix + content
@@ -84,12 +75,6 @@ func (m *App) materialHasChildren(n node) bool {
 	switch n.kind {
 	case nodeCourse:
 		return len(m.courseFiles(n.courseID)) > 0
-	case nodeMaterialBucket:
-		for _, material := range m.courseFiles(n.courseID) {
-			if materialBucketMatch(n.bucket, material) {
-				return true
-			}
-		}
 	case nodeMaterialSection, nodeMaterialFolder:
 		return len(m.materialNodeFiles(n)) > 0
 	case nodeFile:

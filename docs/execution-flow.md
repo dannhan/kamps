@@ -150,7 +150,7 @@ Every keystroke arrives as a `tea.KeyMsg` and goes through [`App.handleKey`](../
 
 #### Downloads
 
-[`App.download()`](../internal/tui/materials.go) only acts on Materials. It prefers checked files; with no selection it uses the focused file, bucket, or course row. Files are streamed by the source's `Download` method into `<library_dir>/<course>/<week>/<folder>/<filename>` as a `tea.Cmd`; on completion the material is marked `Downloaded`, recorded in the store, and saved. External links are not downloaded: `o` opens them in the browser. Demo mode has no downloader and keeps the flag-only behaviour.
+[`App.download()`](../internal/tui/materials.go) only acts on Materials. It prefers checked files; with no selection it uses the focused file, week, folder, or course row. Files are streamed by the source's `Download` method into `<library_dir>/<course>/<week>/<folder>/<filename>` as a `tea.Cmd`; on completion the material is marked `Downloaded`, recorded in the store, and saved. External links are not downloaded: `o` opens them in the browser. Demo mode has no downloader and keeps the flag-only behaviour.
 
 #### Commit queue
 
@@ -194,7 +194,7 @@ A crash mid-write leaves either the old file or the new file, never a half-writt
 #### Tab bodies
 
 - **Tasks:** `taskNodes()` flattens term → course → bucket → task → attached materials. The visible list applies filter + search first, so counts and rows agree. The cursor window is chosen by `windowRange`.
-- **Materials:** `matNodes()` flattens course → download-state bucket → file → linked assignment.
+- **Materials:** `matNodes()` flattens course → week → folder → file → linked assignment.
 - **Sync:** fixed status rows. The data is illustrative; `s` animates but does not reload the source.
 - **Commit:** groups pending items by action, shows task lines, overdue warnings, and the demo `similarManualTask` hint.
 

@@ -102,7 +102,7 @@ func TestMaterialDetailLines(t *testing.T) {
 	app.tab = TabMaterials
 	nodes := app.matNodes()
 
-	var file, course, bucket, assignment *node
+	var file, course, assignment *node
 	for i := range nodes {
 		n := &nodes[i]
 		switch n.kind {
@@ -114,18 +114,14 @@ func TestMaterialDetailLines(t *testing.T) {
 			if course == nil {
 				course = n
 			}
-		case nodeMaterialBucket:
-			if bucket == nil {
-				bucket = n
-			}
 		case nodeMaterialAssignment:
 			if assignment == nil {
 				assignment = n
 			}
 		}
 	}
-	if file == nil || course == nil || bucket == nil {
-		t.Fatalf("demo materials missing rows: file=%v course=%v bucket=%v", file != nil, course != nil, bucket != nil)
+	if file == nil || course == nil {
+		t.Fatalf("demo materials missing rows: file=%v course=%v", file != nil, course != nil)
 	}
 
 	fileLines := stripANSI(strings.Join(app.materialDetailLines(*file, 40), "\n"))
@@ -143,11 +139,6 @@ func TestMaterialDetailLines(t *testing.T) {
 	}
 	if strings.Contains(courseLines, "states") || strings.Contains(courseLines, "tasks") {
 		t.Fatalf("materials course detail leaked task fields: %q", courseLines)
-	}
-
-	bucketLines := stripANSI(strings.Join(app.materialDetailLines(*bucket, 40), "\n"))
-	if !strings.Contains(bucketLines, bucket.bucket) || !strings.Contains(bucketLines, "files") {
-		t.Fatalf("bucket detail = %q", bucketLines)
 	}
 
 	if assignment != nil {

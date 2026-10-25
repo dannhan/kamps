@@ -46,10 +46,6 @@ func (m *App) materialDetailLines(n node, width int) []string {
 		}
 		add("")
 		addFiles(m.courseFiles(n.courseID))
-	case nodeMaterialBucket:
-		add(stPaneTitle.Render(n.bucket + " files"))
-		add("")
-		addFiles(m.materialNodeFiles(n))
 	case nodeFile:
 		material := n.mat
 		add(stCode.Render(material.ID))

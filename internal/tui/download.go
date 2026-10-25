@@ -120,7 +120,7 @@ func (m *App) startDownload(material model.Material) tea.Cmd {
 }
 
 // materialTargets resolves the Materials-tab selection: checked rows first,
-// otherwise the focused file, bucket or course.
+// otherwise the focused file, week, folder, or course.
 func (m *App) materialTargets() []model.Material {
 	var targets []model.Material
 	for _, material := range m.materials {

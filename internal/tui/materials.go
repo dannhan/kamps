@@ -47,8 +47,8 @@ func (m *App) matchesMaterialFilter(material model.Material) bool {
 	return true
 }
 
-// matNodes is the Materials pane: course ▸ state bucket ▸ file. Weeks keep the
-// source's own label; an empty section shows as "general".
+// matNodes is the Materials pane: course ▸ week ▸ folder ▸ file. Weeks keep
+// the source's own label; an empty section shows as week-0.
 func (m *App) matNodes() []node {
 	byCourse := map[int][]model.Material{}
 	for _, material := range m.visibleMaterials() {
@@ -66,127 +66,87 @@ func (m *App) matNodes() []node {
 		if !m.isOpen(course.key) {
 			continue
 		}
-		buckets := []struct {
-			label string
-			keep  func(model.Material) bool
-		}{{"downloaded", func(mt model.Material) bool { return mt.Downloaded }}, {"new", func(mt model.Material) bool { return !mt.Downloaded }}}
-		for _, bucket := range buckets {
-			var files []model.Material
-			for _, material := range byCourse[courseID] {
-				if bucket.keep(material) {
-					files = append(files, material)
-				}
+
+		emitFile := func(file model.Material, fileParents []string) {
+			fileNode := node{kind: nodeFile, courseID: courseID, mat: file, key: materialKey(file.ID), parents: fileParents}
+			out = append(out, fileNode)
+			if assignment := m.assignmentForMaterial(file); assignment != nil && m.isOpen(fileNode.key) {
+				appendParents := append(append([]string(nil), fileParents...), fileNode.key)
+				out = append(out, node{kind: nodeMaterialAssignment, courseID: courseID, task: *assignment, key: "ma:" + assignment.ID + ":" + file.ID, parents: appendParents})
 			}
-			if len(files) == 0 {
-				continue
+		}
+
+		bySection := map[string][]model.Material{}
+		var sections []string
+		for _, file := range byCourse[courseID] {
+			label := sectionLabel(file.Section)
+			if _, ok := bySection[label]; !ok {
+				sections = append(sections, label)
 			}
-			key := materialBucketKey(courseID, bucket.label)
-			parents := []string{course.key}
-			out = append(out, node{kind: nodeMaterialBucket, courseID: courseID, bucket: bucket.label, key: key, parents: parents})
-			if !m.isOpen(key) {
+			bySection[label] = append(bySection[label], file)
+		}
+		sort.Slice(sections, func(i, j int) bool { return sectionLess(sections[i], sections[j]) })
+		for _, section := range sections {
+			sectionFiles := bySection[section]
+			sectionKey := materialSectionKey(courseID, section)
+			out = append(out, node{kind: nodeMaterialSection, courseID: courseID, section: section, key: sectionKey, parents: []string{course.key}})
+			if !m.isOpen(sectionKey) {
 				continue
 			}
 
-			emitFile := func(file model.Material, fileParents []string) {
-				fileNode := node{kind: nodeFile, courseID: courseID, mat: file, key: materialKey(file.ID), parents: fileParents}
-				out = append(out, fileNode)
-				if assignment := m.assignmentForMaterial(file); assignment != nil && m.isOpen(fileNode.key) {
-					appendParents := append(append([]string(nil), fileParents...), fileNode.key)
-					out = append(out, node{kind: nodeMaterialAssignment, courseID: courseID, task: *assignment, key: "ma:" + assignment.ID + ":" + file.ID, parents: appendParents})
-				}
-			}
-
-			bySection := map[string][]model.Material{}
-			var sections []string
-			for _, file := range files {
-				label := sectionLabel(file.Section)
-				if _, ok := bySection[label]; !ok {
-					sections = append(sections, label)
-				}
-				bySection[label] = append(bySection[label], file)
-			}
-			sort.Slice(sections, func(i, j int) bool { return sectionLess(sections[i], sections[j]) })
-			for _, section := range sections {
-				sectionFiles := bySection[section]
-				sectionKey := materialSectionKey(courseID, bucket.label, section)
-				out = append(out, node{kind: nodeMaterialSection, courseID: courseID, bucket: bucket.label, section: section, key: sectionKey, parents: []string{course.key, key}})
-				if !m.isOpen(sectionKey) {
+			byFolder := map[string][]model.Material{}
+			var folders []string
+			var direct []model.Material
+			for _, file := range sectionFiles {
+				if file.Folder == "" {
+					direct = append(direct, file)
 					continue
 				}
-
-				byFolder := map[string][]model.Material{}
-				var folders []string
-				var direct []model.Material
-				for _, file := range sectionFiles {
-					if file.Folder == "" {
-						direct = append(direct, file)
-						continue
-					}
-					if _, ok := byFolder[file.Folder]; !ok {
-						folders = append(folders, file.Folder)
-					}
-					byFolder[file.Folder] = append(byFolder[file.Folder], file)
+				if _, ok := byFolder[file.Folder]; !ok {
+					folders = append(folders, file.Folder)
 				}
-				sort.Strings(folders)
-				for _, folder := range folders {
-					folderFiles := byFolder[folder]
-					sort.Slice(folderFiles, func(i, j int) bool { return folderFiles[i].Name < folderFiles[j].Name })
-					folderKey := materialFolderKey(courseID, bucket.label, section, folder)
-					out = append(out, node{kind: nodeMaterialFolder, courseID: courseID, bucket: bucket.label, section: section, key: folderKey, parents: []string{course.key, key, sectionKey}, mat: model.Material{Folder: folder}})
-					if !m.isOpen(folderKey) {
-						continue
-					}
-					for _, file := range folderFiles {
-						emitFile(file, []string{course.key, key, sectionKey, folderKey})
-					}
+				byFolder[file.Folder] = append(byFolder[file.Folder], file)
+			}
+			sort.Strings(folders)
+			for _, folder := range folders {
+				folderFiles := byFolder[folder]
+				sort.Slice(folderFiles, func(i, j int) bool { return folderFiles[i].Name < folderFiles[j].Name })
+				folderKey := materialFolderKey(courseID, section, folder)
+				out = append(out, node{kind: nodeMaterialFolder, courseID: courseID, section: section, key: folderKey, parents: []string{course.key, sectionKey}, mat: model.Material{Folder: folder}})
+				if !m.isOpen(folderKey) {
+					continue
 				}
-				sort.Slice(direct, func(i, j int) bool { return direct[i].Name < direct[j].Name })
-				for _, file := range direct {
-					emitFile(file, []string{course.key, key, sectionKey})
+				for _, file := range folderFiles {
+					emitFile(file, []string{course.key, sectionKey, folderKey})
 				}
+			}
+			sort.Slice(direct, func(i, j int) bool { return direct[i].Name < direct[j].Name })
+			for _, file := range direct {
+				emitFile(file, []string{course.key, sectionKey})
 			}
 		}
 	}
 	return out
 }
 
-func materialBucketKey(courseID int, bucket string) string {
-	return fmt.Sprintf("mb:%d:%s", courseID, bucket)
-}
-
 // materialNodeFiles lists the materials a row stands for: the file itself,
-// every file in a state bucket, every file in a week, or every file in a
-// course.
+// every visible file in a week or folder, or every file in a course.
 func (m *App) materialNodeFiles(n node) []model.Material {
 	switch n.kind {
 	case nodeFile:
 		return []model.Material{n.mat}
-	case nodeMaterialBucket:
-		files := []model.Material{}
-		for _, material := range m.courseFiles(n.courseID) {
-			if n.bucket == "downloaded" && material.Downloaded || n.bucket == "new" && !material.Downloaded {
-				files = append(files, material)
-			}
-		}
-		return files
 	case nodeMaterialSection:
 		files := []model.Material{}
-		for _, material := range m.courseFiles(n.courseID) {
-			if !materialBucketMatch(n.bucket, material) {
-				continue
-			}
-			if sectionLabel(material.Section) == n.section {
+		for _, material := range m.visibleMaterials() {
+			if material.CourseID == n.courseID && sectionLabel(material.Section) == n.section {
 				files = append(files, material)
 			}
 		}
 		return files
 	case nodeMaterialFolder:
 		files := []model.Material{}
-		for _, material := range m.courseFiles(n.courseID) {
-			if !materialBucketMatch(n.bucket, material) {
-				continue
-			}
-			if sectionLabel(material.Section) == n.section && material.Folder == n.mat.Folder {
+		for _, material := range m.visibleMaterials() {
+			if material.CourseID == n.courseID && sectionLabel(material.Section) == n.section && material.Folder == n.mat.Folder {
 				files = append(files, material)
 			}
 		}
@@ -197,12 +157,8 @@ func (m *App) materialNodeFiles(n node) []model.Material {
 	return nil
 }
 
-func materialBucketMatch(bucket string, material model.Material) bool {
-	return bucket == "downloaded" && material.Downloaded || bucket == "new" && !material.Downloaded
-}
-
 // materialNodeIDs lists the material IDs a row stands for: the file itself,
-// every file in a state bucket, or every file in a course/week.
+// every file in a week, folder, or course.
 func (m *App) materialNodeIDs(n node) []string {
 	return idsOf(m.materialNodeFiles(n))
 }

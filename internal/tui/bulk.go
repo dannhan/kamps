@@ -38,7 +38,7 @@ func (m *App) nodeSelectionIDs(n node) []string {
 			return m.taskGroupIDs(n)
 		}
 		return idsOf(m.materialNodeFiles(n))
-	case nodeMaterialBucket, nodeMaterialSection, nodeMaterialFolder:
+	case nodeMaterialSection, nodeMaterialFolder:
 		return idsOf(m.materialNodeFiles(n))
 	}
 	return nil

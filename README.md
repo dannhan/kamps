@@ -69,7 +69,7 @@ Handy keys:
 | key | action |
 |---|---|
 | `↑↓` / `jk` | move |
-| `hl` | fold / open (courses, sections, folders, buckets) |
+| `hl` | fold / open (courses, sections, folders, task buckets) |
 | `tab`, `1`–`4` | switch tabs |
 | `enter` | open / close the detail pane (Tasks, Materials); write the queue (Commit) |
 | `space`, `a` | select item / select all |

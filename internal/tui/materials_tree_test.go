@@ -7,17 +7,17 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func TestMaterialsTreeHasStateBucketsAndAttachedAssignments(t *testing.T) {
+func TestMaterialsTreeHasWeeksAndAttachedAssignments(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabMaterials
 	nodes := app.matNodes()
-	foundBucket, foundAssignment := false, false
+	foundSection, foundAssignment := false, false
 	for _, n := range nodes {
-		foundBucket = foundBucket || n.kind == nodeMaterialBucket
+		foundSection = foundSection || n.kind == nodeMaterialSection
 		foundAssignment = foundAssignment || n.kind == nodeMaterialAssignment && n.task.ID == "K165483"
 	}
-	if !foundBucket || !foundAssignment {
-		t.Fatalf("Materials tree lacks state bucket or attached assignment: bucket=%v assignment=%v", foundBucket, foundAssignment)
+	if !foundSection || !foundAssignment {
+		t.Fatalf("Materials tree lacks a week or attached assignment: section=%v assignment=%v", foundSection, foundAssignment)
 	}
 	app.filter = "downloaded"
 	for _, n := range app.matNodes() {
@@ -111,5 +111,32 @@ func TestMaterialParentRowsShowCaretAndMark(t *testing.T) {
 	row = stripANSI(app.matTreeRow(nodes, fileIndex, 98, false))
 	if !strings.Contains(row, markEmpty+" ▸ ") {
 		t.Fatalf("folded file should show a right caret before its name: %q", row)
+	}
+}
+
+func TestMaterialRowsShowDownloadedMarkerOnly(t *testing.T) {
+	app := demoApp(t)
+	app.tab = TabMaterials
+	nodes := app.matNodes()
+	var downloaded, fresh = -1, -1
+	for i, n := range nodes {
+		if n.kind != nodeFile {
+			continue
+		}
+		if n.mat.Downloaded && downloaded < 0 {
+			downloaded = i
+		}
+		if !n.mat.Downloaded && fresh < 0 {
+			fresh = i
+		}
+	}
+	if downloaded < 0 || fresh < 0 {
+		t.Fatal("demo materials need both downloaded and new files")
+	}
+	if row := stripANSI(app.matTreeRow(nodes, downloaded, 98, false)); !strings.Contains(row, "●") || strings.Contains(row, "downloaded") {
+		t.Fatalf("downloaded file row = %q", row)
+	}
+	if row := stripANSI(app.matTreeRow(nodes, fresh, 98, false)); !strings.Contains(row, "○") {
+		t.Fatalf("new file row = %q", row)
 	}
 }

@@ -195,7 +195,7 @@ The interactive screen is borderless. The top tab bar, title line, body, and foo
 Both tree tabs render a flat `[]node` list. [`node`](../internal/tui/tree.go) stores its kind, depth via `parents`, a stable fold key, and the underlying assignment or material. The cursor is an index into the same list, so a highlight always corresponds to the row the keys will act on.
 
 - **Tasks:** term → course → state bucket (`needs decision`, `tracked`, `closed`) → task → attached materials.
-- **Materials:** course → `downloaded`/`new` bucket → file → linked assignment (for attachments).
+- **Materials:** course → week → folder → file → linked assignment (for attachments). Downloaded files carry a ● marker.
 - **Connectors:** `│`, `├─`, `╰─`, with an ASCII fallback when `TERM=dumb` or contains `ascii`.
 - **Folding:** missing keys mean open; collapsing is the explicit act. Each tab keeps its own fold state.
 - **Right padding:** both trees keep a two-column inset so metadata does not touch the divider or terminal edge.
