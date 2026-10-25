@@ -210,8 +210,8 @@ func TestLiveSourceLoadsCourseActivitiesAndAssignmentDeadline(t *testing.T) {
 	if requests["/mod/assign/view.php"] != 1 || requests["/course/view.php"] != 1 || requests["/lib/ajax/service.php"] != 1 || requests["/my/"] != 1 {
 		t.Fatalf("requests=%v", requests)
 	}
-	if !strings.Contains(snapshot.Notice, "attachments") {
-		t.Fatalf("notice=%q", snapshot.Notice)
+	if strings.Contains(snapshot.Notice, "not loaded yet") {
+		t.Fatalf("stale notice=%q", snapshot.Notice)
 	}
 }
 

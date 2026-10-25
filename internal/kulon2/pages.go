@@ -32,8 +32,9 @@ var (
 type Section struct{ ID, Name string }
 
 // Module is a Moodle activity whose type and course-module ID were parsed from
-// a course page. URL is the activity link exactly as found on the page.
-type Module struct{ Type, CMID, Name, Section, URL string }
+// a course page. URL is the activity link exactly as found on the page;
+// Section is the human-readable label and SectionID the LMS section id.
+type Module struct{ Type, CMID, Name, Section, SectionID, URL string }
 
 type Attachment struct{ ID, Filename, URL, ItemID string }
 
@@ -62,6 +63,10 @@ func ParseCoursePage(page []byte) ([]Section, []Module, error) {
 			section.Name = textContent(name[1])
 		}
 		sections = append(sections, section)
+		label := section.Name
+		if label == "" {
+			label = sectionID
+		}
 		for _, block := range activityPattern.FindAll(body, -1) {
 			typeMatch := moduleTypePattern.FindSubmatch(block)
 			linkMatch := viewLinkPattern.FindSubmatch(block)
@@ -72,7 +77,7 @@ func ParseCoursePage(page []byte) ([]Section, []Module, error) {
 			if instance := instancePattern.FindSubmatch(block); len(instance) > 1 {
 				name = textContent(instance[1])
 			}
-			modules = append(modules, Module{Type: string(typeMatch[1]), CMID: string(linkMatch[3]), Name: name, Section: sectionID, URL: string(linkMatch[1])})
+			modules = append(modules, Module{Type: string(typeMatch[1]), CMID: string(linkMatch[3]), Name: name, Section: label, SectionID: sectionID, URL: string(linkMatch[1])})
 		}
 	}
 	return sections, modules, nil
@@ -109,12 +114,32 @@ func ParseAssignmentPage(page []byte, cmid string) (AssignmentPage, error) {
 	} else if notSubmittedPattern.Match(page) {
 		result.LMSStatus = "not_submitted"
 	}
+	result.Attachments = parseFileAnchors(page, cmid, true)
+	return result, nil
+}
+
+// ParseFolderPage extracts the individual files behind a folder module.
+func ParseFolderPage(page []byte, cmid string) []Attachment {
+	return parseFileAnchors(page, cmid, false)
+}
+
+func parseFileAnchors(page []byte, cmid string, requireAssign bool) []Attachment {
 	seenNames := map[string]int{}
+	seenHrefs := map[string]bool{}
+	out := []Attachment{}
 	for _, anchor := range findElements(page, "a") {
 		href := attribute(anchor, "href")
-		if !strings.Contains(href, "pluginfile.php") || !strings.Contains(href, "/mod_assign/") {
+		if !strings.Contains(href, "pluginfile.php") {
 			continue
 		}
+		if requireAssign && !strings.Contains(href, "/mod_assign/") {
+			continue
+		}
+		rawURL := strings.ReplaceAll(href, "&amp;", "&")
+		if seenHrefs[rawURL] {
+			continue
+		}
+		seenHrefs[rawURL] = true
 		filename := ""
 		if filenameNode := findElement(anchor, "span", "filename"); filenameNode != nil {
 			filename = strings.TrimSpace(textNode(filenameNode))
@@ -132,14 +157,13 @@ func ParseAssignmentPage(page []byte, cmid string) (AssignmentPage, error) {
 		if seenNames[filename] > 1 {
 			id += ":" + strconv.Itoa(seenNames[filename])
 		}
-		rawURL := strings.ReplaceAll(href, "&amp;", "&")
 		itemID := ""
 		if item := attachmentPathPattern.FindStringSubmatch(href); len(item) > 1 {
 			itemID = item[1]
 		}
-		result.Attachments = append(result.Attachments, Attachment{ID: id, Filename: filename, URL: rawURL, ItemID: itemID})
+		out = append(out, Attachment{ID: id, Filename: filename, URL: rawURL, ItemID: itemID})
 	}
-	return result, nil
+	return out
 }
 
 func findDataRegion(page []byte, regionName string) []byte {
@@ -286,28 +310,31 @@ func MaterialID(cmid string) string   { return "M" + cmid }
 func MapModule(course model.Course, module Module, siteURL string) (assignment *model.Assignment, material *model.Material) {
 	switch module.Type {
 	case "assign", "quiz":
-		return &model.Assignment{ID: AssignmentID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name}, nil
-	case "resource", "folder", "url", "book":
-		kind := "file"
-		if module.Type == "url" {
-			kind = "url"
-		}
-		return nil, &model.Material{ID: MaterialID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name, Section: module.Section, Kind: kind, URL: moduleURL(siteURL, module)}
+		return &model.Assignment{ID: AssignmentID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name, Section: module.Section}, nil
+	case "resource":
+		return nil, &model.Material{ID: MaterialID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name, Section: module.Section, Kind: "file", URL: ResolveURL(siteURL, module.URL)}
+	case "folder":
+		// Folder children are materialized from the folder page at load time.
+		return nil, nil
+	case "url":
+		return nil, &model.Material{ID: MaterialID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name, Section: module.Section, Kind: "url", URL: ResolveURL(siteURL, module.URL)}
+	case "book":
+		return nil, &model.Material{ID: MaterialID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name, Section: module.Section, Kind: "book", URL: ResolveURL(siteURL, module.URL)}
 	default:
 		return nil, nil
 	}
 }
 
-// moduleURL resolves a course-page activity link against the LMS base URL.
-func moduleURL(siteURL string, module Module) string {
-	if module.URL == "" {
+// ResolveURL resolves a course-page link against the LMS base URL.
+func ResolveURL(siteURL, raw string) string {
+	if raw == "" {
 		return ""
 	}
 	base, err := url.Parse(strings.TrimRight(siteURL, "/") + "/")
 	if err != nil {
 		return ""
 	}
-	ref, err := url.Parse(module.URL)
+	ref, err := url.Parse(raw)
 	if err != nil {
 		return ""
 	}

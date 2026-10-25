@@ -14,7 +14,7 @@ func fixture(t *testing.T, name string) []byte {
 	path := filepath.Join("testdata", name)
 	body, err := os.ReadFile(path)
 	if err != nil {
-		t.Skipf("legacy fixture unavailable: %v", err)
+		t.Fatalf("legacy fixture unavailable: %v", err)
 	}
 	return body
 }
@@ -34,7 +34,7 @@ func TestParseCoursePageLegacyFixture(t *testing.T) {
 	if !reflect.DeepEqual(types, []string{"resource", "assign", "assign", "resource", "assign"}) {
 		t.Fatalf("module types = %v", types)
 	}
-	if modules[0].CMID != "165401" || modules[0].Section != "5" {
+	if modules[0].CMID != "165401" || modules[0].SectionID != "5" || modules[0].Section != "Week 1 — 31 August - 6 September" {
 		t.Fatalf("first module = %+v", modules[0])
 	}
 }

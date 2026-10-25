@@ -23,15 +23,17 @@ var (
 )
 
 var (
-	sessKeyPattern = regexp.MustCompile(`"sesskey"\s*:\s*"([^"]+)"`)
-	userIDPattern  = regexp.MustCompile(`(?i)"user(?:id|_id)"\s*:\s*"?([0-9]+)"?`)
-	loginPattern   = regexp.MustCompile(`(?i)(/login/index\.php|/auth/oidc)`)
+	sessKeyPattern        = regexp.MustCompile(`"sesskey"\s*:\s*"([^"]+)"`)
+	userIDPattern         = regexp.MustCompile(`(?i)"user(?:id|_id)"\s*:\s*"?([0-9]+)"?`)
+	loginPattern          = regexp.MustCompile(`(?i)(/login/index\.php|/auth/oidc)`)
+	sessionTimeoutPattern = regexp.MustCompile(`"sessiontimeout"\s*:\s*"?([0-9]+)"?`)
 )
 
 // Identity is the small set of values Kamps needs from an authenticated page.
 type Identity struct {
 	UserID  int
 	SessKey string
+	Timeout time.Duration
 }
 
 // VerifySession checks a MoodleSession cookie against /my/. It returns
@@ -97,7 +99,13 @@ func verifySessionWithClient(ctx context.Context, siteURL, cookie string, client
 	if err != nil || userID <= 0 {
 		return Identity{}, errors.New("authenticated page contains an invalid user id")
 	}
-	return Identity{UserID: userID, SessKey: sessKey}, nil
+	var timeout time.Duration
+	if raw := firstMatch(sessionTimeoutPattern, body); raw != "" {
+		if seconds, err := strconv.Atoi(raw); err == nil && seconds > 0 {
+			timeout = time.Duration(seconds) * time.Second
+		}
+	}
+	return Identity{UserID: userID, SessKey: sessKey, Timeout: timeout}, nil
 }
 
 func parseSiteURL(raw string) (*url.URL, error) {

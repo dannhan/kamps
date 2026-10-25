@@ -24,6 +24,7 @@ type LiveSource struct {
 	minRequestGap time.Duration
 	maxConcurrent int
 	client        *http.Client
+	downloadSlots chan struct{}
 	loadMu        sync.Mutex
 	requestMu     sync.Mutex
 	lastRequest   time.Time
@@ -43,6 +44,7 @@ func NewSource(siteURL, sessionPath string) (*LiveSource, error) {
 	}
 	return &LiveSource{
 		siteURL: siteURL, session: saved, minRequestGap: 100 * time.Millisecond, maxConcurrent: defaultMaxConcurrent,
+		downloadSlots: make(chan struct{}, defaultMaxConcurrent),
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -56,6 +58,17 @@ func NewSource(siteURL, sessionPath string) (*LiveSource, error) {
 }
 
 func (s *LiveSource) Label() string { return "Kulon2" }
+
+// Capabilities reports that live Kulon2 mode supports the full surface.
+func (s *LiveSource) Capabilities() source.Capabilities {
+	return source.Capabilities{Assignments: true, Materials: true, Downloads: true, Session: true}
+}
+
+// SessionStatus reports the best-known expiry of the saved session.
+func (s *LiveSource) SessionStatus() source.SessionStatus {
+	expiry := s.session.Expiry()
+	return source.SessionStatus{ExpiresAt: expiry, OK: !expiry.IsZero()}
+}
 
 func (s *LiveSource) Load(ctx context.Context) (source.Snapshot, error) {
 	s.loadMu.Lock()
@@ -130,6 +143,7 @@ func (s *LiveSource) Load(ctx context.Context) (source.Snapshot, error) {
 		module Module
 	}
 	tasks := make([]assignmentTask, 0)
+	folderTasks := make([]assignmentTask, 0)
 	for courseIndex, modules := range modulesByCourse {
 		course := courses[courseIndex]
 		for _, module := range modules {
@@ -142,6 +156,9 @@ func (s *LiveSource) Load(ctx context.Context) (source.Snapshot, error) {
 			}
 			if assignment != nil && module.Type == "assign" {
 				tasks = append(tasks, assignmentTask{course: course, module: module})
+			}
+			if module.Type == "folder" {
+				folderTasks = append(folderTasks, assignmentTask{course: course, module: module})
 			}
 		}
 	}
@@ -184,6 +201,12 @@ func (s *LiveSource) Load(ctx context.Context) (source.Snapshot, error) {
 							continue
 						}
 						snapshot.Assignments[i].Attachments = len(parsedPage.Attachments)
+						switch parsedPage.LMSStatus {
+						case "submitted":
+							snapshot.Assignments[i].Submission = model.SubmissionSubmitted
+						case "not_submitted":
+							snapshot.Assignments[i].Submission = model.SubmissionNotSubmitted
+						}
 						if parsedPage.DueISO != "" {
 							due, dateErr := time.ParseInLocation("2006-01-02T15:04:05", parsedPage.DueISO, time.Local)
 							if dateErr != nil {
@@ -192,6 +215,18 @@ func (s *LiveSource) Load(ctx context.Context) (source.Snapshot, error) {
 								snapshot.Assignments[i].Due, snapshot.Assignments[i].HasDue = due, true
 							}
 						}
+						for _, attachment := range parsedPage.Attachments {
+							snapshot.Materials = append(snapshot.Materials, model.Material{
+								ID:           attachment.ID,
+								CourseID:     assignment.CourseID,
+								CourseCode:   assignment.CourseCode,
+								Name:         attachment.Filename,
+								Section:      assignment.Section,
+								Kind:         "attachment",
+								URL:          ResolveURL(s.siteURL, attachment.URL),
+								AssignmentID: assignment.ID,
+							})
+						}
 						break
 					}
 				}
@@ -199,7 +234,46 @@ func (s *LiveSource) Load(ctx context.Context) (source.Snapshot, error) {
 			assignmentIndex++
 		}
 	}
-	snapshot.Notice = appendNotice(snapshot.Notice, "assignment attachments and downloads are not loaded yet")
+
+	folderPages := make([][]byte, len(folderTasks))
+	folderErrors := make([]string, len(folderTasks))
+	s.fetchConcurrent(ctx, len(folderTasks), func(index int) {
+		task := folderTasks[index]
+		pageURL := strings.TrimRight(s.siteURL, "/") + "/mod/folder/view.php?id=" + task.module.CMID
+		page, fetchErr := s.getPage(ctx, pageURL)
+		if fetchErr != nil {
+			folderErrors[index] = fmt.Sprintf("%s: %v", task.module.Name, fetchErr)
+			return
+		}
+		folderPages[index] = page
+	})
+	for index, task := range folderTasks {
+		if failure := folderErrors[index]; failure != "" {
+			if strings.Contains(failure, ErrSessionExpired.Error()) {
+				return source.Snapshot{}, errors.New("Kulon2 session expired; run `kamps login` again")
+			}
+			snapshot.Notice = appendNotice(snapshot.Notice, "some folders failed: "+failure)
+			continue
+		}
+		files := ParseFolderPage(folderPages[index], task.module.CMID)
+		if len(files) == 0 {
+			snapshot.Notice = appendNotice(snapshot.Notice, "folder has no downloadable files: "+task.module.Name)
+			continue
+		}
+		for _, file := range files {
+			snapshot.Materials = append(snapshot.Materials, model.Material{
+				ID:         file.ID,
+				CourseID:   task.course.ID,
+				CourseCode: task.course.Short,
+				Name:       file.Filename,
+				Section:    task.module.Section,
+				Folder:     task.module.Name,
+				Kind:       "folder-file",
+				URL:        ResolveURL(s.siteURL, file.URL),
+				ParentID:   MaterialID(task.module.CMID),
+			})
+		}
+	}
 	return snapshot, nil
 }
 
