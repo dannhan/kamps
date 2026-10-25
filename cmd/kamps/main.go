@@ -85,6 +85,13 @@ func main() {
 		}
 	}
 
+	if len(rest) > 0 && len(rest) == 2 && (rest[1] == "--help" || rest[1] == "-h") {
+		printCommandHelp(os.Stdout, rest[0])
+		if _, ok := commandUsage[rest[0]]; ok {
+			return
+		}
+	}
+
 	sourceName := cfg.Source
 	if demoMode {
 		sourceName = "demo"

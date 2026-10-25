@@ -11,8 +11,9 @@ service as JSON CLI commands so an agent can read and mutate kamps without openi
 - Implemented: import guard ensuring `internal/core` never imports the TUI or Lip Gloss.
 - Implemented: `courses`, `tasks`, `materials`, `status`, `sync`, `triage`, `download`,
   and `export` commands, with `--json` and a structured error envelope.
-- Planned: full `run(args, stdout, stderr) int` refactor, per-command help, and the
-  optional localhost/MCP surface.
+- Implemented: per-command help (`kamps <command> --help`).
+- Planned: full `run(args, stdout, stderr) int` refactor and the optional localhost/MCP
+  surface.
 
 ## Planned commands
 

@@ -23,6 +23,10 @@ func runHeadless(args []string, cfg config.Config, src source.Source, stdout, st
 	}
 	command := args[0]
 	args = args[1:]
+	if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
+		printCommandHelp(stdout, command)
+		return true, 0
+	}
 	switch command {
 	case "courses":
 		return true, headlessRead(command, args, jsonOut, cfg, src, stdout, stderr, func(service *core.Service, _ headlessQuery) any {
@@ -508,4 +512,23 @@ func splitIDs(value string) []string {
 		}
 	}
 	return ids
+}
+
+var commandUsage = map[string]string{
+	"courses":   "usage: kamps courses [--json]",
+	"tasks":     "usage: kamps tasks [--json] [--filter all|undecided|overdue|tracked|missed|ignored] [--search Q] [--course ID|CODE]",
+	"materials": "usage: kamps materials [--json] [--filter all|new|downloaded|link] [--search Q] [--course ID|CODE]",
+	"status":    "usage: kamps status [--json]",
+	"sync":      "usage: kamps sync [--json]",
+	"triage":    "usage: kamps triage <id...> --tracked|--missed|--ignored|--undecided [--json]",
+	"download":  "usage: kamps download <id...> | --all-new | --course ID|CODE [--dry-run] [--json]",
+	"export":    "usage: kamps export [--format markdown|todo|taskwarrior] [--out PATH] [--ids A,B] [--json]",
+}
+
+func printCommandHelp(w io.Writer, command string) {
+	if usage, ok := commandUsage[command]; ok {
+		fmt.Fprintln(w, usage)
+		return
+	}
+	fmt.Fprintf(w, "unknown command %q\n", command)
 }
