@@ -87,8 +87,8 @@ func TestListCoursesRejectsSessionError(t *testing.T) {
 	}))
 	defer srv.Close()
 	_, err := ListCourses(context.Background(), srv.URL, "cookie", "key")
-	if !errors.Is(err, ErrSessionExpired) {
-		t.Fatalf("error = %v, want ErrSessionExpired", err)
+	if !errors.Is(err, ErrInvalidSesskey) {
+		t.Fatalf("error = %v, want ErrInvalidSesskey", err)
 	}
 }
 

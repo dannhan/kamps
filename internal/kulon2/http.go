@@ -2,11 +2,13 @@ package kulon2
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -25,6 +27,61 @@ func cloneClientWithCookie(client *http.Client, base *url.URL, cookie string, ti
 		copyClient.Timeout = timeout
 	}
 	return &copyClient
+}
+
+type httpStatusError struct {
+	statusCode int
+	retryAfter time.Duration
+}
+
+func (e *httpStatusError) Error() string { return fmt.Sprintf("HTTP %d", e.statusCode) }
+
+func getPageWithRetry(ctx context.Context, rawURL, cookie string, client *http.Client, wait func(context.Context) error, sleep func(context.Context, time.Duration) error) ([]byte, error) {
+	const maxAttempts = 3
+	for attempt := 1; ; attempt++ {
+		if wait != nil {
+			if err := wait(ctx); err != nil {
+				return nil, err
+			}
+		}
+		body, err := getPage(ctx, rawURL, cookie, client)
+		var statusErr *httpStatusError
+		if !errors.As(err, &statusErr) || (statusErr.statusCode != http.StatusTooManyRequests && statusErr.statusCode < 500) || attempt >= maxAttempts {
+			return body, err
+		}
+		delay := statusErr.retryAfter
+		if delay <= 0 {
+			delay = time.Duration(attempt) * 250 * time.Millisecond
+		}
+		if delay > 5*time.Second {
+			delay = 5 * time.Second
+		}
+		if sleep != nil {
+			if err := sleep(ctx, delay); err != nil {
+				return nil, err
+			}
+		} else {
+			timer := time.NewTimer(delay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return nil, ctx.Err()
+			case <-timer.C:
+			}
+		}
+	}
+}
+
+func retryAfterDelay(value string, now time.Time) time.Duration {
+	if seconds, err := strconv.Atoi(strings.TrimSpace(value)); err == nil && seconds >= 0 {
+		return time.Duration(seconds) * time.Second
+	}
+	if date, err := http.ParseTime(value); err == nil {
+		if delay := date.Sub(now); delay > 0 {
+			return delay
+		}
+	}
+	return 0
 }
 
 func getPage(ctx context.Context, rawURL, cookie string, client *http.Client) ([]byte, error) {
@@ -60,6 +117,9 @@ func getPage(ctx context.Context, rawURL, cookie string, client *http.Client) ([
 		return nil, ErrSessionExpired
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+			return nil, &httpStatusError{statusCode: resp.StatusCode, retryAfter: retryAfterDelay(resp.Header.Get("Retry-After"), time.Now())}
+		}
 		return nil, fmt.Errorf("GET course page: %s", resp.Status)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 12<<20))

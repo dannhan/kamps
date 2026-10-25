@@ -76,10 +76,8 @@ IMK is not on Kulon2 at all (it lives on WhatsApp), so it has no LMS course.
 
 ## Implications for the client
 
-- **Auth:** cookie only; `kamps login` and `kamps logout` are implemented. Live mode verifies the saved session, fetches in-progress courses, and parses course pages into assignments and materials. Assignment due dates, attachments, and downloads are still future work.
-- **Due dates:** parse `/course/view.php?id=<id>`; a reliable due date may need a
-  follow-up fetch of `/mod/assign/view.php?id=<cmid>` (**unverified** — confirm
-  the date is rendered there).
+- **Auth:** cookie only; `kamps login` and `kamps logout` are implemented. Live mode verifies the saved session, fetches in-progress courses and course pages, then fetches assignment pages to populate recognized deadlines. Attachment metadata and downloads are still future work.
+- **Due dates:** assignments fetch `/mod/assign/view.php?id=<cmid>` and map recognized due dates into the snapshot. This endpoint/date shape is fixture-tested from the legacy recon, not yet re-verified against the live site.
 - **Downloads:** `mod/resource` links resolve to `pluginfile.php` direct
   downloads — one request per file, politely spaced.
 - **Politeness:** at least 1 s between requests, at most 2 requests per page.

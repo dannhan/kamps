@@ -3,7 +3,6 @@ package kulon2
 import (
 	"fmt"
 	stdhtml "html"
-	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -15,15 +14,17 @@ import (
 )
 
 var (
-	sectionOpenPattern = regexp.MustCompile(`(?is)<li\b[^>]*\bid=["']section-(\d+)["'][^>]*>`)
-	sectionNamePattern = regexp.MustCompile(`(?is)<h[23]\b[^>]*class=["'][^"']*\bsectionname\b[^"']*["'][^>]*>(.*?)</h[23]\s*>`)
-	activityPattern    = regexp.MustCompile(`(?is)<li\b[^>]*class=["'][^"']*\bactivity\b[^"']*["'][^>]*>.*?</li\s*>`)
-	moduleTypePattern  = regexp.MustCompile(`\bmodtype_([a-z]+)\b`)
-	viewLinkPattern    = regexp.MustCompile(`(?i)href=["']([^"']*/(mod/[a-z]+)/view\.php\?[^"']*\bid=(\d+)[^"']*)["']`)
-	instancePattern    = regexp.MustCompile(`(?is)class=["'][^"']*\binstancename\b[^"']*["'][^>]*>(.*?)</(?:a|span)\s*>`)
-	activityDates      = regexp.MustCompile(`(?is)data-region=["']activity-dates["'](.*?)(?:<div class=["']activity-description|</section\s*>)`)
-	datePairPattern    = regexp.MustCompile(`(?is)<strong[^>]*>([^<]+):</strong>\s*([^<]+)<`)
-	attachmentPattern  = regexp.MustCompile(`(?i)href=["']([^"']*pluginfile\.php/[^"']*/mod_assign/[^"']*)["']`)
+	sectionOpenPattern      = regexp.MustCompile(`(?is)<li\b[^>]*\bid=["']section-(\d+)["'][^>]*>`)
+	sectionNamePattern      = regexp.MustCompile(`(?is)<h[23]\b[^>]*class=["'][^"']*\bsectionname\b[^"']*["'][^>]*>(.*?)</h[23]\s*>`)
+	activityPattern         = regexp.MustCompile(`(?is)<li\b[^>]*class=["'][^"']*\bactivity\b[^"']*["'][^>]*>.*?</li\s*>`)
+	moduleTypePattern       = regexp.MustCompile(`\bmodtype_([a-z]+)\b`)
+	viewLinkPattern         = regexp.MustCompile(`(?i)href=["']([^"']*/(mod/[a-z]+)/view\.php\?[^"']*\bid=(\d+)[^"']*)["']`)
+	instancePattern         = regexp.MustCompile(`(?is)class=["'][^"']*\binstancename\b[^"']*["'][^>]*>(.*?)</(?:a|span)\s*>`)
+	datePairPattern         = regexp.MustCompile(`(?is)<strong[^>]*>([^<]+):</strong>\s*([^<]+)<`)
+	attachmentPathPattern   = regexp.MustCompile(`/mod_assign/[a-z_]+/(\d+)/`)
+	attachmentSuffixPattern = regexp.MustCompile(`/([^/]+)$`)
+	submittedPattern        = regexp.MustCompile(`(?i)Submitted for grading`)
+	notSubmittedPattern     = regexp.MustCompile(`(?i)Not submitted|No attempt`)
 )
 
 // Section is one course-page section; IDs remain LMS section IDs.
@@ -78,8 +79,8 @@ func ParseCoursePage(page []byte) ([]Section, []Module, error) {
 
 func ParseAssignmentPage(page []byte, cmid string) (AssignmentPage, error) {
 	result := AssignmentPage{LMSStatus: "unknown", Attachments: []Attachment{}}
-	if block := activityDates.FindSubmatch(page); len(block) > 1 {
-		for _, pair := range datePairPattern.FindAllSubmatch(block[1], -1) {
+	if region := findDataRegion(page, "activity-dates"); len(region) > 0 {
+		for _, pair := range datePairPattern.FindAllSubmatch(region, -1) {
 			label := strings.ToLower(strings.TrimSpace(string(pair[1])))
 			value := stdhtml.UnescapeString(strings.TrimSpace(string(pair[2])))
 			switch label {
@@ -102,22 +103,25 @@ func ParseAssignmentPage(page []byte, cmid string) (AssignmentPage, error) {
 			}
 		}
 	}
-	if regexp.MustCompile(`(?i)Submitted for grading`).Match(page) {
+	if submittedPattern.Match(page) {
 		result.LMSStatus = "submitted"
-	} else if regexp.MustCompile(`(?i)Not submitted|No attempt`).Match(page) {
+	} else if notSubmittedPattern.Match(page) {
 		result.LMSStatus = "not_submitted"
 	}
 	seenNames := map[string]int{}
-	for _, match := range attachmentPattern.FindAllSubmatch(page, -1) {
-		rawURL := stdhtml.UnescapeString(strings.ReplaceAll(string(match[1]), "&amp;", "&"))
-		parsed, err := url.Parse(rawURL)
-		if err != nil {
-			return AssignmentPage{}, fmt.Errorf("parse attachment URL: %w", err)
+	for _, anchor := range findElements(page, "a") {
+		href := attribute(anchor, "href")
+		if !strings.Contains(href, "pluginfile.php") || !strings.Contains(href, "/mod_assign/") {
+			continue
 		}
-		pathParts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
 		filename := ""
-		if len(pathParts) > 0 {
-			filename, _ = url.PathUnescape(pathParts[len(pathParts)-1])
+		if filenameNode := findElement(anchor, "span", "filename"); filenameNode != nil {
+			filename = strings.TrimSpace(textNode(filenameNode))
+		}
+		if filename == "" {
+			if suffix := attachmentSuffixPattern.FindStringSubmatch(strings.SplitN(href, "?", 2)[0]); len(suffix) > 1 {
+				filename = stdhtml.UnescapeString(suffix[1])
+			}
 		}
 		if filename == "" {
 			continue
@@ -127,9 +131,9 @@ func ParseAssignmentPage(page []byte, cmid string) (AssignmentPage, error) {
 		if seenNames[filename] > 1 {
 			id += ":" + strconv.Itoa(seenNames[filename])
 		}
+		rawURL := strings.ReplaceAll(href, "&amp;", "&")
 		itemID := ""
-		itemPattern := regexp.MustCompile(`/mod_assign/[a-z_]+/(\d+)/`)
-		if item := itemPattern.FindStringSubmatch(parsed.Path); len(item) > 1 {
+		if item := attachmentPathPattern.FindStringSubmatch(href); len(item) > 1 {
 			itemID = item[1]
 		}
 		result.Attachments = append(result.Attachments, Attachment{ID: id, Filename: filename, URL: rawURL, ItemID: itemID})
@@ -137,24 +141,142 @@ func ParseAssignmentPage(page []byte, cmid string) (AssignmentPage, error) {
 	return result, nil
 }
 
-func textContent(raw []byte) string {
-	document, err := html.Parse(strings.NewReader(string(raw)))
+func findDataRegion(page []byte, regionName string) []byte {
+	document, err := html.Parse(strings.NewReader(string(page)))
 	if err != nil {
-		return ""
+		return nil
 	}
-	var text strings.Builder
+	var found []byte
 	var walk func(*html.Node)
 	walk = func(node *html.Node) {
-		if node.Type == html.TextNode {
-			text.WriteString(node.Data)
-			text.WriteByte(' ')
+		if found != nil {
+			return
+		}
+		if node.Type == html.ElementNode {
+			for _, attr := range node.Attr {
+				if attr.Key == "data-region" && attr.Val == regionName {
+					found = []byte(textAndMarkup(node))
+					return
+				}
+			}
 		}
 		for child := node.FirstChild; child != nil; child = child.NextSibling {
 			walk(child)
 		}
 	}
 	walk(document)
+	return found
+}
+
+func textAndMarkup(node *html.Node) string {
+	var out strings.Builder
+	var render func(*html.Node)
+	render = func(current *html.Node) {
+		if current.Type == html.TextNode {
+			out.WriteString(stdhtml.EscapeString(current.Data))
+			return
+		}
+		if current.Type == html.ElementNode {
+			out.WriteByte('<')
+			out.WriteString(current.Data)
+			out.WriteByte('>')
+		}
+		for child := current.FirstChild; child != nil; child = child.NextSibling {
+			render(child)
+		}
+		if current.Type == html.ElementNode {
+			out.WriteString("</")
+			out.WriteString(current.Data)
+			out.WriteByte('>')
+		}
+	}
+	render(node)
+	return out.String()
+}
+
+func findElements(page []byte, tagName string) []*html.Node {
+	document, err := html.Parse(strings.NewReader(string(page)))
+	if err != nil {
+		return nil
+	}
+	return findElementsIn(document, tagName)
+}
+
+func findElementsIn(root *html.Node, tagName string) []*html.Node {
+	var found []*html.Node
+	var walk func(*html.Node)
+	walk = func(node *html.Node) {
+		if node.Type == html.ElementNode && node.Data == tagName {
+			found = append(found, node)
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(root)
+	return found
+}
+
+func findElement(node *html.Node, tagName, className string) *html.Node {
+	var walk func(*html.Node) *html.Node
+	walk = func(current *html.Node) *html.Node {
+		if current.Type == html.ElementNode && current.Data == tagName {
+			for _, attr := range current.Attr {
+				if attr.Key == "class" && hasClass(attr.Val, className) {
+					return current
+				}
+			}
+		}
+		for child := current.FirstChild; child != nil; child = child.NextSibling {
+			if found := walk(child); found != nil {
+				return found
+			}
+		}
+		return nil
+	}
+	return walk(node)
+}
+
+func attribute(node *html.Node, name string) string {
+	for _, attr := range node.Attr {
+		if attr.Key == name {
+			return attr.Val
+		}
+	}
+	return ""
+}
+
+func hasClass(classes, target string) bool {
+	for _, className := range strings.Fields(classes) {
+		if className == target {
+			return true
+		}
+	}
+	return false
+}
+
+func textNode(node *html.Node) string {
+	var text strings.Builder
+	var walk func(*html.Node)
+	walk = func(current *html.Node) {
+		if current.Type == html.TextNode {
+			text.WriteString(current.Data)
+			text.WriteByte(' ')
+		}
+		for child := current.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(node)
 	return strings.Join(strings.Fields(stdhtml.UnescapeString(text.String())), " ")
+}
+
+func textContent(raw []byte) string {
+	document, err := html.Parse(strings.NewReader(string(raw)))
+	if err != nil {
+		return ""
+	}
+	return textNode(document)
 }
 
 func AssignmentID(cmid string) string { return "K" + cmid }

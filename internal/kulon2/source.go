@@ -5,30 +5,31 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/ruyam/kamps/internal/model"
 	"github.com/ruyam/kamps/internal/session"
 	"github.com/ruyam/kamps/internal/source"
 )
 
-// LiveSource fetches the enrolled course list from Kulon2. The first live
-// milestone intentionally does not claim assignments or materials are loaded.
+const defaultMaxConcurrent = 4
+
+// LiveSource fetches enrolled courses and their supported coursework from Kulon2.
 type LiveSource struct {
 	siteURL       string
 	session       session.Session
 	minRequestGap time.Duration
+	maxConcurrent int
 	client        *http.Client
 	loadMu        sync.Mutex
-	mu            sync.Mutex
+	requestMu     sync.Mutex
 	lastRequest   time.Time
 }
 
-// NewSource loads a saved session and binds it to the currently configured
-// site. A session captured for a different site is refused.
+// NewSource loads a saved session and binds it to the currently configured site.
 func NewSource(siteURL, sessionPath string) (*LiveSource, error) {
 	saved, err := session.Load(sessionPath)
 	if err != nil {
@@ -41,9 +42,7 @@ func NewSource(siteURL, sessionPath string) (*LiveSource, error) {
 		return nil, errors.New("saved session belongs to a different site; run `kamps login` again")
 	}
 	return &LiveSource{
-		siteURL:       siteURL,
-		session:       saved,
-		minRequestGap: time.Second,
+		siteURL: siteURL, session: saved, minRequestGap: 100 * time.Millisecond, maxConcurrent: defaultMaxConcurrent,
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -56,28 +55,33 @@ func NewSource(siteURL, sessionPath string) (*LiveSource, error) {
 	}, nil
 }
 
-func (s *LiveSource) Label() string { return "Kulon2 (course list only)" }
+func (s *LiveSource) Label() string { return "Kulon2" }
 
 func (s *LiveSource) Load(ctx context.Context) (source.Snapshot, error) {
 	s.loadMu.Lock()
 	defer s.loadMu.Unlock()
 
-	identity, err := verifySessionWithClient(ctx, s.siteURL, s.session.Cookie, s.client)
-	if err == nil || requestMayHaveStarted(err) {
-		s.noteRequest()
+	sesskey := s.session.SessKey
+	var courses []model.Course
+	var err error
+	if sesskey != "" {
+		courses, err = s.listCourses(ctx, sesskey)
+		if errors.Is(err, ErrInvalidSesskey) {
+			sesskey = ""
+		} else if err != nil {
+			return source.Snapshot{}, err
+		}
 	}
-	if errors.Is(err, ErrSessionExpired) {
-		return source.Snapshot{}, errors.New("Kulon2 session expired; run `kamps login` again")
-	}
-	if err != nil {
-		return source.Snapshot{}, fmt.Errorf("verify Kulon2 session: %w", err)
-	}
-	if err := s.waitForRequestGap(ctx); err != nil {
-		return source.Snapshot{}, err
-	}
-	courses, err := listCoursesWithClient(ctx, s.siteURL, s.session.Cookie, identity.SessKey, s.client)
-	if err == nil || requestMayHaveStarted(err) {
-		s.noteRequest()
+	if sesskey == "" {
+		identity, verifyErr := s.verifySession(ctx)
+		if verifyErr != nil {
+			if errors.Is(verifyErr, ErrSessionExpired) {
+				return source.Snapshot{}, errors.New("Kulon2 session expired; run `kamps login` again")
+			}
+			return source.Snapshot{}, fmt.Errorf("verify Kulon2 session: %w", verifyErr)
+		}
+		sesskey = identity.SessKey
+		courses, err = s.listCourses(ctx, sesskey)
 	}
 	if errors.Is(err, ErrSessionExpired) {
 		return source.Snapshot{}, errors.New("Kulon2 session expired; run `kamps login` again")
@@ -87,25 +91,47 @@ func (s *LiveSource) Load(ctx context.Context) (source.Snapshot, error) {
 	}
 
 	snapshot := source.Snapshot{Courses: courses}
-	for _, course := range courses {
-		if err := s.waitForRequestGap(ctx); err != nil {
-			return source.Snapshot{}, err
-		}
+	coursePages := make([][]byte, len(courses))
+	courseErrors := make([]string, len(courses))
+	s.fetchConcurrent(ctx, len(courses), func(index int) {
+		course := courses[index]
 		pageURL := strings.TrimRight(s.siteURL, "/") + "/course/view.php?id=" + strconv.Itoa(course.ID)
-		page, fetchErr := getPage(ctx, pageURL, s.session.Cookie, s.client)
-		if fetchErr == nil || requestMayHaveStarted(fetchErr) {
-			s.noteRequest()
-		}
-		if errors.Is(fetchErr, ErrSessionExpired) {
-			return source.Snapshot{}, errors.New("Kulon2 session expired; run `kamps login` again")
-		}
+		page, fetchErr := s.getPage(ctx, pageURL)
 		if fetchErr != nil {
-			return source.Snapshot{}, fmt.Errorf("fetch course %d: %w", course.ID, fetchErr)
+			courseErrors[index] = fmt.Sprintf("%s: %v", course.Name, fetchErr)
+			return
+		}
+		coursePages[index] = page
+	})
+
+	modulesByCourse := make([][]Module, len(courses))
+	for i, page := range coursePages {
+		if courseErrors[i] != "" || page == nil {
+			continue
 		}
 		_, modules, parseErr := ParseCoursePage(page)
 		if parseErr != nil {
-			return source.Snapshot{}, fmt.Errorf("parse course %d (%s): %w", course.ID, course.Name, parseErr)
+			courseErrors[i] = fmt.Sprintf("%s (parse): %v", courses[i].Name, parseErr)
+			continue
 		}
+		modulesByCourse[i] = modules
+	}
+	for _, failure := range courseErrors {
+		if strings.Contains(failure, ErrSessionExpired.Error()) {
+			return source.Snapshot{}, errors.New("Kulon2 session expired; run `kamps login` again")
+		}
+		if failure != "" {
+			snapshot.Notice = appendNotice(snapshot.Notice, "some course pages failed: "+failure)
+		}
+	}
+
+	type assignmentTask struct {
+		course model.Course
+		module Module
+	}
+	tasks := make([]assignmentTask, 0)
+	for courseIndex, modules := range modulesByCourse {
+		course := courses[courseIndex]
 		for _, module := range modules {
 			assignment, material := MapModule(course, module)
 			if assignment != nil {
@@ -114,24 +140,106 @@ func (s *LiveSource) Load(ctx context.Context) (source.Snapshot, error) {
 			if material != nil {
 				snapshot.Materials = append(snapshot.Materials, *material)
 			}
+			if assignment != nil && module.Type == "assign" {
+				tasks = append(tasks, assignmentTask{course: course, module: module})
+			}
 		}
 	}
-	snapshot.Notice = "course pages loaded; assignment due dates, assignment attachments, and downloads are not loaded yet"
+	assignmentPages := make([][]byte, len(tasks))
+	assignmentErrors := make([]string, len(tasks))
+	s.fetchConcurrent(ctx, len(tasks), func(index int) {
+		task := tasks[index]
+		pageURL := strings.TrimRight(s.siteURL, "/") + "/mod/assign/view.php?id=" + task.module.CMID
+		page, fetchErr := s.getPage(ctx, pageURL)
+		if fetchErr != nil {
+			assignmentErrors[index] = fmt.Sprintf("%s: %v", task.module.Name, fetchErr)
+			return
+		}
+		assignmentPages[index] = page
+	})
+	for _, failure := range assignmentErrors {
+		if strings.Contains(failure, ErrSessionExpired.Error()) {
+			return source.Snapshot{}, errors.New("Kulon2 session expired; run `kamps login` again")
+		}
+	}
+	assignmentIndex := 0
+	for courseIndex, modules := range modulesByCourse {
+		for _, module := range modules {
+			assignment, _ := MapModule(courses[courseIndex], module)
+			if assignment == nil || module.Type != "assign" {
+				continue
+			}
+			page := assignmentPages[assignmentIndex]
+			failure := assignmentErrors[assignmentIndex]
+			if failure != "" {
+				snapshot.Notice = appendNotice(snapshot.Notice, "some assignment details failed: "+failure)
+			}
+			if page != nil {
+				parsedPage, parseErr := ParseAssignmentPage(page, module.CMID)
+				if parseErr != nil {
+					snapshot.Notice = appendNotice(snapshot.Notice, "assignment detail parse failed: "+module.Name)
+				} else {
+					for i := range snapshot.Assignments {
+						if snapshot.Assignments[i].ID != assignment.ID {
+							continue
+						}
+						snapshot.Assignments[i].Attachments = len(parsedPage.Attachments)
+						if parsedPage.DueISO != "" {
+							due, dateErr := time.ParseInLocation("2006-01-02T15:04:05", parsedPage.DueISO, time.Local)
+							if dateErr != nil {
+								snapshot.Notice = appendNotice(snapshot.Notice, "assignment date could not be parsed: "+module.Name)
+							} else {
+								snapshot.Assignments[i].Due, snapshot.Assignments[i].HasDue = due, true
+							}
+						}
+						break
+					}
+				}
+			}
+			assignmentIndex++
+		}
+	}
+	snapshot.Notice = appendNotice(snapshot.Notice, "assignment attachments and downloads are not loaded yet")
 	return snapshot, nil
 }
 
-func (s *LiveSource) waitForRequestGap(ctx context.Context) error {
-	s.mu.Lock()
-	lastRequest := s.lastRequest
-	s.mu.Unlock()
-	if s.minRequestGap <= 0 || lastRequest.IsZero() {
+func appendNotice(notice, addition string) string {
+	if notice == "" {
+		return addition
+	}
+	return notice + "; " + addition
+}
+
+func (s *LiveSource) listCourses(ctx context.Context, sesskey string) ([]model.Course, error) {
+	if err := s.waitForRequestSlot(ctx); err != nil {
+		return nil, err
+	}
+	courses, err := listCoursesWithClient(ctx, s.siteURL, s.session.Cookie, sesskey, s.client)
+	s.lastRequest = time.Now()
+	if err != nil {
+		return nil, err
+	}
+	return courses, nil
+}
+
+func (s *LiveSource) verifySession(ctx context.Context) (Identity, error) {
+	if err := s.waitForRequestSlot(ctx); err != nil {
+		return Identity{}, err
+	}
+	identity, err := verifySessionWithClient(ctx, s.siteURL, s.session.Cookie, s.client)
+	s.lastRequest = time.Now()
+	return identity, err
+}
+
+func (s *LiveSource) getPage(ctx context.Context, pageURL string) ([]byte, error) {
+	return getPageWithRetry(ctx, pageURL, s.session.Cookie, s.client, s.waitForRequestSlot, s.sleepContext)
+}
+
+func (s *LiveSource) sleepContext(ctx context.Context, duration time.Duration) error {
+	if duration <= 0 {
 		return nil
 	}
-	wait := time.Until(lastRequest.Add(s.minRequestGap))
-	if wait <= 0 {
-		return nil
-	}
-	timer := time.NewTimer(wait)
+	timer := time.NewTimer(duration)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
@@ -141,24 +249,61 @@ func (s *LiveSource) waitForRequestGap(ctx context.Context) error {
 	}
 }
 
-func requestMayHaveStarted(err error) bool {
-	var networkError *url.Error
-	if !errors.As(err, &networkError) {
-		return true
+// waitForRequestSlot serializes request starts, keeping the configured interval
+// even when page fetching uses several workers.
+func (s *LiveSource) waitForRequestSlot(ctx context.Context) error {
+	s.requestMu.Lock()
+	defer s.requestMu.Unlock()
+	if s.minRequestGap > 0 && !s.lastRequest.IsZero() {
+		wait := time.Until(s.lastRequest.Add(s.minRequestGap))
+		if wait > 0 {
+			timer := time.NewTimer(wait)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return ctx.Err()
+			case <-timer.C:
+			}
+		}
 	}
-	return !errors.Is(networkError.Err, context.Canceled) && !errors.Is(networkError.Err, context.DeadlineExceeded)
+	s.lastRequest = time.Now()
+	return nil
 }
 
-func (s *LiveSource) noteRequest() {
-	s.mu.Lock()
-	s.lastRequest = time.Now()
-	s.mu.Unlock()
+func (s *LiveSource) fetchConcurrent(ctx context.Context, count int, fetch func(index int)) {
+	workers := s.maxConcurrent
+	if workers < 1 {
+		workers = 1
+	}
+	if workers > count {
+		workers = count
+	}
+	if workers == 0 {
+		return
+	}
+	indices := make(chan int, count)
+	for index := 0; index < count; index++ {
+		indices <- index
+	}
+	close(indices)
+	var group sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			for index := range indices {
+				if ctx.Err() != nil {
+					continue
+				}
+				fetch(index)
+			}
+		}()
+	}
+	group.Wait()
 }
 
 func sameSite(a, b string) bool {
-	normalize := func(value string) string {
-		return strings.TrimRight(strings.TrimSpace(value), "/")
-	}
+	normalize := func(value string) string { return strings.TrimRight(strings.TrimSpace(value), "/") }
 	return normalize(a) != "" && normalize(a) == normalize(b)
 }
 

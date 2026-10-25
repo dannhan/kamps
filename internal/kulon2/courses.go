@@ -126,11 +126,14 @@ func decodeCourses(body []byte) ([]model.Course, error) {
 	}
 	reply := replies[0]
 	if reply.Error {
-		if strings.Contains(strings.ToLower(reply.Exception+" "+reply.Message), "session") ||
-			strings.Contains(strings.ToLower(reply.Exception+" "+reply.Message), "sesskey") {
+		detail := strings.TrimSpace(reply.Exception + ": " + reply.Message)
+		lowerError := strings.ToLower(detail)
+		if strings.Contains(lowerError, "sesskey") || strings.Contains(strings.ToLower(reply.Exception), "invalidsesskey") {
+			return nil, ErrInvalidSesskey
+		}
+		if strings.Contains(lowerError, "session") {
 			return nil, ErrSessionExpired
 		}
-		detail := strings.TrimSpace(reply.Exception + ": " + reply.Message)
 		return nil, fmt.Errorf("Kulon2 course-list service error: %s", strings.Trim(detail, ": "))
 	}
 	if len(reply.Data) == 0 || string(reply.Data) == "null" {

@@ -17,7 +17,10 @@ import (
 
 // ErrSessionExpired means the LMS redirected to a login page or otherwise did
 // not accept the cookie.
-var ErrSessionExpired = errors.New("session expired")
+var (
+	ErrSessionExpired = errors.New("session expired")
+	ErrInvalidSesskey = errors.New("invalid sesskey")
+)
 
 var (
 	sessKeyPattern = regexp.MustCompile(`"sesskey"\s*:\s*"([^"]+)"`)
