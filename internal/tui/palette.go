@@ -11,25 +11,38 @@ type paletteAction struct {
 	run   func(*App) tea.Cmd
 }
 
-func paletteActions() []paletteAction {
-	return []paletteAction{
-		{"sync now", func(m *App) tea.Cmd { return m.startSync() }},
-		{"go to tasks", func(m *App) tea.Cmd { m.switchTab(TabTasks); return nil }},
-		{"go to materials", func(m *App) tea.Cmd { m.switchTab(TabMaterials); return nil }},
-		{"go to commit", func(m *App) tea.Cmd { m.openCommit(); return nil }},
-		{"filter all", func(m *App) tea.Cmd { m.setPaletteFilter("all"); return nil }},
-		{"filter undecided", func(m *App) tea.Cmd { m.setPaletteFilter("undecided"); return nil }},
-		{"filter overdue", func(m *App) tea.Cmd { m.setPaletteFilter("overdue"); return nil }},
-		{"filter tracked", func(m *App) tea.Cmd { m.setPaletteFilter("tracked"); return nil }},
-		{"filter missed", func(m *App) tea.Cmd { m.setPaletteFilter("missed"); return nil }},
-		{"filter ignored", func(m *App) tea.Cmd { m.setPaletteFilter("ignored"); return nil }},
-		{"download focused", func(m *App) tea.Cmd { return m.download() }},
-		{"open link", func(m *App) tea.Cmd { return m.openExternal() }},
-		{"write queue", func(m *App) tea.Cmd { return m.writeCommitPreview() }},
-		{"copy queue", func(m *App) tea.Cmd { return m.copyCommitPreview() }},
-		{"help", func(m *App) tea.Cmd { m.helpOn = true; return nil }},
-		{"quit", func(m *App) tea.Cmd { m.cancelDownloads(); return tea.Quit }},
+func (m *App) paletteActions() []paletteAction {
+	actions := []paletteAction{
+		{"sync now", func(app *App) tea.Cmd { return app.startSync() }},
+		{"go to tasks", func(app *App) tea.Cmd { app.switchTab(TabTasks); return nil }},
+		{"go to materials", func(app *App) tea.Cmd { app.switchTab(TabMaterials); return nil }},
+		{"go to commit", func(app *App) tea.Cmd { app.openCommit(); return nil }},
+		{"download focused", func(app *App) tea.Cmd { return app.download() }},
+		{"open link", func(app *App) tea.Cmd { return app.openExternal() }},
+		{"write queue", func(app *App) tea.Cmd { return app.writeCommitPreview() }},
+		{"copy queue", func(app *App) tea.Cmd { return app.copyCommitPreview() }},
+		{"help", func(app *App) tea.Cmd { app.helpOn = true; return nil }},
+		{"quit", func(app *App) tea.Cmd { app.cancelDownloads(); return tea.Quit }},
 	}
+	switch m.tab {
+	case TabTasks:
+		actions = append(actions,
+			paletteAction{"filter all", func(app *App) tea.Cmd { app.setPaletteFilter("all"); return nil }},
+			paletteAction{"filter undecided", func(app *App) tea.Cmd { app.setPaletteFilter("undecided"); return nil }},
+			paletteAction{"filter overdue", func(app *App) tea.Cmd { app.setPaletteFilter("overdue"); return nil }},
+			paletteAction{"filter tracked", func(app *App) tea.Cmd { app.setPaletteFilter("tracked"); return nil }},
+			paletteAction{"filter missed", func(app *App) tea.Cmd { app.setPaletteFilter("missed"); return nil }},
+			paletteAction{"filter ignored", func(app *App) tea.Cmd { app.setPaletteFilter("ignored"); return nil }},
+		)
+	case TabMaterials:
+		actions = append(actions,
+			paletteAction{"filter all", func(app *App) tea.Cmd { app.setPaletteFilter("all"); return nil }},
+			paletteAction{"filter new", func(app *App) tea.Cmd { app.setPaletteFilter("new"); return nil }},
+			paletteAction{"filter downloaded", func(app *App) tea.Cmd { app.setPaletteFilter("downloaded"); return nil }},
+			paletteAction{"filter links", func(app *App) tea.Cmd { app.setPaletteFilter("link"); return nil }},
+		)
+	}
+	return actions
 }
 
 func (m *App) openPalette() {
@@ -57,7 +70,7 @@ func (m *App) setPaletteFilter(filter string) {
 func (m *App) filteredPaletteActions() []paletteAction {
 	query := strings.ToLower(strings.TrimSpace(m.paletteQuery))
 	var out []paletteAction
-	for _, action := range paletteActions() {
+	for _, action := range m.paletteActions() {
 		if query == "" || strings.Contains(strings.ToLower(action.label), query) {
 			out = append(out, action)
 		}
