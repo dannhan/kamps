@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -191,6 +192,19 @@ func (c *Coordinator) IsActive(id string) bool {
 	return c.active[id]
 }
 
+// dispositionFilename returns the filename advertised by Content-Disposition.
+func dispositionFilename(resp *http.Response) string {
+	header := resp.Header.Get("Content-Disposition")
+	if header == "" {
+		return ""
+	}
+	_, params, err := mime.ParseMediaType(header)
+	if err != nil {
+		return ""
+	}
+	return params["filename"]
+}
+
 // DownloadFile streams a remote resource to destPath safely.
 // It handles:
 // - Destination directory creation
@@ -283,6 +297,19 @@ func DownloadFile(ctx context.Context, client *http.Client, downloadURL, destPat
 	peekSample := strings.ToLower(string(peekBuf[:nPeek]))
 	if strings.Contains(peekSample, "<!doctype html") || strings.Contains(peekSample, "<html") {
 		return "", ErrSessionExpiredHTML
+	}
+
+	// Prefer the server's filename when the caller only knows an activity name
+	// such as "Slides" and has no extension to work with.
+	if disposition := dispositionFilename(resp); disposition != "" && filepath.Ext(resolvedPath) == "" {
+		candidate := filepath.Join(filepath.Dir(resolvedPath), SanitizeFilename(disposition))
+		if candidate != resolvedPath {
+			resolved, action := ResolveDestination(candidate, expectedSize)
+			if action == ActionSkip {
+				return resolved, nil
+			}
+			resolvedPath = resolved
+		}
 	}
 
 	// Write peeked bytes to part file

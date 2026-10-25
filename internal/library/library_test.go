@@ -173,6 +173,25 @@ func TestDownloadFileCancellationCleansPart(t *testing.T) {
 	assertNoParts(t, dir)
 }
 
+func TestDownloadFileUsesContentDispositionName(t *testing.T) {
+	body := []byte("pdf bytes")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", `attachment; filename="Week 1 Slides.pdf"`)
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	got, err := DownloadFile(context.Background(), srv.Client(), srv.URL, filepath.Join(dir, "Slides"), int64(len(body)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(dir, "Week 1 Slides.pdf"); got != want {
+		t.Fatalf("path = %q, want %q", got, want)
+	}
+}
+
 func TestCoordinatorDeduplicates(t *testing.T) {
 	c := NewCoordinator()
 	if !c.TryStart("M1") || c.TryStart("M1") {
