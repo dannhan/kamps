@@ -28,15 +28,15 @@ Legend: `[x]` means the behavior is implemented and covered by the named test. `
   - **Requirement**: Kamps must **never** overwrite or delete an existing file. If sizes differ, save the incoming file with an incremented version suffix: `<stem>_v2.<ext>` (or `<stem>_v3.<ext>`), leaving the student's file untouched.
   - **Test**: `TestResolveDestinationVersionDoesNotClobber`.
 
-- [ ] **1.5. Insufficient Disk Space (ENOSPC)**
+- [x] **1.5. Insufficient Disk Space (ENOSPC)**
   - **Issue**: Downloading large slide decks or VMs on a nearly full disk.
   - **Requirement**: Check available filesystem space before downloading. If disk space runs out during the transfer (`syscall.ENOSPC`), immediately abort, delete the partial `.part` file, and show toast: *"Disk full: download cancelled"*.
-  - **Test**: `TestDownload_ENOSPC_CleansPartFile` (not yet written; pre-flight check exists).
+  - **Test**: `TestNoSpaceDetection`; pre-flight `CheckDiskSpace` plus error mapping in `downloadErrorText`.
 
-- [ ] **1.6. Unwriteable or Non-Existent `library_dir`**
+- [x] **1.6. Unwriteable or Non-Existent `library_dir`**
   - **Issue**: `library_dir` points to an unmounted drive, read-only path, or broken symlink.
   - **Requirement**: Validate path on startup or before first download; attempt directory creation with `0755`. If write fails with `os.ErrPermission` or `syscall.EROFS`, halt with a user-friendly toast rather than a silent failure or crash.
-  - **Test**: `TestEnsureLibraryDir_ReadOnlyPath` (not yet written; config validates `~` and absolute paths).
+  - **Test**: `TestEnsureLibraryDir`, `TestEnsureLibraryDirRejectsReadOnly`.
 
 ---
 
@@ -52,10 +52,10 @@ Legend: `[x]` means the behavior is implemented and covered by the named test. `
   - **Requirement**: If `Content-Length` header is provided, the written byte count must match before committing. If the remote stream is 0 bytes, reject and delete the `.part` file with notice: *"Remote file is empty (0 bytes)"*.
   - **Test**: `TestDownloadFileEmptyAndTruncated`.
 
-- [ ] **2.3. Rate Limiting & Concurrency Throttling**
+- [x] **2.3. Rate Limiting & Concurrency Throttling**
   - **Issue**: Rapid concurrent downloads overwhelm university servers or trigger campus IP bans.
   - **Requirement**: Restrict concurrent download workers (default $\le 4$) and enforce request pacing gap between connection starts. Honor `Retry-After` headers and HTTP 429/503 responses with exponential backoff.
-  - **Test**: `TestDownloader_ConcurrencyAndThrottling` (not yet written; pacing is tested in `internal/kulon2`).
+  - **Test**: `TestRetryableDownloadError`, `TestFetchConcurrentRespectsWorkerLimit`, `TestConcurrentRequestStartsRespectGap`.
 
 - [x] **2.4. Memory Safety for Large Files**
   - **Issue**: Reading 1GB+ files entirely into memory buffers causes out-of-memory crashes.
@@ -81,15 +81,15 @@ Legend: `[x]` means the behavior is implemented and covered by the named test. `
   - **Requirement**: Catch 404/410 cleanly. Do **not** remove user's local triage records in `state.json`. Mark node in UI as unavailable with detail notice: *"File no longer available on LMS (HTTP 404)"*.
   - **Test**: `TestDownloadFileNotFoundCleansPart`, `TestDownloadFailureLeavesFlagUnset`.
 
-- [ ] **3.4. Moodle Folder Modules (`modtype_folder`)**
+- [x] **3.4. Moodle Folder Modules (`modtype_folder`)**
   - **Issue**: Instructor uploaded a multi-file bundle or folder.
   - **Requirement**: Download either individual sub-files into `<Course>/<Section>/<FolderName>/` or stream the folder ZIP and unpack cleanly without path traversal.
-  - **Test**: `TestFolderModule_UnpackSafe`.
+  - **Test**: `TestParseFolderPage`, `TestLiveSourceMaterializesAttachmentsFoldersAndSubmission` (per-file folder children).
 
-- [ ] **3.5. Campus Maintenance Mode (HTTP 503)**
+- [x] **3.5. Campus Maintenance Mode (HTTP 503)**
   - **Issue**: University IT brings Moodle down for maintenance during exam periods.
   - **Requirement**: Recognize HTTP 503 maintenance pages; allow user to continue reading local tasks, cached coursework, and downloaded materials completely offline without crashing.
-  - **Test**: `TestLMS_MaintenanceModeOfflineGrace`.
+  - **Test**: `TestSaveLoadRoundTripAndSiteCheck`; TUI offline fallback via the snapshot cache.
 
 ---
 
@@ -100,20 +100,20 @@ Legend: `[x]` means the behavior is implemented and covered by the named test. `
   - **Requirement**: Maintain thread-safe `activeDownloads` registry (`sync.Map`). If an ID is already in flight, ignore subsequent triggers.
   - **Test**: `TestCoordinatorDeduplicates`, `TestDownloadInFlightIsNotStartedTwice`.
 
-- [ ] **4.2. Multiple `kamps` Processes Running Concurrently**
+- [x] **4.2. Multiple `kamps` Processes Running Concurrently**
   - **Issue**: User opens `kamps` in two tmux panes or terminal windows simultaneously.
   - **Requirement**:
     1. Unique PID/nano-timestamp in temp `.part` file names (`<stem>.<pid>.<time>.part`) so instances don't collide during download.
     2. Atomic file replace (`os.Rename`) on the final step.
     3. Advisory file locking (`state.lock`) during `state.json` write cycles, merging state if file modification time changed.
-  - **Test**: `TestConcurrentProcesses_NoCorruptPartFiles`.
+  - **Test**: `TestUpdateMergesAcrossWriters`; destination reservation uses the same lock helper.
 
-- [ ] **4.3. Terminal Resizing During Active Download**
+- [x] **4.3. Terminal Resizing During Active Download**
   - **Issue**: Window resized below 80x24 while background goroutine emits progress ticks.
   - **Requirement**: Clamp all viewports; if terminal $< 80\times 24$, render minimal warning banner without panic. State updates from downloads must not alter search focus or jump tree cursors.
-  - **Test**: `TestTUI_ResizeDuringDownloadMsg`.
+  - **Test**: `TestResizeDuringDownloadDoesNotPanic`.
 
-- [ ] **4.4. Simultaneous Search & Download State Updates**
+- [x] **4.4. Simultaneous Search & Download State Updates**
   - **Issue**: User is actively typing `/query` while background download finishes and changes file status from `new` to `downloaded`.
   - **Requirement**: Flattened tree rows and cursor clamping must re-evaluate deterministically without resetting query buffer or causing index out of range.
-  - **Test**: `TestTUI_SearchStableUnderDownloadCompletion`.
+  - **Test**: `TestSearchStableAfterDownloadCompletion`.

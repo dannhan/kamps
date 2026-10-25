@@ -98,7 +98,7 @@ Important details:
 | [`material_rows.go`](../internal/tui/material_rows.go) | You are changing a material row or the Materials tab body |
 | [`detail_materials.go`](../internal/tui/detail_materials.go) | You are changing material detail content |
 | [`commit.go`](../internal/tui/commit.go) | You are changing the session queue, preview, clipboard, or Commit tab |
-| [`sync.go`](../internal/tui/sync.go) | You are changing the simulated sync state or Sync tab |
+| [`sync.go`](../internal/tui/sync.go) | You are changing sync, cursor restoration, session status, or the Sync tab |
 | [`chrome.go`](../internal/tui/chrome.go) | You are changing the shell, tab bar, footer, or help overlay |
 | [`detail.go`](../internal/tui/detail.go) | You are changing split-pane visibility, widths, or clipping |
 | [`search.go`](../internal/tui/search.go) | You are changing query behavior, match fields, or search-mode keys |

@@ -68,7 +68,7 @@ This guide traces the runtime execution of Kamps from binary invocation to shutd
 - Bubble Tea runs this command in a goroutine, so the UI remains responsive.
 - Inside `loadCmd`, one source call returns the snapshot:
   1. `src.Load(ctx)` returns courses, assignments, and materials for Demo.
-  2. Live Kulon2 mode currently returns courses only and sets `Snapshot.Notice`; assignments/materials are intentionally unavailable rather than silently presented as a complete empty result.
+  2. Live Kulon2 mode returns courses, assignments, resources, assignment attachments, and folder children; per-page failures append a `Snapshot.Notice` instead of hiding the whole snapshot.
 - Any error returns [`errMsg`](../internal/tui/app.go).
 - On success, it returns [`loadedMsg`](../internal/tui/app.go) with the snapshot.
 
@@ -125,7 +125,7 @@ Every keystroke arrives as a `tea.KeyMsg` and goes through [`App.handleKey`](../
 | `enter` | Toggle detail on Tasks/Materials; copy preview on Commit |
 | `f` | Cycle the tab's filter |
 | `/` | Start search on Tasks/Materials |
-| `s` | Start the simulated sync animation |
+| `s` | Reload the source and reconcile local state |
 | `d` | Mark Materials as downloaded |
 | `y` | Copy the commit preview (Commit only) |
 | `x` | Drop the focused item from the queue (Commit only) |

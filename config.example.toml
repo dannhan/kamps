@@ -1,6 +1,19 @@
 # Kulon2 URL. This is the default, shown here for clarity.
 site_url = "https://kulon2.undip.ac.id/"
 
-# Default: ~/Documents/kamps. Set this to ~/projects/university to use an
-# existing course workspace once workspace mapping is implemented.
+# Default: ~/Documents/kamps. Files land under
+# <library_dir>/<course>/<section>/<folder>/.
 # library_dir = "~/Documents/kamps"
+
+# In-tree source: "kulon2" (default) or "demo".
+# source = "kulon2"
+
+# Folders scanned for optional course.json workspace mappings.
+# workspace_roots = ["~/projects/university"]
+
+# Commit/export target and format (markdown, todo, taskwarrior).
+# commit_file = "~/notes/tasks.md"
+# export_format = "markdown"
+
+# Auto-track assignments the LMS reports as "Submitted for grading".
+# auto_track_submitted = true

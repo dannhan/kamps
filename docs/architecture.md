@@ -16,83 +16,42 @@ The data boundary is simple:
 - The **commit queue** is intentionally not persisted. It is a per-run export buffer; decisions themselves are saved immediately.
 
 ```mermaid
-flowchart TD
-    subgraph CLI["CLI Entry Point (cmd/kamps)"]
-        Main["main() in main.go"]
-        TTYCheck{"isTTY(stdout)?"}
-    end
-
-    subgraph ConfigPkg["Configuration (internal/config)"]
-        Cfg["config.Config\nXDG paths + defaults"]
-    end
-
-    subgraph ModelPkg["Core Domain (internal/model)"]
-        ModelCourse["model.Course"]
-        ModelAssignment["model.Assignment"]
-        ModelMaterial["model.Material"]
-        ModelTriage["model.Triage enum"]
-    end
-
-    subgraph SourcePkg["Data Ingestion (internal/source)"]
-        SourceInterface["source.Source interface"]
-        DemoSource["source.Demo\nin-memory dataset"]
-        DemoSource -. implements .-> SourceInterface
-    end
-
-    subgraph StorePkg["Persistence (internal/store)"]
-        StoreState["store.State\ndecisions + download flags"]
-        StateFile[("state.json\natomic write")]
-        StoreState <--> StateFile
-    end
-
-    subgraph TUIPkg["Terminal UI (internal/tui)"]
-        TUIApp["tui.App (tea.Model)"]
-        Search["search.go\nlive query + predicates"]
-        Tree["tree.go + task/material files\nflattened nodes + rows"]
-        Detail["detail.go\nsplit pane"]
-        Frame["frame.go / row.go\nshell, hints, bands"]
-    end
-
-    subgraph PlainPkg["Plain output (internal/plain)"]
-        PlainMode["plain.PrintPlain()"]
-    end
-
-    subgraph FormatPkg["Formatting (internal/format)"]
-        Formatter["HumanSize / SortAssignments"]
-    end
-
-    subgraph External["Terminal & Clipboard"]
-        AltScreen["Alternate screen\n(Bubble Tea)"]
-        PlainOut["stdout\n(plain mode)"]
-        OSC52["OSC 52\nsystem clipboard"]
-    end
+%%{init: {"flowchart": {"curve": "step"}}}%%
+flowchart TB
+    Main["cmd/kamps<br/>main() + TTY check"]
+    Cfg["config<br/>XDG paths"]
+    TUI["tui<br/>Bubble Tea UI<br/>alt screen + OSC 52"]
+    Plain["plain<br/>snapshot<br/>stdout"]
+    Source["source<br/>Source interface"]
+    Store["store<br/>decisions + flags"]
+    Model["model<br/>Course / Assignment / Material"]
+    Format["format<br/>sort + sizes"]
+    Disk[("state.json")]
 
     Main --> Cfg
-    Main --> DemoSource
-    Main --> TTYCheck
+    Main -->|TTY| TUI
+    Main -->|pipe / file| Plain
+    TUI --> Source
+    TUI --> Store
+    TUI --> Format
+    Plain --> Source
+    Plain --> Store
+    Plain --> Format
+    Source --> Model
+    Store --> Model
+    Store <--> Disk
 
-    TTYCheck -- "No (pipe / file)" --> PlainMode
-    TTYCheck -- "Yes (interactive)" --> TUIApp
+    classDef entry fill:#dbe8fb,stroke:#7aa2d6,stroke-width:1.5px,color:#1f3350
+    classDef interactive fill:#dff3e8,stroke:#8fc7ad,stroke-width:1.5px,color:#1f3d2f
+    classDef snapshot fill:#ece2fb,stroke:#b79ce8,stroke-width:1.5px,color:#352650
+    classDef pkg fill:#f4f2ea,stroke:#c9c3b4,color:#2b2a26
+    classDef state fill:#fdeed3,stroke:#d9b98a,stroke-width:1.5px,color:#4a3520
 
-    PlainMode --> SourceInterface
-    PlainMode --> StoreState
-    PlainMode --> PlainOut
-
-    TUIApp --> SourceInterface
-    TUIApp --> StoreState
-    TUIApp --> Search
-    TUIApp --> Tree
-    TUIApp --> Detail
-    TUIApp --> Frame
-    TUIApp --> Formatter
-    TUIApp --> AltScreen
-    TUIApp -. "y / enter (commit preview)" .-> OSC52
-    PlainMode --> Formatter
-
-    SourceInterface --> ModelPkg
-    StoreState --> ModelPkg
-    TUIApp --> ModelPkg
-    PlainMode --> ModelPkg
+    class Main entry
+    class TUI interactive
+    class Plain snapshot
+    class Cfg,Source,Store,Model,Format pkg
+    class Disk state
 ```
 
 There is no HTTP server, database, or daemon. Kamps is a single local binary.
@@ -156,7 +115,7 @@ From [`go.mod`](../go.mod) and direct code imports:
    - Manages terminal setup, key listeners, window resize events, and spinner ticks.
 
 2. **`github.com/charmbracelet/bubbles` (v1.0.0)**
-   - [`spinner.Model`](../internal/tui/app.go) drives the simulated sync indicator.
+   - [`spinner.Model`](../internal/tui/app.go) drives the sync indicator while `s` reloads the source.
    - [`help.Model`](../internal/tui/app.go) and [`key.Binding`](../internal/tui/keys.go) provide the `?` help overlay.
 
 3. **`github.com/charmbracelet/lipgloss` (v1.1.0)**
@@ -272,10 +231,10 @@ Both tree tabs render a flat `[]node` list. [`node`](../internal/tui/tree.go) st
 
 These are current limitations, not mysteries:
 
-- **Config supports site URL and library directory.** Login/session verification and live course-list retrieval are implemented; course-page parsing and downloads are not.
-- **The live source is partial.** It verifies the saved session, fetches in-progress courses, parses course-page activities into assignments/materials, reads assignment due dates, and downloads `mod/resource` files. Assignment attachment downloads and folder modules are not implemented.
-- **The demo source seeds triage values.** They are useful for screenshots but are not user state; real sources should return `Undecided`.
-- **Downloads do not transfer bytes.** `d` flips the flag and saves it.
-- **Sync is simulated.** `s` runs an animation and a toast; it does not reload the source.
-- **The commit writer does not exist.** The queue copies text to the clipboard.
-- **`similarManualTask` is a demo stand-in** for a future working-directory cross-check.
+- **Config supports the runtime surface.** Site URL, library directory, source selection, workspace roots, commit target/format, and auto-triage are implemented.
+- **The live source covers current modules.** It verifies the session, fetches courses and course pages, reads due dates/submission state, materializes assignment attachments and folder children, and downloads files with session authentication.
+- **The demo source seeds triage values.** They are useful for screenshots but are not user state; live sources return source data and let the store/auto-triage decide.
+- **Downloads transfer bytes, resume, and retry.** Partial `.part` files survive cancellation; Range requests continue them; rate limits and 5xx responses back off.
+- **Sync reloads the source.** `s` preserves the tab, cursors, search, and selection; a failed load falls back to the cached snapshot.
+- **Exporters write files or Taskwarrior.** Markdown, todo.txt, and Taskwarrior are idempotent; the clipboard remains available with `y`.
+- **`similarManualTask` is a demo stand-in** for a future working-directory cross-check and is not part of exported output.

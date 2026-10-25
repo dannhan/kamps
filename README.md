@@ -26,7 +26,7 @@ clipboard (OSC 52), so you can paste them into whatever list you use.
 
 ## Installation
 
-Requires Go 1.24+.
+Requires Go 1.26+.
 
 ```sh
 git clone <this repo> kamps
@@ -40,6 +40,7 @@ go build -o kamps ./cmd/kamps
 ./kamps              # launch live mode (requires login)
 ./kamps --demo       # launch using bundled demo data
 ./kamps login        # sign in through your browser, then paste MoodleSession
+kamps login --browser  # extract the cookie from a local Firefox/Chromium profile
 ./kamps logout       # remove the saved session
 ./kamps version      # print the version
 kamps | less         # no TTY? prints a plain-text snapshot instead
@@ -60,25 +61,28 @@ site_url = "https://kulon2.undip.ac.id/"
 library_dir = "~/projects/university"
 ```
 
-The `~/projects/university` mapping is **not implemented yet**. Live mode shows the in-progress course list, parses course pages into assignments and materials, and downloads resource files into the library directory. Assignment attachments, folder modules, and resume-after-interruption are not available yet. Use `./kamps --demo` for the complete bundled UI.
+Live mode parses in-progress courses, course pages, assignments, resources, assignment attachments, and folder files. Downloads go to `library_dir` and resume after interruption. An optional `course.json` in a workspace maps a course to that repo so downloads land there; see [`docs/workspace.md`](docs/workspace.md). Use `./kamps --demo` to explore the bundled UI without a session.
 
 Handy keys:
 
 | key | action |
 |---|---|
 | `↑↓` / `jk` | move |
-| `hl` | fold / open (courses, weeks) |
-| `tab`, `1`–`5` | switch tabs |
-| `enter` | open / close the detail pane (Tasks, Materials); copy the queue (Commit) |
+| `hl` | fold / open (courses, sections, folders, buckets) |
+| `tab`, `1`–`4` | switch tabs |
+| `enter` | open / close the detail pane (Tasks, Materials); write the queue (Commit) |
 | `space`, `a` | select item / select all |
+| `V`, `*` | range-select / invert visible |
+| `ctrl+z` | undo the last bulk triage |
 | `t` / `m` / `i` / `u` | decide: track / missed / ignore / undecided |
 | `f` | cycle the filter |
 | `/` | search the tree (composes with the filter) |
 | `esc` | clear the search, then the filter, then drop back |
 | `c` | review & commit |
+| `w` | write the queue to `commit_file` (Commit) |
 | `y` | copy the queue lines (Commit) |
-| `x` | drop an item from the queue (Commit) |
-| `s` | sync |
+| `x` / `X` | drop one item / drop all queued (Commit) |
+| `s` | reload the source |
 | `d` | download (Materials) |
 | `o` | open an external link in the browser (Materials) |
 | `?` | help |
@@ -92,26 +96,34 @@ matches.
 ## Project structure
 
 ```
-cmd/kamps/        entry point
-internal/model/   Course, Assignment, Material — data types
-internal/source/  Source interface, live source, and demo data source
-internal/store/   local state: decisions and download flags
-internal/tui/     the terminal UI
-internal/config/  paths and settings
-docs/             developer guides and Kulon2 notes
+cmd/kamps/          entry point, flags, login, source registration
+internal/model/     Course, Assignment, Material — data types
+internal/source/    Source interface, registry, capabilities, demo data
+internal/kulon2/    live Moodle parser, session, downloads
+internal/library/   safe paths, resumable downloads, library scan
+internal/store/     state schema v2, migration, locking/merge
+internal/cache/     last-successful snapshot for offline mode
+internal/export/    Markdown, todo.txt, Taskwarrior writers
+internal/workspace/ optional course.json discovery and resolution
+internal/browsercookie/ Firefox/Chromium cookie extraction
+internal/tui/       the terminal UI
+internal/config/    paths and settings
+docs/               developer guides and platform notes
 ```
 
 Everything is built against one interface, `source.Source`. Choose the bundled
-demo dataset with `--demo`, or use the live Kulon2 course-list source after
-logging in. Course pages supply activity names, sections, assignments, and downloadable resources; assignment attachment parsing and folder downloads remain future work.
+demo dataset with `--demo`, a registered source with `--source`, or the live
+Kulon2 source after logging in. Course pages supply activity names, sections, assignments, downloadable resources, assignment attachments, and folder children. Downloaded files are reconciled with the local library on startup, and state writes are merged under a cross-process lock.
+
+See [`docs/export.md`](docs/export.md), [`docs/workspace.md`](docs/workspace.md), and [`docs/plugins.md`](docs/plugins.md) for the new surfaces.
 
 ## Status & roadmap
 
-Early days: the UI is complete and runs against demo data; live Kulon2 mode loads courses, parses course pages, and downloads resource files into the library directory. Next up, in order:
+The core roadmap is implemented: live parsing/downloads, resumable transfers, library scan, state locking, real sync, auto-triage, session expiry, offline cache, browser cookie login, exporters, workspace mapping, and the source registry. Next up, in order:
 
-1. Parse assignment attachments and folder modules as downloadable materials. See `docs/kulon2.md`.
-2. Optionally map LMS courses to `course.json` in a user's workspace, without requiring that layout.
-3. Resume interrupted downloads and guard `state.json` against multiple running instances.
-4. Add a real commit writer behind the queue preview (today `y` copies the lines).
+1. Broaden LMS module coverage (quizzes with attachments, pages, and other content types).
+2. Add an opt-in `kamps workspace init` helper that prints a `course.json` template without writing it.
+3. Add optional Todoist/out-of-process source integrations.
+4. Polish offline cache retention and Library views for files kamps did not download.
 
-Later, not now: bulk actions and a plugin surface for new sources.
+Implemented in this pass: assignment attachments, folder files, resumable downloads, download retries/concurrency, startup library scan, state locking/merge, real sync, auto-triage of submitted work, session expiry, offline cache, browser cookie login, Markdown/todo.txt/Taskwarrior exporters, `course.json` workspace mapping, source registry, and range/bulk selection.

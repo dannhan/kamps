@@ -30,12 +30,12 @@ Instead of navigating browser tabs and ad-hoc spreadsheets, students use `kamps`
 | **Atomic State Persistence** | Implemented | `internal/store` | Persists user triage decisions and download flags atomically to `state.json`. |
 | **Live Search & Filters** | Implemented | `internal/tui/search.go`, `filters.go` | Case-insensitive multi-field search composing with status filters. |
 | **Commit Queue & OSC 52** | Implemented | `internal/tui/commit.go` | Stages session decisions as Markdown tasks, copies to clipboard via OSC 52. |
-| **Material File Downloads** | Implemented | `internal/library`, `internal/kulon2/download.go` | Streams `mod/resource` files to disk; skips identical files, versions changed ones, and surfaces failures. Folder modules and assignment attachments are still planned. |
-| **Local Library Management** | Partial | `internal/config`, `internal/library` | `library_dir` scaffolding, `~` expansion, and per-file skip/version rules are done; scanning the library on startup is still planned. |
-| **Workspace Course Mapping** | *Planned* | `internal/config`, `internal/source` | Optional `course.json` in local project repos to bind workspace folders to LMS course IDs. |
-| **Direct File Commit Writers** | *Planned* | `internal/tui/commit.go` | Direct file appending (e.g. `tasks.md`, `todo.txt`) beyond OSC 52 clipboard. |
-| **Automated Triage Sync** | *Planned* | `internal/kulon2/source.go` | Automatically triaging assignments marked "Submitted for grading" on the LMS as `tracked`. |
-| **Automatic Cookie Ingestion** | *Planned* | `cmd/kamps/auth.go` | Extracting active MoodleSession cookies directly from local browser storage. |
+| **Material File Downloads** | Implemented | `internal/library`, `internal/kulon2/download.go` | Streams resource files, assignment attachments, and folder children; resumes partial transfers, retries rate limits, skips identical files, versions changed ones, and surfaces failures. |
+| **Local Library Management** | Implemented | `internal/config`, `internal/library` | `library_dir` scaffolding, `~` expansion, per-file skip/version rules, resumable downloads, and a startup scan that reconciles files with `state.json`. |
+| **Workspace Course Mapping** | Implemented | `internal/workspace` | Optional user-authored `course.json` in local repos binds LMS course IDs/shortnames to download folders. |
+| **Direct File Commit Writers** | Implemented | `internal/export` | Idempotent Markdown, todo.txt, and Taskwarrior writers selected by config/flag; preview equals output. |
+| **Automated Triage Sync** | Implemented | `internal/store`, `internal/tui` | Submitted LMS work auto-tracks unless the user explicitly decided; overrides survive reloads. |
+| **Automatic Cookie Ingestion** | Implemented | `internal/browsercookie` | `kamps login --browser` reads Firefox/Chromium-family profiles with manual-paste fallback. |
 
 ---
 
@@ -155,13 +155,13 @@ Since Kulon2 uses enterprise Microsoft Azure AD SSO and disables local passwords
 - [x] Create directory builder honoring `library_dir` (`<course>/<section>/<file>`).
 - [x] Add safe-skip / non-destructive versioning if destination files already exist.
 - [x] Connect `d` hotkey in Materials tab to background download tasks with progress ticker.
-- [ ] Download assignment attachments and folder modules.
-- [ ] Resume interrupted downloads instead of restarting them.
+- [x] Download assignment attachments and folder modules.
+- [x] Resume interrupted downloads instead of restarting them.
 
 ### Phase 3: Authentication Enhancements
-- [ ] Add `kamps login --browser` to automatically discover and extract `MoodleSession` from local Chromium/Firefox SQLite cookie jars on Linux.
-- [ ] Add session lifetime tracking in `session.json` to warn users when their 8-hour session is nearing expiration.
+- [x] Add `kamps login --browser` to automatically discover and extract `MoodleSession` from local Chromium/Firefox SQLite cookie jars on Linux.
+- [x] Add session lifetime tracking in `session.json` to warn users when their 8-hour session is nearing expiration.
 
 ### Phase 4: Integrations & Commit Exporters
 - [ ] Support `--commit-file <path>` to directly append completed triage items to a local Markdown file (e.g., `~/notes/tasks.md`).
-- [ ] Introduce optional workspace `course.json` discovery to map LMS course IDs to local git repository folders.
+- [x] Introduce optional workspace `course.json` discovery to map LMS course IDs to local git repository folders.

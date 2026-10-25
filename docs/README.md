@@ -33,7 +33,7 @@ LMS / lab drive data (read-only)
   Commit preview ──▶ OSC 52 clipboard
 ```
 
-The UI ships with both bundled demo data and a live Kulon2 source. `kamps login` verifies and securely saves a session; live mode fetches courses, parses course pages into assignments and materials, and downloads resource files into the configured library directory. Assignment attachments and folder modules are not downloaded yet; see [Kulon2 / Moodle notes](kulon2.md).
+The UI ships with both bundled demo data and a live Kulon2 source. `kamps login` verifies and securely saves a session; live mode fetches courses, parses course pages into assignments and materials, downloads resources, assignment attachments, and folder children, and can resume partial transfers. Workspace mapping, exporters, and source registration are described in the guides below.
 
 ---
 
@@ -49,6 +49,9 @@ The documentation is organized progressively from high-level architecture down t
 | [4. Source Code Tour](code-tour.md) | Where to find things and how to change them | File directory, reading order, investigation recipes, testing guide, verified vs future behavior |
 | [5. Learning Path](learning-path.md) | A guided route for a Go newcomer | 30/60/120-minute tours, Go concepts mapped to files, four small exercises |
 | [6. Kulon2 / Moodle Recon](kulon2.md) | Platform notes for live LMS integration | Real LMS endpoints, session cookie auth, AJAX formats, verified scraping constraints |
+| [7. Exporting](export.md) | How to hand the queue to a task list | Markdown, todo.txt, Taskwarrior, idempotent writes |
+| [8. Workspace Mapping](workspace.md) | How course.json maps courses to repos | Schema, discovery, download layout |
+| [9. Sources & Plugins](plugins.md) | How to add an in-tree source | Registry, capabilities, ID contract |
 
 Appendix: [TUI research](../TUI_RESEARCH.md) records the design comparison that informed the tree, row, and theme work. Some ideas there are proposals rather than current behavior; the code tour marks the boundary.
 
@@ -57,7 +60,7 @@ Appendix: [TUI research](../TUI_RESEARCH.md) records the design comparison that 
 ## Core Mental Model & Terminology
 
 - **Triage decision:** The user's local verdict on an assignment ([`model.Triage`](../internal/model/model.go)). Not fetched from the LMS. Options are `Undecided` (default), `Tracked` (handled or submitted), `Missed` (deadline passed), and `Ignored` (optional or outdated materials). The demo dataset seeds some of these values so the UI has realistic counts; saved local state wins when it has an entry for that assignment.
-- **The source:** The read-only data provider ([`source.Source`](../internal/source/source.go)). It is satisfied by the in-memory [`source.Demo`](../internal/source/demo.go) or the Kulon2 source, which currently returns enrolled courses only.
+- **The source:** The read-only data provider ([`source.Source`](../internal/source/source.go)). It is satisfied by the in-memory [`source.Demo`](../internal/source/demo.go) or the Kulon2 source, which loads courses, assignments, and materials.
 - **The store:** Atomically persisted user state ([`store.State`](../internal/store/store.go)) saved to `$XDG_STATE_HOME/kamps/state.json` (`~/.local/state/kamps/state.json` when the variable is unset). It holds assignment triage decisions and downloaded-material flags. Missing entries mean `undecided` and `not downloaded`.
 - **The commit queue:** The list of decisions changed during this process, held only in `App.pending`. Decisions are saved to disk immediately; the queue is the export step. Restarting Kamps does not restore the queue.
 - **The Elm Architecture (TEA):** The design pattern powering Bubble Tea:
@@ -73,15 +76,15 @@ Appendix: [TUI research](../TUI_RESEARCH.md) records the design comparison that 
 
 | Area | Implemented today | Notes |
 |---|---|---|
-| Data source | Demo or Kulon2 | Live mode fetches in-progress courses and parses course-page activities; dates/attachments are not yet parsed |
-| Persistence | Decisions and download flags | Atomic `state.json`; corrupt file falls back to empty with a footer warning |
+| Data source | Demo or Kulon2 | Live mode parses courses, due dates, submission state, resources, attachments, and folder children |
+| Persistence | Decisions, auto-triage overrides, download records | Atomic v2 `state.json` with migration, merge under a cross-process lock |
 | Tasks tree | Term → course → state bucket → task → attached material | Folding is per tab; assignments identify attachments by the `K…`/`M…:` convention |
-| Materials tree | Course → downloaded/new bucket → file → linked assignment | Attachments can link back to an assignment |
+| Materials tree | Course → downloaded/new → section → folder → file → linked assignment | `hl` folds any level; attachments link back to an assignment |
 | Search | Live, case-insensitive, composes with `f` | `ctrl+w`, `alt+backspace`, and `ctrl+backspace` delete a word |
 | Detail pane | Auto-opens at ≥ 100 columns; `enter` pins it | 62/38 split with a 24-column detail minimum |
-| Downloads | Streams resource files to `library_dir`, skips identical files, versions changed ones | External links open with `o`; folder and assignment attachments are not downloaded yet |
-| Sync | Animated status and toast | Simulated; does not reload the source |
-| Commit | Preview + copy via OSC 52 (`y` or `enter`) | `x` drops a queue item; the stored decision remains |
+| Downloads | Streams resources, assignment attachments, and folder children; resumes and retries | External links open with `o`; `book` activities open in the browser |
+| Sync | Reloads the source, preserves cursors/search | Falls back to the last cached snapshot when the LMS is unavailable |
+| Commit | Preview + write (`w`) or copy (`y`); `enter` writes when configured | Markdown/todo/Taskwarrior; `x`/`X` drop one/all; decisions remain stored |
 | Plain mode | Non-TTY snapshot | Applies saved state; source errors exit non-zero |
 
 ---
