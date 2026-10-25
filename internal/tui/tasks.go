@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/ruyam/kamps/internal/format"
 	"github.com/ruyam/kamps/internal/model"
-	"github.com/ruyam/kamps/internal/store"
 )
 
 // visible returns the Tasks-tab assignments after the active filter and
@@ -107,24 +106,24 @@ func (m *App) applyTriage(t model.Triage) {
 			m.undoDecisions[id] = a.Triage
 		}
 	}
+	decisions := make(map[string]model.Triage, len(ids))
 	for _, id := range ids {
-		if a := m.byID(id); a != nil {
-			a.Triage = t
-		}
+		decisions[id] = t
 		if t == model.Undecided {
 			delete(m.pending, id)
 		} else {
 			m.pending[id] = t
 		}
 	}
+	if _, err := m.service.SetDecisions(decisions); err != nil {
+		m.toast = "could not save state: " + err.Error()
+		m.toastTicks = 40
+	} else {
+		m.toast = fmt.Sprintf("%d %s %s", len(ids), plural(len(ids), "item", "items"), t.String())
+		m.toastTicks = 24
+	}
+	m.state = m.service.State()
 	m.selected = map[string]bool{}
-	m.toast = fmt.Sprintf("%d %s %s", len(ids), plural(len(ids), "item", "items"), t.String())
-	m.toastTicks = 24
-	m.updateState(func(s *store.State) {
-		for _, id := range ids {
-			s.SetDecision(id, t)
-		}
-	})
 }
 
 func (m *App) taskFooter(width int) string {

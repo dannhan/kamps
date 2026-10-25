@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/ruyam/kamps/internal/model"
-	"github.com/ruyam/kamps/internal/store"
 )
 
 func (m *App) selectionSet() map[string]bool {
@@ -117,20 +116,18 @@ func (m *App) undoTriage() {
 	ids := make([]string, 0, len(m.undoDecisions))
 	for id, previous := range m.undoDecisions {
 		ids = append(ids, id)
-		if a := m.byID(id); a != nil {
-			a.Triage = previous
-		}
 		if previous == model.Undecided {
 			delete(m.pending, id)
 		} else {
 			m.pending[id] = previous
 		}
 	}
-	m.updateState(func(s *store.State) {
-		for id, previous := range m.undoDecisions {
-			s.SetDecision(id, previous)
-		}
-	})
+	if _, err := m.service.SetDecisions(m.undoDecisions); err != nil {
+		m.toast = "could not save state: " + err.Error()
+		m.toastTicks = 40
+		return
+	}
+	m.state = m.service.State()
 	m.undoDecisions = map[string]model.Triage{}
 	m.toast = fmt.Sprintf("undid %d %s", len(ids), plural(len(ids), "decision", "decisions"))
 	m.toastTicks = 24

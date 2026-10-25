@@ -21,14 +21,21 @@ type Decision struct {
 
 // Decide persists a triage decision for every matching assignment.
 func (s *Service) Decide(ids []string, triage model.Triage) ([]Decision, error) {
-	wanted := make(map[string]bool, len(ids))
+	decisions := make(map[string]model.Triage, len(ids))
 	for _, id := range ids {
-		wanted[id] = true
+		decisions[id] = triage
 	}
+	return s.SetDecisions(decisions)
+}
+
+// SetDecisions applies a set of decisions in one state write. It is used by
+// triage and by undo, which can restore several different prior values.
+func (s *Service) SetDecisions(decisions map[string]model.Triage) ([]Decision, error) {
 	var changed []Decision
 	for i := range s.snapshot.Assignments {
 		assignment := &s.snapshot.Assignments[i]
-		if !wanted[assignment.ID] {
+		triage, ok := decisions[assignment.ID]
+		if !ok {
 			continue
 		}
 		assignment.Triage = triage
