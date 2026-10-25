@@ -53,18 +53,19 @@ type App struct {
 	help    help.Model
 	program *tea.Program
 
-	courses     []model.Course
-	assignments []model.Assignment
-	materials   []model.Material
-	loaded      bool
-	loading     bool
-	loadError   string
-	loadNotice  string
-	downloads   map[string]bool
-	scanSummary string
-	lastSync    time.Time
-	offline     bool
-	cacheNotice string
+	courses      []model.Course
+	assignments  []model.Assignment
+	materials    []model.Material
+	loaded       bool
+	loading      bool
+	loadError    string
+	loadNotice   string
+	downloads    map[string]bool
+	scanSummary  string
+	unknownFiles []string
+	lastSync     time.Time
+	offline      bool
+	cacheNotice  string
 
 	restoreTaskKey  string
 	restoreMatKey   string

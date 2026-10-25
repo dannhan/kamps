@@ -36,7 +36,9 @@ func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 	switch n.kind {
 	case nodeCourse:
 		name := m.shortCode(n.courseID)
-		if course, ok := m.courseByID(n.courseID); ok && course.Name != "" {
+		if n.courseID == localCourseID {
+			name = "local library"
+		} else if course, ok := m.courseByID(n.courseID); ok && course.Name != "" {
 			name = course.Name
 		}
 		content = lead + background(stCode.Bold(true)).Render(name)
@@ -104,6 +106,9 @@ func (m *App) materialsContent(width, height int) (string, string, []string, []s
 	if m.searchActive() {
 		title = m.searchTitle()
 		right = rightAligned(fmt.Sprintf("%d %s", matches, plural(matches, "match", "matches")), hint)
+	} else if m.filter == "unknown" {
+		title = fmt.Sprintf("materials · %d files not in source", len(m.unknownFiles))
+		right = hint
 	} else {
 		title = fmt.Sprintf("materials · %d files · %d local", len(m.materials), m.downloadedMaterials())
 		right = hint

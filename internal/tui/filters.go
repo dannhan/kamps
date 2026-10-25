@@ -3,7 +3,7 @@ package tui
 // filters, cycled with f. `/` is reserved for search.
 var filterNames = []string{"all", "undecided", "overdue", "tracked", "missed", "ignored"}
 
-var materialFilterNames = []string{"all", "new", "downloaded", "link"}
+var materialFilterNames = []string{"all", "new", "downloaded", "link", "unknown"}
 
 func (m *App) cycleFilter() {
 	var names []string

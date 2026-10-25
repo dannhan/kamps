@@ -76,7 +76,7 @@ Handy keys:
 | `V`, `*` | range-select / invert visible |
 | `ctrl+z` | undo the last bulk triage |
 | `t` / `m` / `i` / `u` | decide: track / missed / ignore / undecided |
-| `f` | cycle the filter |
+| `f` | cycle the filter (Materials: all / new / downloaded / link / unknown) |
 | `/` | search the tree (composes with the filter) |
 | `esc` | clear the search, then the filter, then drop back |
 | `c` | review & commit |

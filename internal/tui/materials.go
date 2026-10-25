@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -15,6 +16,15 @@ import (
 // visibleMaterials returns the Materials-tab files after the active filter and
 // search. The tree, counters and cursor all read this one list.
 func (m *App) visibleMaterials() []model.Material {
+	if m.filter == "unknown" {
+		out := make([]model.Material, 0, len(m.unknownFiles))
+		for _, material := range m.unknownMaterials() {
+			if m.matchesMaterialSearch(material) {
+				out = append(out, material)
+			}
+		}
+		return out
+	}
 	out := make([]model.Material, 0, len(m.materials))
 	for _, material := range m.materials {
 		if !m.matchesMaterialFilter(material) || !m.matchesMaterialSearch(material) {
@@ -220,6 +230,9 @@ func (m *App) assignmentForMaterial(material model.Material) *model.Assignment {
 }
 
 func (m *App) courseFiles(courseID int) []model.Material {
+	if courseID == localCourseID {
+		return m.unknownMaterials()
+	}
 	out := []model.Material{}
 	for _, mt := range m.materials {
 		if mt.CourseID == courseID {
@@ -247,8 +260,12 @@ func (m *App) download() tea.Cmd {
 	_, canDownload := m.src.(source.Downloader)
 	var cmds []tea.Cmd
 	var flaggedIDs []string
-	started, links, flagged, missing := 0, 0, 0, 0
+	started, links, flagged, missing, local := 0, 0, 0, 0, 0
 	for _, material := range targets {
+		if material.Kind == "local" {
+			local++
+			continue
+		}
 		if material.Downloaded {
 			continue
 		}
@@ -280,6 +297,8 @@ func (m *App) download() tea.Cmd {
 	switch {
 	case started > 0:
 		m.toast = fmt.Sprintf("downloading %d %s…", started, plural(started, "file", "files"))
+	case local > 0:
+		m.toast = "local file: press o to open"
 	case links > 0:
 		m.toast = "external link: press o to open in browser"
 	case missing > 0:
@@ -298,6 +317,26 @@ func (m *App) download() tea.Cmd {
 		})
 	}
 	return tea.Batch(cmds...)
+}
+
+const localCourseID = -1
+
+// unknownMaterials turns files found on disk but absent from the source into
+// synthetic, read-only rows for the `unknown` Materials filter.
+func (m *App) unknownMaterials() []model.Material {
+	out := make([]model.Material, 0, len(m.unknownFiles))
+	for _, path := range m.unknownFiles {
+		name := path
+		if rel, err := filepath.Rel(m.cfg.LibraryDir, path); err == nil && !strings.HasPrefix(rel, "..") {
+			name = rel
+		}
+		out = append(out, model.Material{
+			ID: "local:" + path, CourseID: localCourseID, CourseCode: "local",
+			Name: name, Section: "unknown", Kind: "local", Downloaded: true, URL: path,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
 }
 
 func (m *App) downloadedMaterials() int {

@@ -17,6 +17,7 @@ func (m *App) reconcileLibrary() {
 	// workspaces); only the library root is walked for unexpected files. A
 	// workspace is a user's repo, so its source files are not "unknown".
 	result := library.Scan(m.materials, m.materialDestination, []string{m.cfg.LibraryDir})
+	m.unknownFiles = result.Unknown
 	changed := false
 	for i := range m.materials {
 		material := &m.materials[i]

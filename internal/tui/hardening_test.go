@@ -1,9 +1,14 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/ruyam/kamps/internal/config"
 )
 
 func TestSearchStableAfterDownloadCompletion(t *testing.T) {
@@ -28,5 +33,36 @@ func TestResizeDuringDownloadDoesNotPanic(t *testing.T) {
 	app.Update(downloadProgressMsg{id: app.materials[0].ID, done: 1, total: 10})
 	if view := app.View(); view == "" {
 		t.Fatal("empty view")
+	}
+}
+
+func TestUnknownFilesFilterShowsLocalFiles(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "stray.pdf"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	app := newDemoApp(t, config.Config{StateDir: t.TempDir(), LibraryDir: dir})
+	app.tab = TabMaterials
+	app.filter = "unknown"
+	app.reconcileLibrary()
+	if got := len(app.visibleMaterials()); got != 1 {
+		t.Fatalf("unknown materials = %d, want 1", got)
+	}
+	nodes := app.matNodes()
+	found := false
+	for i, n := range nodes {
+		if n.kind == nodeFile && n.mat.Kind == "local" {
+			found = true
+			app.matCursor = i
+		}
+	}
+	if !found {
+		t.Fatalf("local file not in tree: %+v", nodes)
+	}
+	if cmd := app.download(); cmd != nil {
+		t.Fatal("local files should not start a download")
+	}
+	if !strings.Contains(app.toast, "local file") {
+		t.Fatalf("toast = %q", app.toast)
 	}
 }
