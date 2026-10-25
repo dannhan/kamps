@@ -96,7 +96,7 @@ func TestTaskTreeConnectorsAndRowWidth(t *testing.T) {
 	if got := lipgloss.Width(stripANSI(row)); got != 98 {
 		t.Fatalf("rendered row width = %d, want 98", got)
 	}
-	if !strings.Contains(row, "ppl") {
+	if !strings.Contains(row, "Proyek Perangkat Lunak A") {
 		t.Fatalf("rendered course row missing course: %q", row)
 	}
 }
@@ -113,7 +113,7 @@ func TestCoursesTreeViewsAt100And80Columns(t *testing.T) {
 				t.Fatalf("width %d line %d has width %d: %q", width, i+1, got, stripANSI(line))
 			}
 		}
-		if !strings.Contains(view, "courses · all") || !strings.Contains(view, "ppl") || strings.Contains(stripANSI(view), "other") || !strings.Contains(stripANSI(view), "queue empty") {
+		if !strings.Contains(view, "courses · all") || !strings.Contains(view, "Proyek Perangkat Lunak A") || strings.Contains(stripANSI(view), "other") || !strings.Contains(stripANSI(view), "queue empty") {
 			t.Fatalf("%d-column view is missing expected content:\n%s", width, stripANSI(view))
 		}
 	}

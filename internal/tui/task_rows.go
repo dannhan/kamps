@@ -34,8 +34,8 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 	switch n.kind {
 	case nodeCourse:
 		name := m.shortCode(n.courseID)
-		if course, ok := m.courseByID(n.courseID); ok && course.Short != "" {
-			name = course.Short
+		if course, ok := m.courseByID(n.courseID); ok && course.Name != "" {
+			name = course.Name
 		}
 		content = h.containerLead(open, selected) + background(stCode.Bold(true)).Render(name)
 	case nodeBucket:

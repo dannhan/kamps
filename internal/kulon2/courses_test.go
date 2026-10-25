@@ -114,3 +114,16 @@ func TestDecodeCoursesRefusesMalformedItems(t *testing.T) {
 		t.Fatalf("error = %v", err)
 	}
 }
+
+func TestCleanCourseNameAndCode(t *testing.T) {
+	full := "[SIAP] [55201] [K2024] [Reguler] [Gabungan] [MIK1624302] S1 2026/2027 Ganjil Struktur Data B"
+	if got := cleanCourseName(full); got != "Struktur Data B" {
+		t.Fatalf("name = %q", got)
+	}
+	if got := extractCourseCode(full, full); got != "MIK1624302" {
+		t.Fatalf("code = %q", got)
+	}
+	if got := cleanCourseName("[SIAP] Basis Data C"); got != "Basis Data C" {
+		t.Fatalf("name = %q", got)
+	}
+}

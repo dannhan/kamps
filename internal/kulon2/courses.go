@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -152,14 +153,46 @@ func decodeCourses(body []byte) ([]model.Course, error) {
 		if item.ID <= 0 || strings.TrimSpace(item.FullName) == "" {
 			return nil, errors.New("Kulon2 course-list response contains a course without a valid id or name")
 		}
-		short := strings.TrimSpace(item.ShortName)
+		short := extractCourseCode(item.ShortName, item.FullName)
+		if short == "" {
+			short = strings.TrimSpace(item.ShortName)
+		}
 		courses = append(courses, model.Course{
 			ID:     item.ID,
 			Code:   short,
 			Short:  short,
-			Name:   strings.TrimSpace(item.FullName),
+			Name:   cleanCourseName(item.FullName),
 			Source: "lms",
 		})
 	}
 	return courses, nil
+}
+
+var (
+	leadingCourseTags = regexp.MustCompile(`^\s*(?:\[[^\]]*\]\s*)+`)
+	semesterPrefix    = regexp.MustCompile(`(?i)^S[0-9]+\s+[0-9]{4}/[0-9]{4}\s+(Ganjil|Genap)\s+`)
+	bracketedCode     = regexp.MustCompile(`\[([A-Z]{2,}[0-9][A-Z0-9]*)\]`)
+)
+
+// cleanCourseName strips Moodle's category chain and semester prefix.
+func cleanCourseName(full string) string {
+	name := strings.TrimSpace(leadingCourseTags.ReplaceAllString(full, ""))
+	name = strings.TrimSpace(semesterPrefix.ReplaceAllString(name, ""))
+	if name == "" {
+		return strings.TrimSpace(full)
+	}
+	return name
+}
+
+// extractCourseCode picks the longest code-like bracket, e.g. MIK1624302.
+func extractCourseCode(short, full string) string {
+	best := ""
+	for _, source := range []string{short, full} {
+		for _, match := range bracketedCode.FindAllStringSubmatch(source, -1) {
+			if len(match[1]) > len(best) {
+				best = match[1]
+			}
+		}
+	}
+	return best
 }

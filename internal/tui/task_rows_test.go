@@ -121,7 +121,7 @@ func TestParentRowsShowCaretAndMark(t *testing.T) {
 
 	// Course rows are the top-level parents, without a placeholder term row.
 	course := findTaskNode(nodes, nodeCourse, "")
-	if row := stripANSI(app.taskTreeRow(nodes, course, 98)); !strings.Contains(row, "▾ "+markEmpty+" ppl") {
+	if row := stripANSI(app.taskTreeRow(nodes, course, 98)); !strings.Contains(row, "▾ "+markEmpty+" Proyek Perangkat Lunak A") {
 		t.Fatalf("course should be top-level with a down caret and hollow mark: %q", row)
 	}
 
