@@ -101,3 +101,17 @@ func TestSectionWeekLabel(t *testing.T) {
 		}
 	}
 }
+
+func TestParseFolderPageDecodesPercentEncodedFilename(t *testing.T) {
+	page := []byte(`<a href="https://kulon2.undip.ac.id/pluginfile.php/1/mod_folder/content/0/Tugas%20Kelompok%20%281%29.pdf?forcedownload=1">Tugas Kelompok (1).pdf</a>`)
+	files := ParseFolderPage(page, "42")
+	if len(files) != 1 {
+		t.Fatalf("files = %+v", files)
+	}
+	if files[0].Filename != "Tugas Kelompok (1).pdf" {
+		t.Fatalf("filename = %q", files[0].Filename)
+	}
+	if files[0].ID != "M42:Tugas Kelompok (1).pdf" {
+		t.Fatalf("id = %q", files[0].ID)
+	}
+}

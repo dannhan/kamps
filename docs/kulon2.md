@@ -84,6 +84,7 @@ IMK is not on Kulon2 at all (it lives on WhatsApp), so it has no LMS course.
   size is skipped, and a changed file is saved with a `_v2` suffix instead of
   overwriting local notes. Concurrent writers are serialized by a hashed lock
   file under `$XDG_STATE_HOME/kamps/locks`, not beside the material.
+  Attachment filenames are percent-decoded for display and disk paths.
   `mod/url` activities are external links and open in the browser with `o`.
 - **Politeness:** at least 1 s between requests, at most 2 requests per page.
 - **Unverified:** `GET /my/courses.php` course cards. Treat a parse failure as

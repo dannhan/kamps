@@ -155,9 +155,10 @@ func parseFileAnchors(page []byte, cmid, modulePath string) []Attachment {
 		}
 		if filename == "" {
 			if suffix := attachmentSuffixPattern.FindStringSubmatch(strings.SplitN(href, "?", 2)[0]); len(suffix) > 1 {
-				filename = stdhtml.UnescapeString(suffix[1])
+				filename = decodeFilename(suffix[1])
 			}
 		}
+		filename = decodeFilename(filename)
 		if filename == "" {
 			continue
 		}
@@ -303,6 +304,16 @@ func textNode(node *html.Node) string {
 	}
 	walk(node)
 	return strings.Join(strings.Fields(stdhtml.UnescapeString(text.String())), " ")
+}
+
+// decodeFilename turns percent-encoded URL path segments back into a display
+// filename. PathUnescape keeps "+" literal, unlike query unescaping.
+func decodeFilename(name string) string {
+	name = strings.TrimSpace(stdhtml.UnescapeString(name))
+	if decoded, err := url.PathUnescape(name); err == nil {
+		return strings.TrimSpace(decoded)
+	}
+	return name
 }
 
 func textContent(raw []byte) string {
