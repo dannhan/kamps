@@ -97,6 +97,23 @@ func (m *App) sessionLine() string {
 	return fmt.Sprintf("ok (expires in %s)", humanDuration(remaining))
 }
 
+// warnSessionExpiry nudges the user before the saved session runs out.
+func (m *App) warnSessionExpiry() {
+	reporter, ok := m.src.(source.SessionReporter)
+	if !ok {
+		return
+	}
+	status := reporter.SessionStatus()
+	if !status.OK || status.ExpiresAt.IsZero() {
+		return
+	}
+	remaining := time.Until(status.ExpiresAt)
+	if remaining > 0 && remaining < 30*time.Minute {
+		m.toast = "session expires in " + humanDuration(remaining) + " — run kamps login"
+		m.toastTicks = 60
+	}
+}
+
 func humanDuration(d time.Duration) string {
 	if d >= 24*time.Hour {
 		return fmt.Sprintf("%dd", int(d.Hours()/24))

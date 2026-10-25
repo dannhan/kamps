@@ -1,13 +1,16 @@
 package tui
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ruyam/kamps/internal/config"
 	"github.com/ruyam/kamps/internal/model"
+	"github.com/ruyam/kamps/internal/source"
 )
 
 func TestAutoTriageTracksSubmittedAndUserOverrideWins(t *testing.T) {
@@ -63,5 +66,23 @@ func TestWriteCommitPreviewWritesExactlyPreview(t *testing.T) {
 	}
 	if strings.TrimSpace(string(data)) != preview {
 		t.Fatalf("file = %q, preview = %q", data, preview)
+	}
+}
+
+type expiringSource struct{ expiry time.Time }
+
+func (s *expiringSource) Label() string { return "expiring" }
+func (s *expiringSource) Load(context.Context) (source.Snapshot, error) {
+	return source.Snapshot{}, nil
+}
+func (s *expiringSource) SessionStatus() source.SessionStatus {
+	return source.SessionStatus{ExpiresAt: s.expiry, OK: true}
+}
+
+func TestSessionExpiryWarning(t *testing.T) {
+	app := New(&expiringSource{expiry: time.Now().Add(10 * time.Minute)}, config.Config{StateDir: t.TempDir(), LibraryDir: t.TempDir()}, "test")
+	app.Update(app.Init()())
+	if !strings.Contains(app.toast, "session expires in") {
+		t.Fatalf("toast = %q", app.toast)
 	}
 }

@@ -241,6 +241,7 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.toastTicks = 40
 			m.stateErr = ""
 		}
+		m.warnSessionExpiry()
 		return m, nil
 
 	case errMsg:
