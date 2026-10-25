@@ -76,6 +76,9 @@ func (m *App) detailLines(n node, width int) []string {
 			}
 		}
 		addKV("due", due, dueStyle)
+		if task.Section != "" {
+			addKV("section", sectionLabel(task.Section), stRow)
+		}
 		if task.Praktikum {
 			addKV("kind", "praktikum", stRow)
 		}

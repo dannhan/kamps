@@ -67,7 +67,7 @@ func (m *App) matchesTaskSearch(assignment model.Assignment) bool {
 		return true
 	}
 	course, _ := m.courseByID(assignment.CourseID)
-	return m.searchMatches(assignment.Name, assignment.ID, assignment.Goal,
+	return m.searchMatches(assignment.Name, assignment.ID, assignment.Goal, assignment.Section, assignment.SectionName,
 		course.Name, course.Code, course.Short)
 }
 
@@ -76,7 +76,7 @@ func (m *App) matchesMaterialSearch(material model.Material) bool {
 		return true
 	}
 	course, _ := m.courseByID(material.CourseID)
-	return m.searchMatches(material.Name, material.ID, material.Section, material.Kind,
+	return m.searchMatches(material.Name, material.ID, material.Section, material.SectionName, material.Kind,
 		material.CourseCode, course.Name, course.Code, course.Short)
 }
 

@@ -59,7 +59,7 @@ func TestLiveSourceMaterializesAttachmentsFoldersAndSubmission(t *testing.T) {
 		t.Fatalf("assignments = %+v", snapshot.Assignments)
 	}
 	assignment := snapshot.Assignments[0]
-	if assignment.Submission != model.SubmissionSubmitted || assignment.Attachments != 1 || assignment.Section != "Week 1" {
+	if assignment.Submission != model.SubmissionSubmitted || assignment.Attachments != 1 || assignment.Section != "week-1" || assignment.SectionName != "Week 1" {
 		t.Fatalf("assignment = %+v", assignment)
 	}
 	if len(snapshot.Materials) != 2 {
@@ -70,7 +70,7 @@ func TestLiveSourceMaterializesAttachmentsFoldersAndSubmission(t *testing.T) {
 		switch material.Kind {
 		case "attachment":
 			sawAttachment = true
-			if material.AssignmentID != "K10" || material.URL == "" || material.Section != "Week 1" {
+			if material.AssignmentID != "K10" || material.URL == "" || material.Section != "week-1" {
 				t.Fatalf("attachment = %+v", material)
 			}
 		case "folder-file":

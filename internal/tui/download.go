@@ -66,14 +66,14 @@ func (m *App) materialDestination(material model.Material) string {
 			courseName = course.Code
 		}
 		if course.WorkspacePath != "" {
-			if path, err := library.SubPath(course.WorkspacePath, material.Section, material.Folder, material.Name); err == nil {
+			if path, err := library.SubPath(course.WorkspacePath, sectionLabel(material.Section), material.Folder, material.Name); err == nil {
 				return path
 			}
 		}
 	}
-	path, err := library.MaterialPath(m.cfg.LibraryDir, courseName, material.Section, material.Folder, material.Name)
+	path, err := library.MaterialPath(m.cfg.LibraryDir, courseName, sectionLabel(material.Section), material.Folder, material.Name)
 	if err != nil {
-		return library.SectionPath(m.cfg.LibraryDir, courseName, material.Section, material.Name)
+		return library.SectionPath(m.cfg.LibraryDir, courseName, sectionLabel(material.Section), material.Name)
 	}
 	return path
 }

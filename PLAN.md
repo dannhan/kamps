@@ -152,7 +152,7 @@ Since Kulon2 uses enterprise Microsoft Azure AD SSO and disables local passwords
 
 ### Phase 2: Downloader Engine & Local File Library
 - [x] Implement `internal/kulon2/download.go` for streaming `pluginfile.php` downloads.
-- [x] Create directory builder honoring `library_dir` (`<course>/<section>/<file>`).
+- [x] Create directory builder honoring `library_dir` (`<course>/<week>/<folder>/<file>`).
 - [x] Add safe-skip / non-destructive versioning if destination files already exist.
 - [x] Connect `d` hotkey in Materials tab to background download tasks with progress ticker.
 - [x] Download assignment attachments and folder modules.

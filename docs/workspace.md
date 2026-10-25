@@ -3,7 +3,7 @@
 By default downloads go to:
 
 ```text
-<library_dir>/<course>/<section>/<folder>/<file>
+<library_dir>/<course>/<week>/<folder>/<file>
 ```
 
 `library_dir` defaults to `~/Documents/kamps`. If a course already lives in a
@@ -66,7 +66,7 @@ produce a notice in the UI instead of a crash.
 For a mapped course with `path: "."`:
 
 ```text
-~/projects/university/basdat/Week 1/Slides/week1.pdf
+~/projects/university/basdat/week-1/Slides/week1.pdf
 ```
 
 No extra course directory is added inside the workspace. Every path component

@@ -61,6 +61,9 @@ func (m *App) materialDetailLines(n node, width int) []string {
 			addKV("course", m.shortCode(material.CourseID), stRow)
 		}
 		addKV("section", sectionLabel(material.Section), stRow)
+		if material.SectionName != "" && material.SectionName != material.Section {
+			addKV("label", material.SectionName, stRow)
+		}
 		if material.Kind != "" {
 			addKV("kind", material.Kind, stRow)
 		}

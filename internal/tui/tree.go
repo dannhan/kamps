@@ -3,6 +3,8 @@ package tui
 import (
 	"fmt"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/ruyam/kamps/internal/model"
@@ -98,9 +100,17 @@ func (m *App) setOpen(key string, open bool) {
 	m.expanded[key] = false
 }
 
+var weekSectionPattern = regexp.MustCompile(`(?i)^week[-_ ]?0*([0-9]+)$`)
+
 func sectionLabel(section string) string {
+	section = strings.TrimSpace(section)
 	if section == "" {
-		return "general"
+		return "week-0"
+	}
+	if match := weekSectionPattern.FindStringSubmatch(section); len(match) > 1 {
+		if n, err := strconv.Atoi(match[1]); err == nil {
+			return fmt.Sprintf("week-%d", n)
+		}
 	}
 	return section
 }

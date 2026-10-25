@@ -222,6 +222,7 @@ func (s *LiveSource) Load(ctx context.Context) (source.Snapshot, error) {
 								CourseCode:   assignment.CourseCode,
 								Name:         attachment.Filename,
 								Section:      assignment.Section,
+								SectionName:  assignment.SectionName,
 								Kind:         "attachment",
 								URL:          ResolveURL(s.siteURL, attachment.URL),
 								AssignmentID: assignment.ID,
@@ -262,15 +263,16 @@ func (s *LiveSource) Load(ctx context.Context) (source.Snapshot, error) {
 		}
 		for _, file := range files {
 			snapshot.Materials = append(snapshot.Materials, model.Material{
-				ID:         file.ID,
-				CourseID:   task.course.ID,
-				CourseCode: task.course.Short,
-				Name:       file.Filename,
-				Section:    task.module.Section,
-				Folder:     task.module.Name,
-				Kind:       "folder-file",
-				URL:        ResolveURL(s.siteURL, file.URL),
-				ParentID:   MaterialID(task.module.CMID),
+				ID:          file.ID,
+				CourseID:    task.course.ID,
+				CourseCode:  task.course.Short,
+				Name:        file.Filename,
+				Section:     task.module.Section,
+				SectionName: task.module.SectionName,
+				Folder:      task.module.Name,
+				Kind:        "folder-file",
+				URL:         ResolveURL(s.siteURL, file.URL),
+				ParentID:    MaterialID(task.module.CMID),
 			})
 		}
 	}

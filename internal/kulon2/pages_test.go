@@ -34,7 +34,7 @@ func TestParseCoursePageLegacyFixture(t *testing.T) {
 	if !reflect.DeepEqual(types, []string{"resource", "assign", "assign", "resource", "assign"}) {
 		t.Fatalf("module types = %v", types)
 	}
-	if modules[0].CMID != "165401" || modules[0].SectionID != "5" || modules[0].Section != "Week 1 — 31 August - 6 September" {
+	if modules[0].CMID != "165401" || modules[0].SectionID != "5" || modules[0].Section != "week-1" || modules[0].SectionName != "Week 1 — 31 August - 6 September" {
 		t.Fatalf("first module = %+v", modules[0])
 	}
 }
@@ -80,5 +80,24 @@ func TestMapCourseModules(t *testing.T) {
 	}
 	if a, m := MapModule(course, Module{Type: "forum", CMID: "1"}, site); a != nil || m != nil {
 		t.Fatalf("unknown module mapped: %v %v", a, m)
+	}
+}
+
+func TestSectionWeekLabel(t *testing.T) {
+	counter := 0
+	cases := []struct {
+		name string
+		want string
+	}{
+		{"General", "week-0"},
+		{"18 August - 24 August", "week-1"},
+		{"25 August - 31 August", "week-2"},
+		{"Week 4 — 1 October", "week-4"},
+		{"Pertemuan Kelima", "week-5"},
+	}
+	for _, tc := range cases {
+		if got := sectionWeekLabel(tc.name, &counter); got != tc.want {
+			t.Errorf("sectionWeekLabel(%q) = %q, want %q", tc.name, got, tc.want)
+		}
 	}
 }

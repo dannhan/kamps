@@ -29,12 +29,13 @@ var (
 )
 
 // Section is one course-page section; IDs remain LMS section IDs.
-type Section struct{ ID, Name string }
+type Section struct{ ID, Name, Week string }
 
 // Module is a Moodle activity whose type and course-module ID were parsed from
 // a course page. URL is the activity link exactly as found on the page;
-// Section is the human-readable label and SectionID the LMS section id.
-type Module struct{ Type, CMID, Name, Section, SectionID, URL string }
+// Section is the week label (week-0, week-1, …), SectionName the original
+// Moodle label, and SectionID the LMS section id.
+type Module struct{ Type, CMID, Name, Section, SectionName, SectionID, URL string }
 
 type Attachment struct{ ID, Filename, URL, ItemID string }
 
@@ -50,6 +51,7 @@ func ParseCoursePage(page []byte) ([]Section, []Module, error) {
 	}
 	sections := make([]Section, 0, len(matches))
 	modules := make([]Module, 0)
+	weekCounter := 0
 	for i, match := range matches {
 		start := match[1]
 		end := len(page)
@@ -62,11 +64,8 @@ func ParseCoursePage(page []byte) ([]Section, []Module, error) {
 		if name := sectionNamePattern.FindSubmatch(body); len(name) > 1 {
 			section.Name = textContent(name[1])
 		}
+		section.Week = sectionWeekLabel(section.Name, &weekCounter)
 		sections = append(sections, section)
-		label := section.Name
-		if label == "" {
-			label = sectionID
-		}
 		for _, block := range activityPattern.FindAll(body, -1) {
 			typeMatch := moduleTypePattern.FindSubmatch(block)
 			linkMatch := viewLinkPattern.FindSubmatch(block)
@@ -77,7 +76,7 @@ func ParseCoursePage(page []byte) ([]Section, []Module, error) {
 			if instance := instancePattern.FindSubmatch(block); len(instance) > 1 {
 				name = textContent(instance[1])
 			}
-			modules = append(modules, Module{Type: string(typeMatch[1]), CMID: string(linkMatch[3]), Name: name, Section: label, SectionID: sectionID, URL: string(linkMatch[1])})
+			modules = append(modules, Module{Type: string(typeMatch[1]), CMID: string(linkMatch[3]), Name: name, Section: section.Week, SectionName: section.Name, SectionID: sectionID, URL: string(linkMatch[1])})
 		}
 	}
 	return sections, modules, nil
@@ -320,18 +319,18 @@ func MaterialID(cmid string) string   { return "M" + cmid }
 func MapModule(course model.Course, module Module, siteURL string) (assignment *model.Assignment, material *model.Material) {
 	switch module.Type {
 	case "assign", "quiz":
-		return &model.Assignment{ID: AssignmentID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name, Section: module.Section}, nil
+		return &model.Assignment{ID: AssignmentID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name, Section: module.Section, SectionName: module.SectionName}, nil
 	case "resource":
-		return nil, &model.Material{ID: MaterialID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name, Section: module.Section, Kind: "file", URL: ResolveURL(siteURL, module.URL)}
+		return nil, &model.Material{ID: MaterialID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name, Section: module.Section, Kind: "file", SectionName: module.SectionName, URL: ResolveURL(siteURL, module.URL)}
 	case "folder":
 		// Folder children are materialized from the folder page at load time.
 		return nil, nil
 	case "url":
-		return nil, &model.Material{ID: MaterialID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name, Section: module.Section, Kind: "url", URL: ResolveURL(siteURL, module.URL)}
+		return nil, &model.Material{ID: MaterialID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name, Section: module.Section, Kind: "url", SectionName: module.SectionName, URL: ResolveURL(siteURL, module.URL)}
 	case "book":
-		return nil, &model.Material{ID: MaterialID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name, Section: module.Section, Kind: "book", URL: ResolveURL(siteURL, module.URL)}
+		return nil, &model.Material{ID: MaterialID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name, Section: module.Section, Kind: "book", SectionName: module.SectionName, URL: ResolveURL(siteURL, module.URL)}
 	case "page":
-		return nil, &model.Material{ID: MaterialID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name, Section: module.Section, Kind: "page", URL: ResolveURL(siteURL, module.URL)}
+		return nil, &model.Material{ID: MaterialID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name, Section: module.Section, Kind: "page", SectionName: module.SectionName, URL: ResolveURL(siteURL, module.URL)}
 	default:
 		return nil, nil
 	}
@@ -351,4 +350,24 @@ func ResolveURL(siteURL, raw string) string {
 		return ""
 	}
 	return base.ResolveReference(ref).String()
+}
+
+var weekInName = regexp.MustCompile(`(?i)week\s*[-_ ]?\s*0*([0-9]+)`)
+
+// sectionWeekLabel prefers an explicit "Week N" in the section name. General
+// sections are week-0; every other unnamed section advances the week counter,
+// so a course without a General section starts at week-1.
+func sectionWeekLabel(name string, counter *int) string {
+	if match := weekInName.FindStringSubmatch(name); len(match) > 1 {
+		if n, err := strconv.Atoi(match[1]); err == nil {
+			*counter = n
+			return fmt.Sprintf("week-%d", n)
+		}
+	}
+	lower := strings.ToLower(strings.TrimSpace(name))
+	if lower == "" || strings.Contains(lower, "general") || strings.Contains(lower, "umum") {
+		return "week-0"
+	}
+	*counter++
+	return fmt.Sprintf("week-%d", *counter)
 }

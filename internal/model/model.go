@@ -94,7 +94,8 @@ type Assignment struct {
 	CourseID    int
 	CourseCode  string // short course code, filled in by the source
 	Name        string
-	Section     string    // course-page section label, when known
+	Section     string    // week-based section label, e.g. week-1
+	SectionName string    // original Moodle section label
 	Due         time.Time // zero value + HasDue=false means "no due date"
 	HasDue      bool
 	Triage      Triage
@@ -125,7 +126,8 @@ type Material struct {
 	CourseID     int
 	CourseCode   string
 	Name         string
-	Section      string // section/week label, or "" when unknown
+	Section      string // week-based section label, e.g. week-1
+	SectionName  string // original Moodle section label
 	Folder       string // folder-module title for folder children
 	Kind         string
 	Size         int64 // bytes; 0 = unknown

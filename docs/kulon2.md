@@ -80,7 +80,7 @@ IMK is not on Kulon2 at all (it lives on WhatsApp), so it has no LMS course.
 - **Due dates:** assignments fetch `/mod/assign/view.php?id=<cmid>` and map recognized due dates into the snapshot. This endpoint/date shape is fixture-tested from the legacy recon, not yet re-verified against the live site.
 - **Downloads:** `mod/resource` links resolve to `pluginfile.php` direct
   downloads — one request per file, politely spaced. Files land under
-  `<library_dir>/<course>/<section>/<filename>`; an existing file with the same
+  `<library_dir>/<course>/<week>/<folder>/<filename>`; an existing file with the same
   size is skipped, and a changed file is saved with a `_v2` suffix instead of
   overwriting local notes. `mod/url` activities are external links and open in
   the browser with `o`.
