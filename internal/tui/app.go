@@ -97,10 +97,12 @@ type App struct {
 	selectedM map[string]bool // material id -> checked
 	pending   map[string]model.Triage
 
-	visual        bool
-	rangeAnchor   int
-	undoDecisions map[string]model.Triage
-	dropAllArmed  bool
+	visual          bool
+	rangeAnchor     int
+	undoDecisions   map[string]model.Triage
+	dropAllArmed    bool
+	openAllArmed    bool
+	downloadCancels map[string]context.CancelFunc
 
 	// state is the local store behind decisions and download flags; statePath
 	// is empty when the config has no state directory.
@@ -141,30 +143,31 @@ func New(src source.Source, cfg config.Config, version string) *App {
 	}
 
 	return &App{
-		src:           src,
-		cfg:           cfg,
-		ver:           version,
-		keys:          DefaultKeys(),
-		help:          h,
-		filter:        "all",
-		returnTab:     TabTasks,
-		detailPane:    -1,
-		tabFilters:    [tabCount]string{"all", "all", "all", "all"},
-		tabExpanded:   [tabCount]map[string]bool{0: {}, 1: {}, 2: {}, 3: {}},
-		expanded:      map[string]bool{},
-		selected:      map[string]bool{},
-		selectedM:     map[string]bool{},
-		pending:       map[string]model.Triage{},
-		undoDecisions: map[string]model.Triage{},
-		downloads:     map[string]bool{},
-		state:         state,
-		statePath:     statePath,
-		stateErr:      stateErr,
-		lastSync:      state.LastSync,
-		spinner:       sp,
-		width:         100,
-		height:        30,
-		noAnim:        cfg.NoAnim,
+		src:             src,
+		cfg:             cfg,
+		ver:             version,
+		keys:            DefaultKeys(),
+		help:            h,
+		filter:          "all",
+		returnTab:       TabTasks,
+		detailPane:      -1,
+		tabFilters:      [tabCount]string{"all", "all", "all", "all"},
+		tabExpanded:     [tabCount]map[string]bool{0: {}, 1: {}, 2: {}, 3: {}},
+		expanded:        map[string]bool{},
+		selected:        map[string]bool{},
+		selectedM:       map[string]bool{},
+		pending:         map[string]model.Triage{},
+		undoDecisions:   map[string]model.Triage{},
+		downloads:       map[string]bool{},
+		downloadCancels: map[string]context.CancelFunc{},
+		state:           state,
+		statePath:       statePath,
+		stateErr:        stateErr,
+		lastSync:        state.LastSync,
+		spinner:         sp,
+		width:           100,
+		height:          30,
+		noAnim:          cfg.NoAnim,
 	}
 }
 
@@ -280,6 +283,10 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case downloadDoneMsg:
 		delete(m.downloads, msg.id)
+		if cancel := m.downloadCancels[msg.id]; cancel != nil {
+			cancel()
+			delete(m.downloadCancels, msg.id)
+		}
 		if msg.err != nil {
 			m.toast = "download failed: " + downloadErrorText(msg.err)
 			m.toastTicks = 40
@@ -295,6 +302,15 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.toast = "could not open browser: " + msg.err.Error()
 		} else {
 			m.toast = "opened in browser"
+		}
+		m.toastTicks = 24
+		return m, nil
+
+	case openURLsMsg:
+		if msg.err != nil {
+			m.toast = "could not open all links: " + msg.err.Error()
+		} else {
+			m.toast = fmt.Sprintf("opened %d links", msg.count)
 		}
 		m.toastTicks = 24
 		return m, nil

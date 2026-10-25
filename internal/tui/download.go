@@ -33,6 +33,11 @@ type openURLMsg struct {
 	err error
 }
 
+type openURLsMsg struct {
+	count int
+	err   error
+}
+
 // openExternalURL launches the user's browser. Tests replace it.
 var openExternalURL = func(rawURL string) error {
 	var cmd *exec.Cmd
@@ -100,8 +105,10 @@ func (m *App) startDownload(material model.Material) tea.Cmd {
 	program := m.program
 	id := material.ID
 	dest := m.materialDestination(material)
+	ctx, cancel := context.WithCancel(context.Background())
+	m.downloadCancels[id] = cancel
 	return func() tea.Msg {
-		path, err := downloader.Download(context.Background(), material, dest, func(done, total int64) {
+		path, err := downloader.Download(ctx, material, dest, func(done, total int64) {
 			if program != nil {
 				program.Send(downloadProgressMsg{id: id, done: done, total: total})
 			}
@@ -135,12 +142,30 @@ func (m *App) openExternal() tea.Cmd {
 		m.toastTicks = 20
 		return nil
 	}
+	seen := map[string]bool{}
+	var urls []string
 	for _, material := range m.materialTargets() {
-		if material.URL == "" {
+		if material.URL == "" || seen[material.URL] {
 			continue
 		}
-		rawURL := material.URL
-		m.selectedM = map[string]bool{}
+		seen[material.URL] = true
+		urls = append(urls, material.URL)
+	}
+	if len(urls) == 0 {
+		m.toast = "no link on this row"
+		m.toastTicks = 20
+		return nil
+	}
+	if len(urls) > 1 && !m.openAllArmed {
+		m.openAllArmed = true
+		m.toast = fmt.Sprintf("press o again to open %d links", len(urls))
+		m.toastTicks = 40
+		return nil
+	}
+	m.openAllArmed = false
+	m.selectedM = map[string]bool{}
+	if len(urls) == 1 {
+		rawURL := urls[0]
 		return func() tea.Msg {
 			if err := openExternalURL(rawURL); err != nil {
 				return openURLMsg{url: rawURL, err: err}
@@ -148,9 +173,22 @@ func (m *App) openExternal() tea.Cmd {
 			return openURLMsg{url: rawURL}
 		}
 	}
-	m.toast = "no link on this row"
-	m.toastTicks = 20
-	return nil
+	return func() tea.Msg {
+		var firstErr error
+		for _, rawURL := range urls {
+			if err := openExternalURL(rawURL); err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+		return openURLsMsg{count: len(urls), err: firstErr}
+	}
+}
+
+func (m *App) cancelDownloads() {
+	for id, cancel := range m.downloadCancels {
+		cancel()
+		delete(m.downloadCancels, id)
+	}
 }
 
 func downloadErrorText(err error) string {

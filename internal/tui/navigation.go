@@ -6,6 +6,7 @@ func (m *App) switchTab(tab Tab) {
 	}
 	m.visual = false
 	m.dropAllArmed = false
+	m.openAllArmed = false
 	m.searching = false
 	m.search = ""
 	m.tabFilters[m.tab] = m.filter
@@ -165,4 +166,5 @@ func (m *App) back() {
 	m.selected = map[string]bool{}
 	m.selectedM = map[string]bool{}
 	m.visual = false
+	m.openAllArmed = false
 }

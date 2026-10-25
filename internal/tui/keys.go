@@ -108,6 +108,7 @@ func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.String() {
 	case "q", "ctrl+c":
+		m.cancelDownloads()
 		return m, tea.Quit
 	case "?":
 		m.helpOn = true

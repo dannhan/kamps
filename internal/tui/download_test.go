@@ -226,3 +226,54 @@ func TestDownloadErrorText(t *testing.T) {
 		}
 	}
 }
+
+func TestOpenGroupRequiresConfirmation(t *testing.T) {
+	src := downloadTestSource()
+	src.snapshot.Materials = append(src.snapshot.Materials, model.Material{
+		ID: "M3", CourseID: 1, CourseCode: "metnum", Name: "Second reading", Section: "week-1", Kind: "url", URL: "https://example.test/second",
+	})
+	app := downloadTestApp(t, src)
+	app.selectedM = map[string]bool{"M2": true, "M3": true}
+
+	var opened []string
+	oldOpen := openExternalURL
+	openExternalURL = func(rawURL string) error {
+		opened = append(opened, rawURL)
+		return nil
+	}
+	t.Cleanup(func() { openExternalURL = oldOpen })
+
+	if cmd := app.openExternal(); cmd != nil {
+		t.Fatal("first press should only ask for confirmation")
+	}
+	if !strings.Contains(app.toast, "press o again") {
+		t.Fatalf("toast = %q", app.toast)
+	}
+	cmd := app.openExternal()
+	if cmd == nil {
+		t.Fatal("second press should open the links")
+	}
+	app.Update(cmd())
+	if len(opened) != 2 {
+		t.Fatalf("opened = %v", opened)
+	}
+	if !strings.Contains(app.toast, "opened 2 links") {
+		t.Fatalf("toast = %q", app.toast)
+	}
+}
+
+func TestCancelDownloadsClearsInFlight(t *testing.T) {
+	src := downloadTestSource()
+	app := downloadTestApp(t, src)
+	material := *app.materialByID("M1")
+	if cmd := app.startDownload(material); cmd == nil {
+		t.Fatal("expected a download command")
+	}
+	if len(app.downloadCancels) != 1 {
+		t.Fatalf("cancels = %d", len(app.downloadCancels))
+	}
+	app.cancelDownloads()
+	if len(app.downloadCancels) != 0 {
+		t.Fatal("cancel map was not cleared")
+	}
+}
