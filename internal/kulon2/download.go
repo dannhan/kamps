@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -85,12 +87,71 @@ func retryableDownloadError(err error) bool {
 // resolveFileURL turns a Moodle activity page such as
 // /mod/resource/view.php?id=123 into the pluginfile.php link it serves.
 func (s *LiveSource) resolveFileURL(ctx context.Context, pageURL string) (string, error) {
-	page, err := s.getPage(ctx, pageURL)
-	if errors.Is(err, ErrSessionExpired) {
-		return "", fmt.Errorf("%w: run `kamps login` again", err)
-	}
+	parsed, err := url.Parse(pageURL)
 	if err != nil {
 		return "", err
+	}
+	base, err := parseSiteURL(s.siteURL)
+	if err != nil {
+		return "", err
+	}
+	client := cloneClientWithCookie(s.client, base, s.session.Cookie, 30*time.Second)
+	// Moodle often redirects /mod/resource/view.php straight to pluginfile.php.
+	// Stop at the redirect instead of downloading the file into memory here.
+	client.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	if err := s.waitForRequestSlot(ctx); err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "kamps/0.1 (Kulon2 client; polite requests)")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if location := resp.Header.Get("Location"); resp.StatusCode >= 300 && resp.StatusCode < 400 && location != "" {
+		ref, err := url.Parse(location)
+		if err != nil {
+			return "", err
+		}
+		resolved := parsed.ResolveReference(ref)
+		if isLoginPage(resolved) {
+			return "", fmt.Errorf("%w: run `kamps login` again", ErrSessionExpired)
+		}
+		if strings.Contains(resolved.Path, "pluginfile.php") {
+			return resolved.String(), nil
+		}
+		return "", fmt.Errorf("resource redirected to %s", resolved.Path)
+	}
+
+	switch resp.StatusCode {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return "", library.ErrUnauthorized
+	case http.StatusNotFound, http.StatusGone:
+		return "", library.ErrFileNotFound
+	}
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("resource page: HTTP %d", resp.StatusCode)
+	}
+
+	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+	if !strings.Contains(contentType, "text/html") {
+		// The server already served the file directly.
+		return pageURL, nil
+	}
+	page, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return "", err
+	}
+	if strings.Contains(strings.ToLower(string(page)), "/login/index.php") {
+		return "", fmt.Errorf("%w: run `kamps login` again", ErrSessionExpired)
 	}
 	if link := findPluginFileURL(page, pageURL); link != "" {
 		return link, nil

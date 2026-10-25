@@ -129,3 +129,33 @@ func TestRetryableDownloadError(t *testing.T) {
 		t.Fatal("404 should not be retried")
 	}
 }
+
+func TestLiveSourceDownloadFollowsResourceRedirect(t *testing.T) {
+	body := []byte("redirected body")
+	mux := http.NewServeMux()
+	mux.HandleFunc("/mod/resource/view.php", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/pluginfile.php/1/mod_resource/content/0/slides.pdf", http.StatusFound)
+	})
+	mux.HandleFunc("/pluginfile.php/1/mod_resource/content/0/slides.pdf", func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Cookie"), "MoodleSession=cookie") {
+			t.Errorf("missing cookie: %q", r.Header.Get("Cookie"))
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Length", fmt.Sprint(len(body)))
+		_, _ = w.Write(body)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	src := newTestSource(t, srv.URL, session.Session{Cookie: "cookie"})
+	dest := filepath.Join(t.TempDir(), "slides.pdf")
+	material := model.Material{ID: "M1", Kind: "file", URL: srv.URL + "/mod/resource/view.php?id=1"}
+	got, err := src.Download(context.Background(), material, dest, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := os.ReadFile(got)
+	if err != nil || string(saved) != string(body) {
+		t.Fatalf("saved = %q, err = %v", saved, err)
+	}
+}
