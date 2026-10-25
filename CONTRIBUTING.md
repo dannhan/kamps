@@ -21,6 +21,14 @@ make build        # build ./kamps
 make test         # go test ./...
 ```
 
+If `make` is unavailable:
+
+```sh
+go run ./cmd/kamps
+go build -o kamps ./cmd/kamps
+go test ./...
+```
+
 ## Verify before committing
 
 ```sh
