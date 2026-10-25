@@ -13,10 +13,62 @@ import (
 
 	xterm "github.com/charmbracelet/x/term"
 
+	"github.com/ruyam/kamps/internal/browsercookie"
 	"github.com/ruyam/kamps/internal/config"
 	"github.com/ruyam/kamps/internal/kulon2"
 	"github.com/ruyam/kamps/internal/session"
 )
+
+// loginWithBrowser tries browser cookie extraction when requested, then falls
+// back to the manual hidden prompt.
+func loginWithBrowser(cfg config.Config, mode string, useBrowser bool) error {
+	if !useBrowser {
+		return login(cfg)
+	}
+	cookie, err := browsercookie.Find(cfg.SiteURL, mode)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Browser cookie lookup failed: %v\n", err)
+		fmt.Fprintln(os.Stderr, "Falling back to manual paste.")
+		return login(cfg)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	identity, err := kulon2.VerifySession(ctx, cfg.SiteURL, cookie.Value)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Browser cookie was rejected: %v\n", err)
+		fmt.Fprintln(os.Stderr, "Falling back to manual paste.")
+		return login(cfg)
+	}
+	expires := cookie.ExpiresAt
+	if expires.IsZero() {
+		lifetime := identity.Timeout
+		if lifetime <= 0 {
+			lifetime = session.DefaultLifetime
+		}
+		expires = time.Now().Add(lifetime)
+	}
+	if err := saveSession(cfg, cookie.Value, identity, expires); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stdout, "✓ signed in as user %d via %s\n", identity.UserID, cookie.Browser)
+	fmt.Fprintf(os.Stdout, "Session saved to %s\n", cfg.SessionPath())
+	return nil
+}
+
+func saveSession(cfg config.Config, cookie string, identity kulon2.Identity, expires time.Time) error {
+	saved := session.Session{
+		SiteURL:   cfg.SiteURL,
+		Cookie:    cookie,
+		UserID:    identity.UserID,
+		SessKey:   identity.SessKey,
+		ExpiresAt: expires,
+	}
+	if err := session.Save(cfg.SessionPath(), saved); err != nil {
+		return fmt.Errorf("save session: %w", err)
+	}
+	return nil
+}
 
 // login opens the LMS in a browser, asks for the MoodleSession cookie, verifies
 // it, and saves the resulting session. The cookie is never written to output.
@@ -58,14 +110,12 @@ func login(cfg config.Config) error {
 		return err
 	}
 
-	saved := session.Session{
-		SiteURL: cfg.SiteURL,
-		Cookie:  cookie,
-		UserID:  identity.UserID,
-		SessKey: identity.SessKey,
+	lifetime := identity.Timeout
+	if lifetime <= 0 {
+		lifetime = session.DefaultLifetime
 	}
-	if err := session.Save(cfg.SessionPath(), saved); err != nil {
-		return fmt.Errorf("save session: %w", err)
+	if err := saveSession(cfg, cookie, identity, time.Now().Add(lifetime)); err != nil {
+		return err
 	}
 
 	fmt.Fprintf(os.Stdout, "✓ signed in as user %d\n", identity.UserID)

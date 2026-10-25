@@ -14,7 +14,6 @@ import (
 	xterm "github.com/charmbracelet/x/term"
 
 	"github.com/ruyam/kamps/internal/config"
-	"github.com/ruyam/kamps/internal/kulon2"
 	"github.com/ruyam/kamps/internal/plain"
 	"github.com/ruyam/kamps/internal/source"
 	"github.com/ruyam/kamps/internal/tui"
@@ -24,21 +23,12 @@ import (
 var version = "0.1.0-dev"
 
 func main() {
-	args := os.Args[1:]
-	noAnim := false
-	demoMode := false
-	var rest []string
-	for _, a := range args {
-		if a == "--no-anim" || a == "--noanim" {
-			noAnim = true
-			continue
-		}
-		if a == "--demo" {
-			demoMode = true
-			continue
-		}
-		rest = append(rest, a)
+	opts, rest, err := parseOptions(os.Args[1:])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "kamps:", err)
+		os.Exit(1)
 	}
+	demoMode := opts.demo
 
 	if len(rest) > 0 {
 		switch rest[0] {
@@ -56,12 +46,16 @@ func main() {
 		fmt.Fprintln(os.Stderr, "kamps:", err)
 		os.Exit(1)
 	}
-	cfg.NoAnim = noAnim
+	if err := opts.apply(&cfg); err != nil {
+		fmt.Fprintln(os.Stderr, "kamps:", err)
+		os.Exit(1)
+	}
 
 	if len(rest) > 0 {
 		switch rest[0] {
 		case "login":
-			if err := login(cfg); err != nil {
+			mode, useBrowser := browserMode(rest[1:])
+			if err := loginWithBrowser(cfg, mode, useBrowser); err != nil {
 				fmt.Fprintln(os.Stderr, "kamps:", err)
 				os.Exit(1)
 			}
@@ -75,16 +69,22 @@ func main() {
 		}
 	}
 
-	var src source.Source
+	sourceName := cfg.Source
 	if demoMode {
-		src = source.NewDemo()
-	} else {
-		liveSource, sourceErr := kulon2.NewSource(cfg.SiteURL, cfg.SessionPath())
-		if sourceErr != nil {
-			fmt.Fprintln(os.Stderr, "kamps:", sourceErr)
-			os.Exit(1)
-		}
-		src = liveSource
+		sourceName = "demo"
+	}
+	if sourceName == "" {
+		sourceName = "kulon2"
+	}
+	src, sourceErr := source.Open(sourceName, source.Options{
+		SiteURL:     cfg.SiteURL,
+		SessionPath: cfg.SessionPath(),
+		StateDir:    cfg.StateDir,
+		LibraryDir:  cfg.LibraryDir,
+	})
+	if sourceErr != nil {
+		fmt.Fprintln(os.Stderr, "kamps:", sourceErr)
+		os.Exit(1)
 	}
 
 	// Non-interactive fallback: piping `kamps | less` should still work.
@@ -118,39 +118,53 @@ func printHelp() {
 	fmt.Print(`kamps — college coursework, in your terminal
 
 USAGE
-  kamps            launch with live Kulon2 course list (requires login)
+  kamps            launch live Kulon2 mode (requires a saved session)
   kamps --demo     launch using bundled demo data
-  kamps login      verify and save a Moodle session cookie
+  kamps login [--browser[=auto|firefox|chromium]]
+                   verify and save a Moodle session cookie
   kamps logout     remove the saved session
   kamps version    print the version
   kamps help       print this help
 
 FLAGS
-  --no-anim        no spinner or progress motion
-  --demo           use bundled demo data instead of Kulon2 (before the command)
+  --demo                        use bundled demo data
+  --source NAME                 select an in-tree source (demo, kulon2)
+  --commit-file PATH            default export target for the Commit tab
+  --export-format FORMAT        markdown, todo, or taskwarrior
+  --no-anim                     no spinner or progress motion
 
 CONFIG
   ~/.config/kamps/config.toml
     site_url = "https://kulon2.undip.ac.id/"
     library_dir = "~/Documents/kamps"
+    source = "kulon2"
+    workspace_roots = ["~/projects/university"]
+    commit_file = "~/notes/tasks.md"
+    export_format = "markdown"
+    auto_track_submitted = true
 
 SCREENS
-  1 Tasks       2 Materials       3 Courses     4 Sync       5 Commit
+  1 Tasks       2 Materials       3 Sync       4 Commit
   c  open the commit queue
-  enter  toggle the detail pane (Tasks, Materials); copy the queue (Commit)
-  /  search     f  filter     esc  clear search/filter
+  enter  toggle the detail pane (Tasks, Materials); write the queue (Commit)
+  /  search     f  filter     esc  clear search/filter/selection
 
 KEYS
   ↑/k ↓/j    move            space   select
   ←/h →/l    fold / open     a       select all
+  V          range select    *       invert visible
+  ctrl+z     undo triage
   t          track           m       missed
   i          ignore          u       undecided
-  c          review & commit y       copy queue lines
-  x          drop from queue s       sync
-  d          download        /       search
-  f          filter          ?       help
+  c          review & commit w       write queue
+  y          copy queue      x       drop from queue
+  X          drop all queued
+  d          download        s       sync
+  o          open link       ?       help
   q          quit
 
-Live mode currently loads the Kulon2 course list only; assignments and materials remain unavailable. Use --demo to see the complete bundled example.
+Live mode parses courses, assignments, resources, assignment attachments, and
+folder files; downloads go to library_dir or a mapped course.json workspace.
+Use --demo to see the bundled example without a session.
 `)
 }
