@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -199,6 +201,10 @@ func downloadErrorText(err error) string {
 		return "session expired — run kamps login"
 	case errors.Is(err, library.ErrInsufficientDiskSpace):
 		return "not enough disk space"
+	case errors.Is(err, os.ErrPermission) || strings.Contains(strings.ToLower(err.Error()), "permission denied"):
+		return "library is not writable — check library_dir"
+	case strings.Contains(strings.ToLower(err.Error()), "read-only file system"):
+		return "library is read-only — check library_dir"
 	case errors.Is(err, library.ErrRateLimited):
 		return "server is rate limiting; try again shortly"
 	case errors.Is(err, library.ErrEmptyFile):

@@ -13,17 +13,10 @@ func (m *App) reconcileLibrary() {
 	if m.cfg.LibraryDir == "" || len(m.materials) == 0 {
 		return
 	}
-	roots := []string{m.cfg.LibraryDir}
-	seenRoot := map[string]bool{m.cfg.LibraryDir: true}
-	for _, course := range m.courses {
-		if course.WorkspacePath == "" || seenRoot[course.WorkspacePath] {
-			continue
-		}
-		seenRoot[course.WorkspacePath] = true
-		roots = append(roots, course.WorkspacePath)
-	}
-
-	result := library.Scan(m.materials, m.materialDestination, roots)
+	// Known files are resolved through materialDestination (including mapped
+	// workspaces); only the library root is walked for unexpected files. A
+	// workspace is a user's repo, so its source files are not "unknown".
+	result := library.Scan(m.materials, m.materialDestination, []string{m.cfg.LibraryDir})
 	changed := false
 	for i := range m.materials {
 		material := &m.materials[i]

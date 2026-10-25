@@ -220,6 +220,8 @@ func TestDownloadErrorText(t *testing.T) {
 		{library.ErrRateLimited, "rate limiting"},
 		{library.ErrEmptyFile, "empty"},
 		{library.ErrIncompleteDownload, "cut short"},
+		{errors.New("permission denied"), "not writable"},
+		{errors.New("read-only file system"), "read-only"},
 	} {
 		if got := downloadErrorText(tc.err); !strings.Contains(got, tc.want) {
 			t.Errorf("downloadErrorText(%v) = %q, want %q", tc.err, got, tc.want)

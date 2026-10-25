@@ -91,6 +91,11 @@ func main() {
 	if sourceName == "" {
 		sourceName = "kulon2"
 	}
+	if sourceName != "demo" {
+		if err := cfg.EnsureLibraryDir(); err != nil {
+			fmt.Fprintln(os.Stderr, "kamps: warning:", err)
+		}
+	}
 	src, sourceErr := source.Open(sourceName, source.Options{
 		SiteURL:     cfg.SiteURL,
 		SessionPath: cfg.SessionPath(),
