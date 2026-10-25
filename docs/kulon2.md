@@ -82,8 +82,9 @@ IMK is not on Kulon2 at all (it lives on WhatsApp), so it has no LMS course.
   downloads — one request per file, politely spaced. Files land under
   `<library_dir>/<course>/<week>/<folder>/<filename>`; an existing file with the same
   size is skipped, and a changed file is saved with a `_v2` suffix instead of
-  overwriting local notes. `mod/url` activities are external links and open in
-  the browser with `o`.
+  overwriting local notes. Concurrent writers are serialized by a hashed lock
+  file under `$XDG_STATE_HOME/kamps/locks`, not beside the material.
+  `mod/url` activities are external links and open in the browser with `o`.
 - **Politeness:** at least 1 s between requests, at most 2 requests per page.
 - **Unverified:** `GET /my/courses.php` course cards. Treat a parse failure as
   an error, never as an empty course list.

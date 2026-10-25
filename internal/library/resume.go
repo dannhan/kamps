@@ -2,6 +2,7 @@ package library
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,6 +25,9 @@ type DownloadOptions struct {
 	// Headers are added to the request (for example, an authenticated cookie is
 	// already handled by the client's jar).
 	Headers http.Header
+	// LockDir keeps destination locks out of the library. Empty falls back to a
+	// sidecar next to the destination.
+	LockDir string
 }
 
 // DownloadResult reports where the bytes landed.
@@ -51,7 +55,7 @@ func DownloadFileWithOptions(ctx context.Context, client *http.Client, downloadU
 		client = http.DefaultClient
 	}
 
-	resolvedPath, action, destLock, err := reserveDestination(destPath, opts.ExpectedSize)
+	resolvedPath, action, destLock, err := reserveDestination(destPath, opts.ExpectedSize, opts.LockDir)
 	if err != nil {
 		return DownloadResult{}, err
 	}
@@ -113,7 +117,7 @@ func DownloadFileWithOptions(ctx context.Context, client *http.Client, downloadU
 		offset = 0
 		_ = os.Remove(partPath)
 		_ = os.Remove(metaPath)
-		return DownloadFileWithOptions(ctx, client, downloadURL, destPath, DownloadOptions{ExpectedSize: opts.ExpectedSize, Headers: opts.Headers}, progress)
+		return DownloadFileWithOptions(ctx, client, downloadURL, destPath, opts, progress)
 	case http.StatusUnauthorized, http.StatusForbidden:
 		cleanupPart(partPath, metaPath, opts.Resume)
 		return DownloadResult{}, ErrUnauthorized
@@ -302,13 +306,14 @@ func DownloadFileWithOptions(ctx context.Context, client *http.Client, downloadU
 // reserveDestination serializes writers targeting the same file. The lock is
 // held through the final rename so two kamps processes cannot both claim the
 // same versioned name.
-func reserveDestination(destPath string, expectedSize int64) (string, DestinationAction, *lockfile.Lock, error) {
+func reserveDestination(destPath string, expectedSize int64, lockDir string) (string, DestinationAction, *lockfile.Lock, error) {
+	lockPath := destinationLockPath(destPath, lockDir)
 	for {
 		resolved, action := ResolveDestination(destPath, expectedSize)
 		if action == ActionSkip {
 			return resolved, action, nil, nil
 		}
-		lock, err := lockfile.Acquire(resolved + ".lock")
+		lock, err := lockfile.Acquire(lockPath)
 		if err != nil {
 			return "", ActionDownload, nil, err
 		}
@@ -322,6 +327,20 @@ func reserveDestination(destPath string, expectedSize int64) (string, Destinatio
 		}
 		lock.Unlock()
 	}
+}
+
+// destinationLockPath keeps the lock stable for every writer of destPath while
+// storing it under lockDir. Hashing avoids leaking library paths into filenames.
+func destinationLockPath(destPath, lockDir string) string {
+	if lockDir == "" {
+		return destPath + ".lock"
+	}
+	absolute, err := filepath.Abs(destPath)
+	if err != nil {
+		absolute = filepath.Clean(destPath)
+	}
+	sum := sha256.Sum256([]byte(absolute))
+	return filepath.Join(lockDir, fmt.Sprintf("%x.lock", sum[:16]))
 }
 
 func loadPart(partPath, metaPath, downloadURL string, resume bool) (int64, partMeta) {

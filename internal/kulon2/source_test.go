@@ -27,7 +27,7 @@ func newTestSource(t *testing.T, site string, saved session.Session) *LiveSource
 	if err := session.Save(path, saved); err != nil {
 		t.Fatal(err)
 	}
-	src, err := NewSource(site, path)
+	src, err := NewSource(site, path, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,14 +216,14 @@ func TestLiveSourceLoadsCourseActivitiesAndAssignmentDeadline(t *testing.T) {
 }
 
 func TestNewSourceRejectsMissingOrWrongSiteSession(t *testing.T) {
-	if _, err := NewSource("https://kulon2.undip.ac.id", filepath.Join(t.TempDir(), "absent")); err == nil {
+	if _, err := NewSource("https://kulon2.undip.ac.id", filepath.Join(t.TempDir(), "absent"), ""); err == nil {
 		t.Fatal("expected missing session error")
 	}
 	path := filepath.Join(t.TempDir(), "session.json")
 	if err := session.Save(path, session.Session{SiteURL: "https://other.example", Cookie: "cookie"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewSource("https://kulon2.undip.ac.id", path); err == nil {
+	if _, err := NewSource("https://kulon2.undip.ac.id", path, ""); err == nil {
 		t.Fatal("expected mismatched site error")
 	}
 }

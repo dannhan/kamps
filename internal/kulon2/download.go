@@ -63,6 +63,7 @@ func (s *LiveSource) Download(ctx context.Context, material model.Material, dest
 		result, err := library.DownloadFileWithOptions(ctx, client, downloadURL, destPath, library.DownloadOptions{
 			ExpectedSize: material.Size,
 			Resume:       true,
+			LockDir:      s.lockDir,
 		}, progress)
 		if errors.Is(err, library.ErrSessionExpiredHTML) || errors.Is(err, library.ErrUnauthorized) {
 			return "", fmt.Errorf("%w: run `kamps login` again", err)

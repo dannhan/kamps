@@ -21,6 +21,7 @@ const defaultMaxConcurrent = 4
 type LiveSource struct {
 	siteURL       string
 	session       session.Session
+	lockDir       string
 	minRequestGap time.Duration
 	maxConcurrent int
 	client        *http.Client
@@ -31,7 +32,7 @@ type LiveSource struct {
 }
 
 // NewSource loads a saved session and binds it to the currently configured site.
-func NewSource(siteURL, sessionPath string) (*LiveSource, error) {
+func NewSource(siteURL, sessionPath, lockDir string) (*LiveSource, error) {
 	saved, err := session.Load(sessionPath)
 	if err != nil {
 		if errors.Is(err, session.ErrNotFound) {

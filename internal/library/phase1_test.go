@@ -41,7 +41,8 @@ func TestDownloadFileResumesPartial(t *testing.T) {
 		UpdatedAt: time.Now(),
 	})
 
-	result, err := DownloadFileWithOptions(context.Background(), srv.Client(), srv.URL+"/file.bin", dest, DownloadOptions{Resume: true}, nil)
+	lockDir := t.TempDir()
+	result, err := DownloadFileWithOptions(context.Background(), srv.Client(), srv.URL+"/file.bin", dest, DownloadOptions{Resume: true, LockDir: lockDir}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,6 +52,13 @@ func TestDownloadFileResumesPartial(t *testing.T) {
 	saved, err := os.ReadFile(dest)
 	if err != nil || string(saved) != string(body) {
 		t.Fatalf("saved = %q, err = %v", saved, err)
+	}
+	if _, err := os.Stat(dest + ".lock"); !os.IsNotExist(err) {
+		t.Fatal("lock file should not sit beside the downloaded file")
+	}
+	entries, err := os.ReadDir(lockDir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("lock dir entries = %v, err = %v", entries, err)
 	}
 	if _, err := os.Stat(dest + ".part"); !os.IsNotExist(err) {
 		t.Fatalf("part file still exists: %v", err)
