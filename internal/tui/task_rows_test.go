@@ -119,10 +119,10 @@ func TestParentRowsShowCaretAndMark(t *testing.T) {
 	nodes := app.taskNodes()
 	app.taskCursor = findTaskNode(nodes, nodeTask, "K901000")
 
-	// Open term: guide, then caret, mark column, name.
-	term := findTaskNode(nodes, nodeTerm, "smt11")
-	if row := stripANSI(app.taskTreeRow(nodes, term, 98)); !strings.Contains(row, "▾ "+markEmpty+" smt11") {
-		t.Fatalf("open term should show a down caret and hollow mark: %q", row)
+	// Course rows are the top-level parents, without a placeholder term row.
+	course := findTaskNode(nodes, nodeCourse, "")
+	if row := stripANSI(app.taskTreeRow(nodes, course, 98)); !strings.Contains(row, "▾ "+markEmpty+" ppl") {
+		t.Fatalf("course should be top-level with a down caret and hollow mark: %q", row)
 	}
 
 	// The demo tree's "closed" bucket starts folded.

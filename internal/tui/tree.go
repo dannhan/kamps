@@ -19,7 +19,6 @@ const (
 	nodeCourse nodeKind = iota
 	nodeTask
 	nodeFile
-	nodeTerm
 	nodeBucket
 	nodeTaskMaterial
 	nodeMaterialBucket
@@ -29,7 +28,6 @@ const (
 type node struct {
 	kind     nodeKind
 	courseID int
-	term     string
 	bucket   string
 	key      string
 	parents  []string
@@ -42,6 +40,8 @@ func (n node) depth() int {
 		return len(n.parents)
 	}
 	switch n.kind {
+	case nodeCourse, nodeMaterialAssignment:
+		return 0
 	case nodeTask, nodeMaterialBucket:
 		return 1
 	case nodeFile:

@@ -12,13 +12,38 @@ import (
 func TestTaskTreeGroupsSortsAndFolds(t *testing.T) {
 	app := demoApp(t)
 	nodes := app.taskNodes()
-	term := findTaskNode(nodes, nodeTerm, "smt11")
+	if len(nodes) == 0 || nodes[0].kind != nodeCourse {
+		t.Fatalf("courses should be the top-level rows: %#v", nodes)
+	}
+
+	// Courses are the only top-level rows and sort by their short name.
+	var courseIDs []int
+	for _, n := range nodes {
+		if n.kind == nodeCourse {
+			courseIDs = append(courseIDs, n.courseID)
+		}
+	}
+	for i := 1; i < len(courseIDs); i++ {
+		if app.shortCode(courseIDs[i-1]) > app.shortCode(courseIDs[i]) {
+			t.Fatalf("courses are not sorted by short name: %v", courseIDs)
+		}
+	}
+
 	course := findTaskNode(nodes, nodeCourse, "")
-	needsDecision := findTaskNode(nodes, nodeBucket, "needs decision")
-	tracked := findTaskNode(nodes, nodeBucket, "tracked")
-	closed := findTaskNode(nodes, nodeBucket, "closed")
-	if term != 0 || course < term || needsDecision < course || tracked < needsDecision || closed < tracked {
-		t.Fatalf("unexpected tree ordering: term=%d course=%d needs=%d tracked=%d closed=%d", term, course, needsDecision, tracked, closed)
+	if course < 0 {
+		t.Fatal("ppl course row not found")
+	}
+	var buckets []string
+	for _, n := range nodes[course+1:] {
+		if n.kind == nodeCourse {
+			break
+		}
+		if n.kind == nodeBucket {
+			buckets = append(buckets, n.bucket)
+		}
+	}
+	if len(buckets) != 3 || buckets[0] != "needs decision" || buckets[1] != "tracked" || buckets[2] != "closed" {
+		t.Fatalf("ppl buckets = %v", buckets)
 	}
 	if findTaskNode(nodes, nodeTask, "K150009") >= 0 {
 		t.Fatal("closed assignments should be collapsed by default")
@@ -58,22 +83,21 @@ func TestTaskTreeConnectorsAndRowWidth(t *testing.T) {
 	_ = os.Setenv("TERM", "xterm-256color")
 	app := demoApp(t)
 	nodes := app.taskNodes()
-	term := findTaskNode(nodes, nodeTerm, "smt11")
 	course := findTaskNode(nodes, nodeCourse, "")
-	if got := treeGuides(nodes, course); got != "├─ " {
-		t.Fatalf("course connector = %q, want %q", got, "├─ ")
+	if got := treeGuides(nodes, course); got != "" {
+		t.Fatalf("top-level course connector = %q, want empty", got)
 	}
 	_ = os.Setenv("TERM", "dumb")
 	if vertical, branch, last := treeConnectors(); vertical != "|  " || branch != "|-- " || last != "`-- " {
 		t.Fatalf("ASCII connectors = %q, %q, %q", vertical, branch, last)
 	}
-	app.taskCursor = term
-	row := app.taskTreeRow(nodes, term, 98)
+	app.taskCursor = course
+	row := app.taskTreeRow(nodes, course, 98)
 	if got := lipgloss.Width(stripANSI(row)); got != 98 {
 		t.Fatalf("rendered row width = %d, want 98", got)
 	}
-	if !strings.Contains(row, "smt11") {
-		t.Fatalf("rendered term row missing term: %q", row)
+	if !strings.Contains(row, "ppl") {
+		t.Fatalf("rendered course row missing course: %q", row)
 	}
 }
 
@@ -89,7 +113,7 @@ func TestCoursesTreeViewsAt100And80Columns(t *testing.T) {
 				t.Fatalf("width %d line %d has width %d: %q", width, i+1, got, stripANSI(line))
 			}
 		}
-		if !strings.Contains(view, "courses · all") || !strings.Contains(view, "smt11") || !strings.Contains(stripANSI(view), "queue empty") {
+		if !strings.Contains(view, "courses · all") || !strings.Contains(view, "ppl") || strings.Contains(stripANSI(view), "other") || !strings.Contains(stripANSI(view), "queue empty") {
 			t.Fatalf("%d-column view is missing expected content:\n%s", width, stripANSI(view))
 		}
 	}

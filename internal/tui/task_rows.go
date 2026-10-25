@@ -32,8 +32,6 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 	content := ""
 	counts := m.taskNodeCounts(n)
 	switch n.kind {
-	case nodeTerm:
-		content = h.containerLead(open, selected) + background(stCode.Bold(true)).Render(n.term)
 	case nodeCourse:
 		name := m.shortCode(n.courseID)
 		if course, ok := m.courseByID(n.courseID); ok && course.Short != "" {
@@ -106,7 +104,7 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 }
 
 func (m *App) isTaskGroup(n node) bool {
-	return n.kind == nodeTerm || n.kind == nodeCourse || n.kind == nodeBucket || n.kind == nodeTask && len(m.assignmentMaterials(n.task)) > 0
+	return n.kind == nodeCourse || n.kind == nodeBucket || n.kind == nodeTask && len(m.assignmentMaterials(n.task)) > 0
 }
 
 func (m *App) taskNodeCounts(group node) [5]int {

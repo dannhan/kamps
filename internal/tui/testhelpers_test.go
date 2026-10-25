@@ -25,10 +25,6 @@ func findTaskNode(nodes []node, kind nodeKind, value string) int {
 			continue
 		}
 		switch kind {
-		case nodeTerm:
-			if n.term == value {
-				return i
-			}
 		case nodeCourse:
 			if n.courseID == 18515 {
 				return i

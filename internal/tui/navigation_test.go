@@ -99,9 +99,9 @@ func TestFoldOnAlreadyFoldedGroupMovesCursorToParent(t *testing.T) {
 	app.expanded[courseKey(18515)] = false
 	nodes := app.taskNodes()
 	course := findTaskNode(nodes, nodeCourse, "")
-	expected := findTaskNode(nodes, nodeTerm, "smt11")
-	if course < 0 || expected != 0 {
-		t.Fatalf("unexpected folded tree: course=%d term=%d", course, expected)
+	expected := findTaskNode(nodes, nodeCourse, "")
+	if course < 0 || expected != course {
+		t.Fatalf("unexpected folded tree: course=%d expected=%d", course, expected)
 	}
 	app.taskCursor = course
 	app.moveX(-1)

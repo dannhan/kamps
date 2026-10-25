@@ -33,10 +33,6 @@ func (m *App) detailLines(n node, width int) []string {
 	}
 
 	switch n.kind {
-	case nodeTerm:
-		add(stPaneTitle.Render(truncate(n.term, width)))
-		addKV("tasks", fmt.Sprint(len(m.taskGroupIDs(n))), stRow)
-		addStates(n)
 	case nodeCourse:
 		short := m.shortCode(n.courseID)
 		if course, ok := m.courseByID(n.courseID); ok {
