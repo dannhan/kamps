@@ -79,3 +79,9 @@ func TestDownloadBlockedWhileOffline(t *testing.T) {
 		t.Fatalf("toast = %q", app.toast)
 	}
 }
+
+func TestWeekSectionsSortNumerically(t *testing.T) {
+	if !sectionLess("week-1", "week-2") || !sectionLess("week-2", "week-10") {
+		t.Fatal("week sections are not in numeric order")
+	}
+}

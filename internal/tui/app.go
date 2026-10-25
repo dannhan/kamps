@@ -230,7 +230,7 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a.CourseCode < b.CourseCode
 			}
 			if a.Section != b.Section {
-				return a.Section < b.Section
+				return sectionLess(a.Section, b.Section)
 			}
 			return a.Name < b.Name
 		})

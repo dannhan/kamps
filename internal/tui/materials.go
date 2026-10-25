@@ -105,7 +105,7 @@ func (m *App) matNodes() []node {
 				}
 				bySection[label] = append(bySection[label], file)
 			}
-			sort.Strings(sections)
+			sort.Slice(sections, func(i, j int) bool { return sectionLess(sections[i], sections[j]) })
 			for _, section := range sections {
 				sectionFiles := bySection[section]
 				sectionKey := materialSectionKey(courseID, bucket.label, section)

@@ -102,6 +102,28 @@ func (m *App) setOpen(key string, open bool) {
 
 var weekSectionPattern = regexp.MustCompile(`(?i)^week[-_ ]?0*([0-9]+)$`)
 
+func sectionNumber(section string) (int, bool) {
+	match := weekSectionPattern.FindStringSubmatch(strings.TrimSpace(section))
+	if len(match) < 2 {
+		return 0, false
+	}
+	n, err := strconv.Atoi(match[1])
+	return n, err == nil
+}
+
+// sectionLess orders week-1 before week-2 before week-10.
+func sectionLess(a, b string) bool {
+	na, oka := sectionNumber(a)
+	nb, okb := sectionNumber(b)
+	if oka && okb {
+		return na < nb
+	}
+	if oka != okb {
+		return oka
+	}
+	return a < b
+}
+
 func sectionLabel(section string) string {
 	section = strings.TrimSpace(section)
 	if section == "" {
