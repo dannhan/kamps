@@ -7,11 +7,19 @@ This is the practical map for changing Kamps: where things live, which files to 
 ## 1. Repository Map
 
 ```
-cmd/kamps/              CLI entry point, help text, TTY detection
-internal/config/        XDG paths and default settings
+cmd/kamps/              CLI entry point, flags, login/logout, TTY detection
+internal/core/          UI-free application pipeline: load, merge, reconcile
+internal/config/        XDG paths, config.toml, derived paths
 internal/model/         Course, Assignment, Material, Triage
-internal/source/        Source interface + bundled demo dataset
-internal/store/         state.json: load, apply, atomic save
+internal/source/        Source interface, registry, demo dataset
+internal/kulon2/        Live Moodle/Kulon2 parser, session, downloads
+internal/library/       Safe paths, resumable downloads, library scan
+internal/store/         state.json: load, merge, atomic save
+internal/cache/         Last successful snapshot for offline startup
+internal/export/        Markdown, todo.txt, Taskwarrior writers
+internal/workspace/     course.json discovery and resolution
+internal/session/       Private session file and expiry
+internal/plain/         Non-TTY snapshot renderer
 internal/tui/           Bubble Tea app and all rendering
 docs/                   developer guides
 TUI_RESEARCH.md         design research and proposals (not a status page)
@@ -39,11 +47,12 @@ A non-empty `gofmt -l .` output means a file needs formatting. The repository's 
 ## 2. Recommended Reading Order
 
 1. [`cmd/kamps/main.go`](../cmd/kamps/main.go) — how the binary chooses TUI vs. plain mode.
-2. [`internal/config/config.go`](../internal/config/config.go) — paths and the minimal config shape.
+2. [`internal/config/config.go`](../internal/config/config.go) — paths, config loading, and derived paths.
 3. [`internal/source/source.go`](../internal/source/source.go) — the one interface the UI is built against.
 4. [`internal/model/model.go`](../internal/model/model.go) — the domain types and triage values.
 5. [`internal/store/store.go`](../internal/store/store.go) — local state and atomic writes.
-6. [`internal/tui/app.go`](../internal/tui/app.go) — the root model and event loop.
+6. [`internal/core/core.go`](../internal/core/core.go) — the shared load/merge/reconcile pipeline.
+7. [`internal/tui/app.go`](../internal/tui/app.go) — the root model and event loop.
 7. [`internal/tui/task_tree.go`](../internal/tui/task_tree.go) and [`materials.go`](../internal/tui/materials.go) — the two flattened trees.
 8. [`internal/tui/task_rows.go`](../internal/tui/task_rows.go) and [`material_rows.go`](../internal/tui/material_rows.go) — row rendering and tab bodies.
 9. [`internal/tui/search.go`](../internal/tui/search.go) and [`filters.go`](../internal/tui/filters.go) — narrowing the trees.
@@ -60,11 +69,17 @@ A non-empty `gofmt -l .` output means a file needs formatting. The repository's 
 source.Source
     │  Load(ctx) -> source.Snapshot
     ▼
-loadCmd (tea.Cmd, one call)
-    │  loadedMsg or errMsg
+core.Service.Load
+    │  workspace resolve -> sort -> state apply -> auto-triage -> library scan
     ▼
-App.Update
-    │  sort, applyState, clampCursor
+core.Snapshot  ──►  plain.PrintPlain
+    │
+    ▼
+loadCmd (tea.Cmd) -> loadedMsg
+    │
+    ▼
+App.applySnapshot
+    │  clampCursor, restoreCursors
     ▼
 visible() / visibleMaterials() / taskNodes() / matNodes()
     │
@@ -74,11 +89,11 @@ View (trees, detail, commit, footer)
 
 Important details:
 
-- `loadCmd` is asynchronous from Bubble Tea's perspective but makes one `Load` call. The snapshot contains courses, assignments, and materials; any error aborts the load.
-- Courses are sorted by name; materials by course code, section, then name. Assignments are sorted only when the visible Tasks list is built: dated items first, oldest first, then by ID.
-- `store.State.Apply` overlays saved decisions and download flags. Saved decisions win where they exist; otherwise the source's `Triage` value remains.
+- `loadCmd` is asynchronous from Bubble Tea's perspective but calls the shared `core.Service.Load`. The snapshot contains courses, assignments, materials, scan results, and warnings.
+- Core resolves workspaces, sorts courses by name and materials by course code/section/name, applies saved state, auto-triages submitted work, and scans the library.
+- Assignments are sorted only when the visible Tasks list is built: dated items first, oldest first, then by ID.
 - `pending` is the session-only export queue. Decisions are saved immediately; the queue is not restored after restart.
-- Plain mode uses the same source and store but skips Bubble Tea. It returns source errors to the CLI instead of printing a partial snapshot; its code lives in [`internal/plain`](../internal/plain/plain.go).
+- Plain mode consumes the same core snapshot and falls back to the cache when the source is unavailable.
 
 ---
 
@@ -98,11 +113,11 @@ Important details:
 | [`material_rows.go`](../internal/tui/material_rows.go) | You are changing a material row or the Materials tab body |
 | [`detail_materials.go`](../internal/tui/detail_materials.go) | You are changing material detail content |
 | [`commit.go`](../internal/tui/commit.go) | You are changing the session queue, preview, clipboard, or Commit tab |
-| [`sync.go`](../internal/tui/sync.go) | You are changing sync, cursor restoration, session status, or the Sync tab |
+| [`sync.go`](../internal/tui/sync.go) | You are changing real reload, cursor restoration, session status, or the Sync tab |
 | [`chrome.go`](../internal/tui/chrome.go) | You are changing the shell, tab bar, footer, or help overlay |
 | [`detail.go`](../internal/tui/detail.go) | You are changing split-pane visibility, widths, or clipping |
 | [`search.go`](../internal/tui/search.go) | You are changing query behavior, match fields, or search-mode keys |
-| [`state.go`](../internal/tui/state.go) | You are changing how App applies or saves local state |
+| [`state.go`](../internal/tui/state.go) | You are changing how App writes state through `core.Service` |
 | [`tree.go`](../internal/tui/tree.go) | You are changing the shared node contract, fold keys, or connectors |
 | [`frame.go`](../internal/tui/frame.go) | You are changing the title row, rules, body height, tab cells, or hint fitting |
 | [`row.go`](../internal/tui/row.go) | You are changing cursor/mark bands, gutters, carets, or selection cells |
@@ -112,9 +127,7 @@ Important details:
 | [`format.go`](../internal/tui/format.go) | You need shared formatting helpers such as `taskLine`, `shortCode`, or `lastSyncLine` |
 | [`numbers.go`](../internal/tui/numbers.go) | You need a small integer helper |
 
-Plain mode lives outside this package in [`internal/plain/plain.go`](../internal/plain/plain.go). Shared byte-size formatting and assignment ordering live in [`internal/format/format.go`](../internal/format/format.go), so plain mode never imports Bubble Tea.
-
-`nodeWeek` has been removed; neither tree builder emits week rows today.
+Plain mode lives outside this package in [`internal/plain/plain.go`](../internal/plain/plain.go). Shared byte-size formatting and assignment ordering live in [`internal/format/format.go`](../internal/format/format.go), so plain mode never imports Bubble Tea. The shared application pipeline lives in [`internal/core`](../internal/core), which also has no UI imports.
 
 ---
 
@@ -122,10 +135,10 @@ Plain mode lives outside this package in [`internal/plain/plain.go`](../internal
 
 Both tree tabs render a flat `[]node`. A node carries:
 
-- `kind` — `nodeTerm`, `nodeCourse`, `nodeBucket`, `nodeTask`, `nodeTaskMaterial`, `nodeMaterialBucket`, `nodeFile`, or `nodeMaterialAssignment`;
+- `kind` — `nodeCourse`, `nodeBucket`, `nodeTask`, `nodeTaskMaterial`, `nodeMaterialSection`, `nodeMaterialFolder`, `nodeFile`, or `nodeMaterialAssignment`;
 - `key` — stable identity for folding;
 - `parents` — ancestor keys, also used to compute depth;
-- `courseID`, `term`, `bucket`;
+- `courseID`, `bucket`, `section`;
 - `task` and/or `mat` payloads.
 
 The flattened list is the single source of truth. The cursor is an index into it, so whatever is highlighted is exactly what `space`, `h`/`l`, `d`, and triage keys act on. If you change what a tree shows, build it in `taskNodes` or `matNodes`; do not add a parallel row calculation in `View`.
@@ -146,10 +159,10 @@ term
 
 ```
 course
-├── downloaded
-│   └── file
-│       └── linked assignment (attachments only)
-└── new
+└── week
+    ├── folder
+    │   └── file
+    │       └── linked assignment (attachments only)
     └── file
         └── linked assignment (attachments only)
 ```
@@ -207,7 +220,7 @@ Connectors are produced by `treeGuides` from the flat list and fall back to ASCI
 
 1. Add or change fields in [`store.State`](../internal/store/store.go).
 2. Update `New`, `ensureMaps`, `Apply`, and the relevant setters.
-3. If the JSON shape changes incompatibly, bump `version` and decide how old files are handled. There is currently no migration code.
+3. If the JSON shape changes incompatibly, bump `version` and add a migration in `store.decode` (v1 is migrated in memory with a best-effort `.bak`).
 4. Keep writes atomic and `0600`.
 5. Add a round-trip test and a corrupt-file test. Use `t.TempDir()`; never write to the real home directory.
 
@@ -220,7 +233,7 @@ Connectors are produced by `treeGuides` from the flat list and fall back to ASCI
 
 ### Add an export format
 
-The commit preview is built in [`commitPreviewText`](../internal/tui/commit.go) and each line comes from [`taskLine`](../internal/tui/format.go). If you add a real writer, keep the preview and the written output identical; otherwise the “review before write” promise is broken.
+The commit preview is built from the same [`export.Writer`](../internal/export/export.go) renderer used for the file write. If you add a format, implement it in `internal/export` and keep preview and written output identical; otherwise the “review before write” promise is broken.
 
 ---
 
@@ -300,19 +313,19 @@ Useful checks:
 | Feature | Status |
 |---|---|
 | Demo source | Implemented; bundled in `internal/source/demo.go` |
-| Moodle/Kulon2 source | Not implemented; recon notes in [kulon2.md](kulon2.md) |
-| Config file (`config.toml`) | Not implemented; `config.Default()` only |
-| Cookie auth / expiry | Not implemented |
+| Moodle/Kulon2 source | Implemented: course list, course/assignment/quiz/folder parsing, attachments, downloads |
+| Config file (`config.toml`) | Implemented; `internal/config.Load` |
+| Cookie auth / expiry | Implemented: `login`, `logout`, browser extraction, session expiry |
 | Live search | Implemented on Tasks and Materials; composes with filters |
 | Saved decisions | Implemented; applied at load and in plain mode |
-| Saved download flags | Implemented |
-| Actual file downloads | Not implemented; `d` flips and persists a flag |
-| Sync | Simulated animation and toast; does not reload the source |
-| Commit writer | Not implemented; `y`/`enter` copies OSC 52 |
+| Saved download flags | Implemented; reconciled against the library |
+| Actual file downloads | Implemented: resumable, authenticated, hidden destination locks |
+| Sync | Implemented: reloads the source and restores cursor/filter/search |
+| Commit writer | Implemented: Markdown, todo.txt, Taskwarrior |
 | Commit queue persistence | Not implemented; session-only by design |
 | Attachment → assignment linking | Implemented for the `K…` / `M…:` ID convention |
-| Week-grouped materials | Not implemented; no week rows are emitted |
-| Working-directory cross-check | Demo stand-in (`similarManualTask`) |
+| Week-grouped materials | Implemented; week labels drive the tree and paths |
+| Headless core / JSON CLI | Core pipeline implemented; JSON subcommands are the next phase |
 
 When documenting a change, keep this table honest. The fastest way for docs to rot is to describe planned behavior as shipped behavior.
 

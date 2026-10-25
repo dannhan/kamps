@@ -3,10 +3,9 @@ package tui
 import (
 	"fmt"
 	"os"
-	"regexp"
-	"strconv"
 	"strings"
 
+	"github.com/ruyam/kamps/internal/core"
 	"github.com/ruyam/kamps/internal/model"
 )
 
@@ -99,44 +98,15 @@ func (m *App) setOpen(key string, open bool) {
 	m.expanded[key] = false
 }
 
-var weekSectionPattern = regexp.MustCompile(`(?i)^week[-_ ]?0*([0-9]+)$`)
-
-func sectionNumber(section string) (int, bool) {
-	match := weekSectionPattern.FindStringSubmatch(strings.TrimSpace(section))
-	if len(match) < 2 {
-		return 0, false
-	}
-	n, err := strconv.Atoi(match[1])
-	return n, err == nil
-}
-
 // sectionLess orders week-1 before week-2 before week-10.
 func sectionLess(a, b string) bool {
-	na, oka := sectionNumber(a)
-	nb, okb := sectionNumber(b)
-	if oka && okb {
-		return na < nb
-	}
-	if oka != okb {
-		return oka
-	}
-	return a < b
+	return core.SectionLess(a, b)
 }
 
 func sectionLabel(section string) string {
-	section = strings.TrimSpace(section)
-	if section == "" {
-		return "week-0"
-	}
-	if match := weekSectionPattern.FindStringSubmatch(section); len(match) > 1 {
-		if n, err := strconv.Atoi(match[1]); err == nil {
-			return fmt.Sprintf("week-%d", n)
-		}
-	}
-	return section
+	return core.SectionLabel(section)
 }
 
-// idsOf is the ids a node's children would carry, for selection bookkeeping.
 func idsOf(files []model.Material) []string {
 	out := make([]string, 0, len(files))
 	for _, f := range files {

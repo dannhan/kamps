@@ -6,51 +6,55 @@ This document describes the architecture of Kamps, the responsibilities of each 
 
 ## 1. High-Level Architecture
 
-Kamps follows a strict separation of concerns between **domain models**, **external data sources**, **persisted local state**, and the **terminal UI**.
+Kamps separates **domain models**, **external data sources**, **persisted local state**, the **application core**, and the **terminal UI**.
 
 The data boundary is simple:
 
 - **LMS coursework data** is read-only external input received through [`source.Source`](../internal/source/source.go).
 - **User decisions and local flags** are owned by the local machine and stored atomically in JSON via [`store.State`](../internal/store/store.go).
-- The **TUI** ([`tui.App`](../internal/tui/app.go)) is the reconciler: it loads source data, overlays saved local state, captures user interactions, and renders the result.
+- The **application core** ([`core.Service`](../internal/core/core.go)) is the reconciler: it loads source data, resolves workspaces, overlays saved state, auto-triages submitted work, reconciles the library, and exposes a display-neutral snapshot.
+- The **TUI** ([`tui.App`](../internal/tui/app.go)) renders that snapshot and captures user interaction. It also owns the per-run commit queue.
 - The **commit queue** is intentionally not persisted. It is a per-run export buffer; decisions themselves are saved immediately.
 
 ```mermaid
 %%{init: {"flowchart": {"curve": "step"}}}%%
 flowchart TB
-    Main["cmd/kamps<br/>main() + TTY check"]
-    Cfg["config<br/>XDG paths"]
+    Main["cmd/kamps<br/>CLI + TUI shell"]
+    Core["core<br/>load + merge<br/>reconcile"]
     TUI["tui<br/>Bubble Tea UI<br/>alt screen + OSC 52"]
     Plain["plain<br/>snapshot<br/>stdout"]
     Source["source<br/>Source interface"]
     Store["store<br/>decisions + flags"]
+    Lib["library<br/>paths + downloads + scan"]
     Model["model<br/>Course / Assignment / Material"]
-    Format["format<br/>sort + sizes"]
+    Cfg["config + session<br/>paths + credentials"]
     Disk[("state.json")]
 
     Main --> Cfg
     Main -->|TTY| TUI
     Main -->|pipe / file| Plain
-    TUI --> Source
-    TUI --> Store
-    TUI --> Format
-    Plain --> Source
-    Plain --> Store
-    Plain --> Format
+    TUI --> Core
+    Plain --> Core
+    Core --> Source
+    Core --> Store
+    Core --> Lib
+    Core --> Model
     Source --> Model
     Store --> Model
     Store <--> Disk
 
     classDef entry fill:#dbe8fb,stroke:#7aa2d6,stroke-width:1.5px,color:#1f3350
+    classDef corec fill:#f4f2ea,stroke:#c9c3b4,stroke-width:1.8px,color:#2b2a26
     classDef interactive fill:#dff3e8,stroke:#8fc7ad,stroke-width:1.5px,color:#1f3d2f
     classDef snapshot fill:#ece2fb,stroke:#b79ce8,stroke-width:1.5px,color:#352650
     classDef pkg fill:#f4f2ea,stroke:#c9c3b4,color:#2b2a26
     classDef state fill:#fdeed3,stroke:#d9b98a,stroke-width:1.5px,color:#4a3520
 
     class Main entry
+    class Core corec
     class TUI interactive
     class Plain snapshot
-    class Cfg,Source,Store,Model,Format pkg
+    class Source,Store,Lib,Model,Cfg pkg
     class Disk state
 ```
 
@@ -62,14 +66,23 @@ There is no HTTP server, database, or daemon. Kamps is a single local binary.
 
 | Package | Path | Responsibility | Key Symbols |
 |---|---|---|---|
-| `main` | [`cmd/kamps`](../cmd/kamps/main.go) | CLI entry point, flag parsing (`--no-anim`, `version`, `help`), TTY detection, runtime mode selection. | [`main()`](../cmd/kamps/main.go), [`isTTY()`](../cmd/kamps/main.go), [`printHelp()`](../cmd/kamps/main.go) |
-| `config` | [`internal/config`](../internal/config/config.go) | Resolve XDG state/config directories, define defaults, return the state file path. There is no config-file loader yet. | [`Config`](../internal/config/config.go), [`Default()`](../internal/config/config.go), [`Config.StatePath()`](../internal/config/config.go) |
-| `model` | [`internal/model`](../internal/model/model.go) | Pure domain types. Defines courses, assignments, materials, and the triage enum. | [`Course`](../internal/model/model.go), [`Assignment`](../internal/model/model.go), [`Material`](../internal/model/model.go), [`Triage`](../internal/model/model.go) |
-| `source` | [`internal/source`](../internal/source/source.go) | Abstract snapshot provider (`Source`) and the bundled demo implementation (`Demo`). | [`Source`](../internal/source/source.go), [`Snapshot`](../internal/source/source.go), [`Demo`](../internal/source/demo.go), [`NewDemo()`](../internal/source/demo.go) |
-| `store` | [`internal/store`](../internal/store/store.go) | Atomically persist triage decisions and download flags to JSON; load and apply them over fresh source data. | [`State`](../internal/store/store.go), [`Load()`](../internal/store/store.go), [`State.Save()`](../internal/store/store.go), [`State.Apply()`](../internal/store/store.go) |
-| `format` | [`internal/format`](../internal/format/format.go) | Shared display formatting and assignment ordering for both UI modes. | [`HumanSize()`](../internal/format/format.go), [`LessAssignment()`](../internal/format/format.go), [`SortAssignments()`](../internal/format/format.go) |
-| `plain` | [`internal/plain`](../internal/plain/plain.go) | Non-interactive snapshot for pipes, files, and CI. Shares source/store with the TUI but has no Bubble Tea dependency. | [`PrintPlain()`](../internal/plain/plain.go) |
-| `tui` | [`internal/tui`](../internal/tui/app.go) | Full Bubble Tea user interface: screen management, navigation, tree flattening, search, detail pane, styling, and keyboard dispatch. | [`App`](../internal/tui/app.go), [`New()`](../internal/tui/app.go) |
+| `main` | [`cmd/kamps`](../cmd/kamps/main.go) | CLI entry point, flag parsing, subcommands, TTY detection, runtime mode selection. | [`main()`](../cmd/kamps/main.go), [`isTTY()`](../cmd/kamps/main.go), [`printHelp()`](../cmd/kamps/main.go) |
+| `config` | [`internal/config`](../internal/config/config.go) | Resolve XDG paths, load `config.toml`, provide the state/session/cache/lock paths. | [`Config`](../internal/config/config.go), [`Load()`](../internal/config/config.go), [`Config.StatePath()`](../internal/config/config.go) |
+| `model` | [`internal/model`](../internal/model/model.go) | Pure domain types: courses, assignments, materials, triage, submission state. | [`Course`](../internal/model/model.go), [`Assignment`](../internal/model/model.go), [`Material`](../internal/model/model.go), [`Triage`](../internal/model/model.go) |
+| `source` | [`internal/source`](../internal/source/source.go) | Source interface, registry, capabilities, and the bundled demo implementation. | [`Source`](../internal/source/source.go), [`Snapshot`](../internal/source/source.go), [`NewDemo()`](../internal/source/demo.go) |
+| `kulon2` | [`internal/kulon2`](../internal/kulon2) | Live Moodle/Kulon2 session, course/activity parsing, and authenticated downloads. | `LiveSource`, `ParseCoursePage`, `ParseAssignmentPage`, `Download` |
+| `store` | [`internal/store`](../internal/store/store.go) | Atomically persist triage, auto-triage, overrides, download records, and last sync. | [`State`](../internal/store/store.go), [`Load()`](../internal/store/store.go), [`Update()`](../internal/store/store.go) |
+| `library` | [`internal/library`](../internal/library) | Safe material paths, resumable downloads, destination locks, and library scan. | `MaterialPath`, `DownloadFileWithOptions`, `Scan` |
+| `cache` | [`internal/cache`](../internal/cache) | Last successful snapshot for offline startup. | `Save`, `Load` |
+| `export` | [`internal/export`](../internal/export) | Markdown, todo.txt, and Taskwarrior render/write. | `For`, `Writer`, `Item` |
+| `workspace` | [`internal/workspace`](../internal/workspace) | Discover and resolve `course.json` workspace mappings. | `Resolve` |
+| `session` | [`internal/session`](../internal/session) | Private session file, expiry, save/load/delete. | `Session`, `Load`, `Save` |
+| `core` | [`internal/core`](../internal/core) | UI-free application layer: load, workspace resolve, state merge, auto-triage, library reconcile, cache save/fallback. | [`Service`](../internal/core/core.go), `Load`, `LoadCached`, `Destination` |
+| `plain` | [`internal/plain`](../internal/plain/plain.go) | Non-interactive snapshot for pipes, files, and CI. Consumes `core`. | [`PrintPlain()`](../internal/plain/plain.go) |
+| `tui` | [`internal/tui`](../internal/tui/app.go) | Bubble Tea rendering: tabs, trees, search, detail pane, styles, key dispatch. | [`App`](../internal/tui/app.go), [`New()`](../internal/tui/app.go) |
+| `lockfile` | [`internal/lockfile`](../internal/lockfile) | Cross-platform advisory locks for state and destinations. | `Acquire`, `Unlock` |
+| `browsercookie` | [`internal/browsercookie`](../internal/browsercookie) | Browser profile cookie extraction for `login --browser`. | `Find` |
+| `format` | [`internal/format`](../internal/format/format.go) | Shared byte-size formatting and assignment ordering. | [`HumanSize()`](../internal/format/format.go), [`SortAssignments()`](../internal/format/format.go) |
 
 ### TUI file map
 
@@ -87,11 +100,12 @@ There is no HTTP server, database, or daemon. Kamps is a single local binary.
 | [`material_rows.go`](../internal/tui/material_rows.go) | Material rows and Materials tab body |
 | [`detail_materials.go`](../internal/tui/detail_materials.go) | Material detail content |
 | [`commit.go`](../internal/tui/commit.go) | Session queue, preview, clipboard, Commit tab |
-| [`sync.go`](../internal/tui/sync.go) | Simulated sync state and Sync tab |
+| [`sync.go`](../internal/tui/sync.go) | Real reload, cursor restoration, session status, Sync tab |
 | [`chrome.go`](../internal/tui/chrome.go) | Shell, tab bar, footer, help overlay |
 | [`detail.go`](../internal/tui/detail.go) | Split-pane visibility, widths, clipping |
 | [`search.go`](../internal/tui/search.go) | Search state, title, predicates, search-mode keys |
-| [`state.go`](../internal/tui/state.go) | App-to-store apply/save bridge |
+| [`state.go`](../internal/tui/state.go) | App-to-core state bridge |
+| [`cache.go`](../internal/tui/cache.go) | Cache-first startup through `core.LoadCached` |
 | [`tree.go`](../internal/tui/tree.go) | Shared node contract, fold keys, connectors |
 | [`frame.go`](../internal/tui/frame.go) | Title line, body clamping, tab cells, rules, footer hints |
 | [`row.go`](../internal/tui/row.go) | Cursor/mark bands, gutters, carets, selection cells |
@@ -167,14 +181,14 @@ From [`go.mod`](../go.mod) and direct code imports:
 
 ### Plain mode
 
-[`plain.PrintPlain`](../internal/plain/plain.go) uses the same source and store, but no Bubble Tea loop:
+[`plain.PrintPlain`](../internal/plain/plain.go) consumes the same [`core.Service`](../internal/core/core.go) as the TUI, with no Bubble Tea loop:
 
-1. Call `Load` synchronously and return immediately on a source error.
-2. Load and apply saved state when a state path is configured.
+1. Call `Service.Load` synchronously.
+2. On a source error, try `Service.LoadCached`; if no cache exists, return the source error.
 3. Sort assignments by due date (dated first, oldest first, then ID).
-4. Print a plain-text snapshot.
+4. Print a plain-text snapshot, including the cache time when offline.
 
-Source errors are returned to the caller, so the CLI can print them to stderr and exit non-zero. A corrupt state file is still skipped, matching the TUI's best-effort behavior.
+A corrupt state file is still skipped, matching the TUI's best-effort behavior.
 
 ---
 

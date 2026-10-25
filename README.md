@@ -99,6 +99,7 @@ matches.
 ```
 cmd/kamps/          entry point, flags, login, source registration
 internal/model/     Course, Assignment, Material — data types
+internal/core/      application pipeline: load, state merge, auto-triage, reconcile
 internal/source/    Source interface, registry, capabilities, demo data
 internal/kulon2/    live Moodle parser, session, downloads
 internal/library/   safe paths, resumable downloads, library scan
@@ -116,7 +117,7 @@ Everything is built against one interface, `source.Source`. Choose the bundled
 demo dataset with `--demo`, a registered source with `--source`, or the live
 Kulon2 source after logging in. Course pages supply activity names, sections, assignments, downloadable resources, assignment attachments, and folder children. Downloaded files are reconciled with the local library on startup, and state writes are merged under a cross-process lock.
 
-See [`docs/export.md`](docs/export.md), [`docs/workspace.md`](docs/workspace.md), and [`docs/plugins.md`](docs/plugins.md) for the new surfaces.
+See [`docs/export.md`](docs/export.md), [`docs/workspace.md`](docs/workspace.md), [`docs/headless.md`](docs/headless.md), and [`docs/plugins.md`](docs/plugins.md) for the new surfaces.
 
 ## Status & roadmap
 

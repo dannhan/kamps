@@ -18,7 +18,7 @@ func (m *App) startSync() tea.Cmd {
 	m.loading = true
 	m.syncTicks = 0
 	m.captureCursors()
-	return tea.Batch(m.spinner.Tick, loadCmd(m.src))
+	return tea.Batch(m.spinner.Tick, loadCmd(m.service))
 }
 
 func (m *App) animating() bool {

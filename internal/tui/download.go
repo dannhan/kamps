@@ -55,27 +55,9 @@ var openExternalURL = func(rawURL string) error {
 // Attach binds the running program so background downloads can report progress.
 func (m *App) Attach(p *tea.Program) { m.program = p }
 
-// materialDestination is the on-disk target for a material:
-// <library_dir>/<course>/<section>/<name>.
+// materialDestination is the on-disk target for a material.
 func (m *App) materialDestination(material model.Material) string {
-	courseName := material.CourseCode
-	if course, ok := m.courseByID(material.CourseID); ok {
-		if course.Short != "" {
-			courseName = course.Short
-		} else if course.Code != "" {
-			courseName = course.Code
-		}
-		if course.WorkspacePath != "" {
-			if path, err := library.SubPath(course.WorkspacePath, sectionLabel(material.Section), material.Folder, material.Name); err == nil {
-				return path
-			}
-		}
-	}
-	path, err := library.MaterialPath(m.cfg.LibraryDir, courseName, sectionLabel(material.Section), material.Folder, material.Name)
-	if err != nil {
-		return library.SectionPath(m.cfg.LibraryDir, courseName, sectionLabel(material.Section), material.Name)
-	}
-	return path
+	return m.service.Destination(material)
 }
 
 func (m *App) materialByID(id string) *model.Material {

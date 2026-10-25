@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/ruyam/kamps/internal/config"
+	"github.com/ruyam/kamps/internal/core"
 	"github.com/ruyam/kamps/internal/model"
 	"github.com/ruyam/kamps/internal/source"
 )
@@ -24,7 +26,7 @@ func TestLoadCmdReturnsSnapshot(t *testing.T) {
 	want := source.Snapshot{
 		Courses: []model.Course{{ID: 7, Name: "Test Course"}},
 	}
-	msg := loadCmd(stubSource{snapshot: want})()
+	msg := loadCmd(core.New(stubSource{snapshot: want}, config.Config{StateDir: t.TempDir()}))()
 	loaded, ok := msg.(loadedMsg)
 	if !ok {
 		t.Fatalf("loadCmd returned %T, want loadedMsg", msg)
@@ -36,7 +38,7 @@ func TestLoadCmdReturnsSnapshot(t *testing.T) {
 
 func TestLoadCmdReturnsError(t *testing.T) {
 	want := errors.New("boom")
-	msg := loadCmd(stubSource{err: want})()
+	msg := loadCmd(core.New(stubSource{err: want}, config.Config{StateDir: t.TempDir()}))()
 	failure, ok := msg.(errMsg)
 	if !ok {
 		t.Fatalf("loadCmd returned %T, want errMsg", msg)

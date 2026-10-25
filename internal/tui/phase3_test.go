@@ -14,31 +14,6 @@ import (
 	"github.com/ruyam/kamps/internal/source"
 )
 
-func TestAutoTriageTracksSubmittedAndUserOverrideWins(t *testing.T) {
-	app := demoApp(t)
-	app.cfg.AutoTrackSubmitted = true
-	id := app.assignments[0].ID
-	app.assignments[0].Submission = model.SubmissionSubmitted
-	app.assignments[0].Triage = model.Undecided
-	app.applyAutoTriage()
-	if app.byID(id).Triage != model.Tracked {
-		t.Fatalf("auto triage = %v, want tracked", app.byID(id).Triage)
-	}
-	if app.state.AutoDecisions[id] != model.Tracked {
-		t.Fatalf("auto decision = %v", app.state.AutoDecisions[id])
-	}
-
-	app.state.SetDecision(id, model.Missed)
-	app.applyState()
-	app.applyAutoTriage()
-	if app.byID(id).Triage != model.Missed {
-		t.Fatalf("user override lost: %v", app.byID(id).Triage)
-	}
-	if _, ok := app.state.AutoDecisions[id]; ok {
-		t.Fatal("user decision should clear auto triage")
-	}
-}
-
 func TestWriteCommitPreviewWritesExactlyPreview(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tasks.md")
 	app := newDemoApp(t, config.Config{

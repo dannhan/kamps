@@ -44,7 +44,6 @@ func TestUnknownFilesFilterShowsLocalFiles(t *testing.T) {
 	app := newDemoApp(t, config.Config{StateDir: t.TempDir(), LibraryDir: dir})
 	app.tab = TabMaterials
 	app.filter = "unknown"
-	app.reconcileLibrary()
 	if got := len(app.visibleMaterials()); got != 1 {
 		t.Fatalf("unknown materials = %d, want 1", got)
 	}

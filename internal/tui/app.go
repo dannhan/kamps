@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -11,12 +10,11 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/ruyam/kamps/internal/cache"
 	"github.com/ruyam/kamps/internal/config"
+	"github.com/ruyam/kamps/internal/core"
 	"github.com/ruyam/kamps/internal/model"
 	"github.com/ruyam/kamps/internal/source"
 	"github.com/ruyam/kamps/internal/store"
-	"github.com/ruyam/kamps/internal/workspace"
 )
 
 // Tab is one top-level screen.
@@ -48,6 +46,7 @@ func (t Tab) String() string {
 type App struct {
 	src     source.Source
 	cfg     config.Config
+	service *core.Service
 	ver     string
 	keys    KeyMap
 	help    help.Model
@@ -131,21 +130,15 @@ func New(src source.Source, cfg config.Config, version string) *App {
 
 	h := help.New()
 
-	state := store.New()
-	statePath := cfg.StatePath()
-	stateErr := ""
-	if statePath != "" {
-		loaded, err := store.Load(statePath)
-		if err != nil {
-			stateErr = err.Error()
-		} else {
-			state = loaded
-		}
-	}
+	service := core.New(src, cfg)
+	state := service.State()
+	statePath := service.StatePath()
+	stateErr := service.StateErr()
 
 	return &App{
 		src:             src,
 		cfg:             cfg,
+		service:         service,
 		ver:             version,
 		keys:            DefaultKeys(),
 		help:            h,
@@ -172,13 +165,13 @@ func New(src source.Source, cfg config.Config, version string) *App {
 	}
 }
 
-type loadedMsg struct{ source.Snapshot }
+type loadedMsg struct{ core.Snapshot }
 
 type errMsg struct{ err error }
 
-func loadCmd(src source.Source) tea.Cmd {
+func loadCmd(service *core.Service) tea.Cmd {
 	return func() tea.Msg {
-		snapshot, err := src.Load(context.Background())
+		snapshot, err := service.Load(context.Background())
 		if err != nil {
 			return errMsg{err}
 		}
@@ -191,7 +184,18 @@ func (m *App) Init() tea.Cmd {
 	if !strings.HasPrefix(m.src.Label(), "demo") && m.loadCache() {
 		m.loaded = true
 	}
-	return loadCmd(m.src)
+	return loadCmd(m.service)
+}
+
+func (m *App) applySnapshot(snapshot core.Snapshot) {
+	m.courses = snapshot.Courses
+	m.assignments = snapshot.Assignments
+	m.materials = snapshot.Materials
+	m.loadNotice = snapshot.Notice
+	m.lastSync = snapshot.LoadedAt
+	m.scanSummary = snapshot.Scan.Text
+	m.unknownFiles = append([]string(nil), snapshot.Scan.UnknownFiles...)
+	m.state = m.service.State()
 }
 
 func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -208,39 +212,12 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loadError = ""
 		m.offline = false
 		m.cacheNotice = ""
-		m.loadNotice = msg.Notice
-		m.lastSync = time.Now()
-		m.updateState(func(s *store.State) { s.LastSync = m.lastSync })
-		m.courses = msg.Courses
-		resolved, notices := workspace.Resolve(m.courses, m.cfg.WorkspaceRoots)
-		m.courses = resolved
-		if len(notices) > 0 {
-			combined := append([]string(nil), notices...)
-			if m.loadNotice != "" {
-				combined = append([]string{m.loadNotice}, combined...)
-			}
-			m.loadNotice = strings.Join(combined, "; ")
-		}
-		m.assignments = msg.Assignments
-		m.materials = msg.Materials
-		sort.Slice(m.courses, func(i, j int) bool { return m.courses[i].Name < m.courses[j].Name })
-		sort.Slice(m.materials, func(i, j int) bool {
-			a, b := m.materials[i], m.materials[j]
-			if a.CourseCode != b.CourseCode {
-				return a.CourseCode < b.CourseCode
-			}
-			if a.Section != b.Section {
-				return sectionLess(a.Section, b.Section)
-			}
-			return a.Name < b.Name
-		})
-		m.applyState()
-		m.applyAutoTriage()
-		m.reconcileLibrary()
+		m.applySnapshot(msg.Snapshot)
 		m.clampCursor()
 		m.restoreCursors()
-		if !strings.HasPrefix(m.src.Label(), "demo") {
-			_ = cache.Save(m.cfg.CachePath(), m.cfg.SiteURL, msg.Snapshot)
+		if len(msg.Warnings) > 0 {
+			m.toast = msg.Warnings[0]
+			m.toastTicks = 40
 		}
 		if m.stateErr != "" {
 			m.toast = "state: " + m.stateErr
