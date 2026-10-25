@@ -9,6 +9,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime/debug"
 
 	tea "github.com/charmbracelet/bubbletea"
 	xterm "github.com/charmbracelet/x/term"
@@ -33,7 +34,7 @@ func main() {
 	if len(rest) > 0 {
 		switch rest[0] {
 		case "version", "--version", "-v":
-			fmt.Printf("kamps %s\n", version)
+			fmt.Println(versionLine())
 			return
 		case "help", "--help", "-h":
 			printHelp()
@@ -189,4 +190,35 @@ Live mode parses courses, assignments, resources, assignment attachments, and
 folder files; downloads go to library_dir or a mapped course.json workspace.
 Use --demo to see the bundled example without a session.
 `)
+}
+
+func versionLine() string {
+	line := "kamps " + version
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return line
+	}
+	var revision, built, modified string
+	for _, setting := range info.Settings {
+		switch setting.Key {
+		case "vcs.revision":
+			revision = setting.Value
+		case "vcs.time":
+			built = setting.Value
+		case "vcs.modified":
+			if setting.Value == "true" {
+				modified = "-dirty"
+			}
+		}
+	}
+	if len(revision) > 12 {
+		revision = revision[:12]
+	}
+	if revision != "" {
+		line += " · " + revision + modified
+	}
+	if built != "" {
+		line += " · " + built
+	}
+	return line
 }
