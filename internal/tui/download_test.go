@@ -80,6 +80,7 @@ func downloadTestApp(t *testing.T, src *fakeDownloadSource) *App {
 
 func focusMaterial(t *testing.T, app *App, id string) {
 	t.Helper()
+	expandAllMaterials(app)
 	for i, n := range app.matNodes() {
 		if n.kind == nodeFile && n.mat.ID == id {
 			app.matCursor = i

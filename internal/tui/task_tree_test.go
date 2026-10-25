@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -77,19 +76,12 @@ func TestTaskTreeAssignmentsSortOldestFirstAndAssociateAttachments(t *testing.T)
 	}
 }
 
-func TestTaskTreeConnectorsAndRowWidth(t *testing.T) {
-	oldTerm := os.Getenv("TERM")
-	t.Cleanup(func() { _ = os.Setenv("TERM", oldTerm) })
-	_ = os.Setenv("TERM", "xterm-256color")
+func TestTaskTreeIndentAndRowWidth(t *testing.T) {
 	app := demoApp(t)
 	nodes := app.taskNodes()
 	course := findTaskNode(nodes, nodeCourse, "")
 	if got := treeGuides(nodes, course); got != "" {
-		t.Fatalf("top-level course connector = %q, want empty", got)
-	}
-	_ = os.Setenv("TERM", "dumb")
-	if vertical, branch, last := treeConnectors(); vertical != "|  " || branch != "|-- " || last != "`-- " {
-		t.Fatalf("ASCII connectors = %q, %q, %q", vertical, branch, last)
+		t.Fatalf("top-level guide = %q, want empty", got)
 	}
 	app.taskCursor = course
 	row := app.taskTreeRow(nodes, course, 98)
@@ -113,7 +105,7 @@ func TestCoursesTreeViewsAt100And80Columns(t *testing.T) {
 				t.Fatalf("width %d line %d has width %d: %q", width, i+1, got, stripANSI(line))
 			}
 		}
-		if !strings.Contains(view, "courses · all") || !strings.Contains(view, "Proyek Perangkat Lunak A") || strings.Contains(stripANSI(view), "other") || !strings.Contains(stripANSI(view), "queue empty") {
+		if !strings.Contains(view, "courses · all") || !strings.Contains(view, "Proyek Perangkat Lunak A") || strings.Contains(stripANSI(view), "other") {
 			t.Fatalf("%d-column view is missing expected content:\n%s", width, stripANSI(view))
 		}
 	}
@@ -123,7 +115,23 @@ func TestHistoricalTreeLabelsRemainStateColored(t *testing.T) {
 	if got := formatTaskCounts([5]int{6, 1, 0, 1, 1}, rowHighlight{}); stripANSI(got) != "○ 6  ◐ 1  ◆ 1  × 1" {
 		t.Fatalf("task counters = %q", stripANSI(got))
 	}
-	if got := taskTreeRowForTest(t); !strings.Contains(stripANSI(got), "new · K901013 ·") {
-		t.Fatalf("assignment metadata missing: %q", stripANSI(got))
+	if got := taskTreeRowForTest(t); !strings.Contains(stripANSI(got), "Latihan ERD") || !strings.Contains(stripANSI(got), "−50d") {
+		t.Fatalf("assignment row missing name or due: %q", stripANSI(got))
+	}
+}
+
+func TestTrackedAndClosedStartCollapsed(t *testing.T) {
+	app := demoApp(t)
+	app.expanded = map[string]bool{}
+	nodes := app.taskNodes()
+	for i, n := range nodes {
+		if n.kind != nodeBucket || (n.bucket != "tracked" && n.bucket != "closed") {
+			continue
+		}
+		for j := i + 1; j < len(nodes) && nodes[j].depth() > n.depth(); j++ {
+			if nodes[j].kind == nodeTask {
+				t.Fatalf("%s bucket should start collapsed", n.bucket)
+			}
+		}
 	}
 }

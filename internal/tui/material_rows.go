@@ -63,9 +63,6 @@ func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 	case nodeMaterialAssignment:
 		content = background(triageStyle(n.task.Triage)).Render(flagChar(n.task.Triage)) + background(stFaint).Render(" ⁝ ") + background(stRow).Render("assignment: "+n.task.Name) + background(stRowDim).Render(" · "+n.task.ID)
 	}
-	if (n.kind == nodeCourse || n.kind == nodeMaterialSection || n.kind == nodeMaterialFolder || n.kind == nodeFile) && !open && parent {
-		content += background(stRowDim).Render("  ⋯")
-	}
 	row := prefix + content
 	row = ansiTruncate(row, inner)
 	return row + background(stRow).Render(strings.Repeat(" ", maxInt(0, width-lipgloss.Width(row))))
@@ -102,7 +99,7 @@ func (m *App) materialsContent(width, height int) (string, string, []string, []s
 	if m.detailVisible() {
 		detailHint = "enter hide"
 	}
-	hints := []string{"↑↓ move", "h/l fold", "space select", "V range", detailHint, "d download", "o open"}
+	hints := []string{"↑↓ move", "d download", "o open", detailHint, "? more"}
 	if m.filter != "all" {
 		hints = append(hints, "esc clear")
 	}

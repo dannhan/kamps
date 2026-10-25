@@ -18,7 +18,20 @@ func newDemoApp(t *testing.T, cfg config.Config) *App {
 	t.Helper()
 	app := New(source.NewDemo(), cfg, "test")
 	app.Update(app.Init()())
+	expandAllMaterials(app)
 	return app
+}
+
+// expandAllMaterials opens the week and folder rows so rendering tests do not
+// have to repeat the default-collapsed navigation.
+func expandAllMaterials(app *App) {
+	for pass := 0; pass < 3; pass++ {
+		for _, n := range app.matNodes() {
+			if n.kind == nodeMaterialSection || n.kind == nodeMaterialFolder {
+				app.expanded[n.key] = true
+			}
+		}
+	}
 }
 
 func findTaskNode(nodes []node, kind nodeKind, value string) int {

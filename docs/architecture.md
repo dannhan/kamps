@@ -107,7 +107,7 @@ There is no HTTP server, database, or daemon. Kamps is a single local binary.
 | [`search.go`](../internal/tui/search.go) | Search state, title, predicates, search-mode keys |
 | [`state.go`](../internal/tui/state.go) | App-to-core state bridge |
 | [`cache.go`](../internal/tui/cache.go) | Cache-first startup through `core.LoadCached` |
-| [`tree.go`](../internal/tui/tree.go) | Shared node contract, fold keys, connectors |
+| [`tree.go`](../internal/tui/tree.go) | Shared node contract, fold keys, indentation |
 | [`frame.go`](../internal/tui/frame.go) | Title line, body clamping, tab cells, rules, footer hints |
 | [`row.go`](../internal/tui/row.go) | Cursor/mark bands, gutters, carets, selection cells |
 | [`theme.go`](../internal/tui/theme.go) | Semantic color tokens and reusable Lip Gloss styles |
@@ -209,10 +209,9 @@ The interactive screen is borderless. The top tab bar, title line, body, and foo
 
 Both tree tabs render a flat `[]node` list. [`node`](../internal/tui/tree.go) stores its kind, depth via `parents`, a stable fold key, and the underlying assignment or material. The cursor is an index into the same list, so a highlight always corresponds to the row the keys will act on.
 
-- **Tasks:** term → course → state bucket (`needs decision`, `tracked`, `closed`) → task → attached materials.
+- **Tasks:** course → state bucket (`needs decision`, `tracked`, `closed`) → task → attached materials.
 - **Materials:** course → week → folder → file → linked assignment (for attachments). Downloaded files carry a ● marker.
-- **Connectors:** `│`, `├─`, `╰─`, with an ASCII fallback when `TERM=dumb` or contains `ascii`.
-- **Folding:** missing keys mean open; collapsing is the explicit act. Each tab keeps its own fold state.
+- **Folding:** tasks keep `needs decision` open; tracked/closed and material weeks/folders start collapsed. Each tab keeps its own fold state.
 - **Right padding:** both trees keep a two-column inset so metadata does not touch the divider or terminal edge.
 
 ### Search and filters
@@ -228,7 +227,7 @@ Both tree tabs render a flat `[]node` list. [`node`](../internal/tui/tree.go) st
 ### Detail pane
 
 - Visible on Tasks and Materials only.
-- Auto-opens when `width >= 100`; `enter` pins it open or closed.
+- Opt-in: `enter` opens or closes it; it follows the cursor while open.
 - Split: 62% tree / remaining detail, with a 24-column minimum for detail.
 - Long descriptions wrap; clipped detail content ends with `…`.
 

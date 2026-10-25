@@ -1,19 +1,12 @@
 package tui
 
-// detailMinWidth is where the tree detail pane starts showing on its own.
-// Below this the tree keeps every column until the pane is toggled on.
-const detailMinWidth = 100
-
 // detailVisible reports whether the selected item's detail pane should be
-// drawn: an explicit toggle wins, otherwise it follows the terminal width.
+// drawn. The pane is opt-in: enter pins it open or closed.
 func (m *App) detailVisible() bool {
 	if m.tab != TabTasks && m.tab != TabMaterials {
 		return false
 	}
-	if m.detailPane >= 0 {
-		return m.detailPane == 1
-	}
-	return m.width >= detailMinWidth
+	return m.detailPane == 1
 }
 
 // toggleDetailPane pins the detail pane open or closed.

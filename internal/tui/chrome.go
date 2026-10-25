@@ -59,28 +59,12 @@ func (m *App) View() string {
 // No box — gh-dash lets the top and bottom bars sit flush against the screen.
 func (m *App) tabBar(w int) string {
 	labels := []string{"Tasks", "Materials", "Sync", "Commit"}
-	const cellWidth = 14
+	const cellWidth = 12
 	var cells []string
 	for i, label := range labels {
-		count := ""
-		switch Tab(i) {
-		case TabTasks:
-			count = fmt.Sprint(len(m.assignments))
-		case TabMaterials:
-			count = fmt.Sprint(len(m.materials))
-		case TabCommit:
-			count = fmt.Sprint(len(m.commitItems()))
-		}
-		text := pad(label, 9, false) + " " + pad(count, 2, true)
-		cells = append(cells, fixedTabCell(text, m.tab == Tab(i), cellWidth))
+		cells = append(cells, fixedTabCell(" "+label, m.tab == Tab(i), cellWidth))
 	}
-	left := strings.Join(cells, "")
-	status := stFaint.Render("backup · sync · cookie")
-	statusWidth := lipgloss.Width(status)
-	if w <= len(cells)*cellWidth+statusWidth {
-		return fitLine(left+status, w)
-	}
-	return fitLine(left+strings.Repeat(" ", w-len(cells)*cellWidth-statusWidth)+status, w)
+	return fitLine(strings.Join(cells, ""), w)
 }
 
 func (m *App) helpBar(w int, items []string) string {

@@ -55,10 +55,7 @@ func (h rowHighlight) blanks(n int) string {
 	return h.style(stRow).Render(strings.Repeat(" ", n))
 }
 
-const (
-	markEmpty = "▫"
-	markFull  = "▪"
-)
+const markFull = "▪"
 
 // caretGlyph is the expand/collapse indicator drawn before a parent row's
 // name. Open containers show a down caret, folded ones a right caret.
@@ -83,7 +80,7 @@ func (h rowHighlight) markCell(marked bool) string {
 	if marked {
 		return h.style(stSelMark).Render(markFull)
 	}
-	return h.style(stFaint).Render(markEmpty)
+	return h.style(stRow).Render(" ")
 }
 
 func sharedFocusRow(content string, width int, focused bool) string {

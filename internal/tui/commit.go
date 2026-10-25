@@ -172,5 +172,5 @@ func commitActionLabel(action model.Triage) (string, lipgloss.Style) {
 }
 
 func (m *App) commitContent(width, height int) (string, string, []string, []string) {
-	return "review & commit · " + m.exportStatusLine(), "", []string{"↑↓ move", "w write", "y copy", "x drop", "X drop all", "esc back"}, m.commitBody(width, height)
+	return "review & commit · " + m.exportStatusLine(), "", []string{"↑↓ move", "w write", "y copy", "x drop", "esc back", "? more"}, m.commitBody(width, height)
 }

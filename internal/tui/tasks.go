@@ -114,7 +114,7 @@ func (m *App) taskFooter(width int) string {
 func (m *App) taskQueueLabel() string {
 	tracked, missed, ignored := m.pendingCounts()
 	if tracked+missed+ignored == 0 {
-		return stDim.Render("queue empty")
+		return ""
 	}
 	var parts []string
 	if tracked > 0 {

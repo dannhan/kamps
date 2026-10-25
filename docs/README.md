@@ -78,10 +78,10 @@ Appendix: [TUI research](../TUI_RESEARCH.md) records the design comparison that 
 |---|---|---|
 | Data source | Demo or Kulon2 | Live mode parses courses, due dates, submission state, resources, attachments, and folder children |
 | Persistence | Decisions, auto-triage overrides, download records | Atomic v2 `state.json` with migration, merge under a cross-process lock |
-| Tasks tree | Term → course → state bucket → task → attached material | Folding is per tab; assignments identify attachments by the `K…`/`M…:` convention |
+| Tasks tree | Course → state bucket → task → attached material | Folding is per tab; assignments identify attachments by the `K…`/`M…:` convention |
 | Materials tree | Course → week → folder → file → linked assignment | `hl` folds any level; downloaded files carry a ● marker; attachments link back to an assignment |
 | Search | Live, case-insensitive, composes with `f` | `ctrl+w`, `alt+backspace`, and `ctrl+backspace` delete a word |
-| Detail pane | Auto-opens at ≥ 100 columns; `enter` pins it | 62/38 split with a 24-column detail minimum |
+| Detail pane | Opt-in; `enter` opens or closes it | 62/38 split with a 24-column detail minimum |
 | Downloads | Streams resources, assignment attachments, and folder children; resumes and retries | External links open with `o`; `book` activities open in the browser |
 | Sync | Reloads the source, preserves cursors/search | Falls back to the last cached snapshot when the LMS is unavailable |
 | Commit | Preview + write (`w`) or copy (`y`); `enter` writes when configured | Markdown/todo/Taskwarrior; `x`/`X` drop one/all; decisions remain stored |

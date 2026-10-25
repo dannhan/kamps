@@ -118,7 +118,7 @@ Important details:
 | [`detail.go`](../internal/tui/detail.go) | You are changing split-pane visibility, widths, or clipping |
 | [`search.go`](../internal/tui/search.go) | You are changing query behavior, match fields, or search-mode keys |
 | [`state.go`](../internal/tui/state.go) | You are changing how App writes state through `core.Service` |
-| [`tree.go`](../internal/tui/tree.go) | You are changing the shared node contract, fold keys, or connectors |
+| [`tree.go`](../internal/tui/tree.go) | You are changing the shared node contract, fold keys, or indentation |
 | [`frame.go`](../internal/tui/frame.go) | You are changing the title row, rules, body height, tab cells, or hint fitting |
 | [`row.go`](../internal/tui/row.go) | You are changing cursor/mark bands, gutters, carets, or selection cells |
 | [`theme.go`](../internal/tui/theme.go) | You are adding a semantic color or reusable style |
@@ -146,8 +146,7 @@ The flattened list is the single source of truth. The cursor is an index into it
 ### Tasks hierarchy
 
 ```
-term
-└── course
+course
     ├── needs decision
     │   ├── task
     │   │   └── attached material (only when the ID matches K… → M…:)
@@ -270,9 +269,9 @@ func newDemoApp(t *testing.T, cfg config.Config) *App {
 ### What the tests cover
 
 - **Shell/layout:** row widths, rules instead of boxes, footer priority, small-terminal notice.
-- **Trees:** grouping, sorting, folding, connectors, right padding, cursor vs. mark styling.
+- **Trees:** grouping, sorting, folding, indentation, right padding, cursor vs. mark styling.
 - **Search:** activation, narrowing, compound input, `ctrl+w`, `enter`/`esc` semantics, materials, filter composition, tab-switch clearing.
-- **Detail:** auto-open threshold, toggling, content, ellipsis clipping, split widths.
+- **Detail:** opt-in toggling, content, ellipsis clipping, split widths.
 - **Commit:** exact preview lines, grouping, drop behavior, empty queue, clipping.
 - **Persistence:** restart survival, `undecided` deletion, downloads, corrupt fallback, missing file, directory creation.
 - **Plain mode:** saved decisions and downloads appear in the snapshot.
@@ -300,7 +299,7 @@ TERM=dumb ./kamps       # ASCII tree connectors
 Useful checks:
 
 - Resize below 80×24 to see the “terminal too small” path.
-- Resize across 100 columns to see the detail pane auto-open/close.
+- Press `enter` to open or close the detail pane.
 - Press `?` to inspect the full key map.
 - Remove or move `$XDG_STATE_HOME/kamps/state.json` to test a clean first run. Do this only when you do not need the saved decisions.
 - To test corrupt-state handling, write invalid JSON to that path and restart.

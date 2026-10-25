@@ -66,6 +66,7 @@ func TestFoldingOpenGroupKeepsCursorOnIt(t *testing.T) {
 		t.Fatal("tracked bucket missing from the demo tree")
 	}
 	app.taskCursor = tracked
+	app.expanded[nodes[tracked].key] = true
 	app.moveX(-1)
 	if app.taskCursor != tracked {
 		t.Fatalf("folding an open bucket moved the cursor: got %d, want %d", app.taskCursor, tracked)

@@ -30,7 +30,6 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 	group := m.isTaskGroup(n)
 	open := group && m.taskIsOpen(n.key, taskNodeDefaultOpen(n))
 	content := ""
-	counts := m.taskNodeCounts(n)
 	switch n.kind {
 	case nodeCourse:
 		name := m.shortCode(n.courseID)
@@ -41,60 +40,35 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 	case nodeBucket:
 		content = h.containerLead(open, selected) + background(stRow).Render(fmt.Sprintf("%s (%d)", n.bucket, len(m.taskGroupIDs(n))))
 	case nodeTask:
-		glyph := background(triageStyle(n.task.Triage)).Render(flagChar(n.task.Triage))
 		marker := h.markCell(selected)
 		caret := ""
 		if group {
 			caret = background(stFaint).Render(caretGlyph(open)) + background(stRow).Render(" ")
 		}
-		stateLabel := n.task.Triage.String()
-		if n.task.Triage == model.Undecided {
-			stateLabel = "new"
-		}
-		state := background(triageStyle(n.task.Triage)).Render(stateLabel)
 		now := time.Now()
 		age := dueAge(n.task, now)
 		ageStyle := stRowDim
 		if n.task.HasDue && n.task.Due.Before(now) {
 			ageStyle = stOverdue
 		}
-		metadata := background(stRowDim).Render(" · "+n.task.ID+" · ") + background(ageStyle).Render(age)
-		fixed := lipgloss.Width(glyph) + 1 + lipgloss.Width(marker) + 1 + lipgloss.Width(caret) + lipgloss.Width(state) + lipgloss.Width(metadata)
-		nameWidth := maxInt(1, available-fixed-1)
+		ageText := background(ageStyle).Render(age)
+		lead := marker + background(stRow).Render(" ") + caret
+		nameWidth := maxInt(1, available-lipgloss.Width(lead)-lipgloss.Width(ageText)-1)
 		name := background(stRow).Render(ansi.Truncate(n.task.Name, nameWidth, "…"))
-		space := background(stRow).Render(" ")
-		content = glyph + space + marker + space + caret + name + space + state + metadata
+		gap := maxInt(1, available-lipgloss.Width(lead)-lipgloss.Width(name)-lipgloss.Width(ageText))
+		content = lead + name + background(stRow).Render(strings.Repeat(" ", gap)) + ageText
 	case nodeTaskMaterial:
-		state, style := materialTreeState(n.mat)
+		_, style := materialTreeState(n.mat)
 		glyph := "○"
 		if n.mat.Downloaded {
 			glyph = "●"
 		}
-		label := ansi.Truncate(n.mat.Name, maxInt(1, available-lipgloss.Width(state)-5), "…")
+		label := ansi.Truncate(n.mat.Name, maxInt(1, available-5), "…")
 		space := background(stRow).Render(" ")
-		content = background(style).Render(glyph) + space + background(stFaint).Render("⁝") + space + background(stRow).Render(label) + space + background(style).Render(state)
+		content = background(style).Render(glyph) + space + background(stFaint).Render("⁝") + space + background(stRow).Render(label)
 	}
 
-	if group {
-		meta := ""
-		if n.kind == nodeCourse {
-			meta = formatTaskCounts(counts, h)
-		}
-		if !open {
-			if meta != "" {
-				meta += background(stRow).Render("  ")
-			}
-			meta += background(stRowDim).Render("⋯")
-		}
-		metaWidth := lipgloss.Width(meta)
-		contentWidth := maxInt(1, available-metaWidth-1)
-		content = ansiTruncate(content, contentWidth)
-		if metaWidth > 0 {
-			content += background(stRow).Render(strings.Repeat(" ", maxInt(1, available-lipgloss.Width(content)-metaWidth))) + meta
-		}
-	} else if n.kind == nodeTask {
-		content = ansiTruncate(content, available)
-	}
+	content = ansiTruncate(content, available)
 	row := prefix + content
 	padding := strings.Repeat(" ", maxInt(0, width-lipgloss.Width(row)))
 	if h.band() {
@@ -219,8 +193,7 @@ func (m *App) tasksContent(width, height int) (string, string, []string, []strin
 		right = rightAligned(fmt.Sprintf("%d %s", matches, plural(matches, "match", "matches")), hint)
 	} else {
 		title = fmt.Sprintf("courses · %s · %d assignments", m.filter, matches)
-		budget := maxInt(0, width-lipgloss.Width(title)-4)
-		right = rightAligned(m.taskTotals(maxInt(0, budget-lipgloss.Width(hint)-2)), hint)
+		right = hint
 	}
 	filterHint := "f filter"
 	if m.filter != "all" || m.search != "" {
@@ -230,7 +203,7 @@ func (m *App) tasksContent(width, height int) (string, string, []string, []strin
 	if m.detailVisible() {
 		detailHint = "enter hide"
 	}
-	hints := []string{"↑↓ move", "h/l fold", "space select", "V range", "t/m/i decide", "c commit", filterHint, detailHint}
+	hints := []string{"↑↓ move", "t/m/i decide", "c commit", filterHint, detailHint, "? more"}
 	leftWidth := width
 	if m.detailVisible() {
 		leftWidth, _ = splitWidths(width)

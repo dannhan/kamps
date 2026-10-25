@@ -252,10 +252,10 @@ Normal text is truncated with `…`; tree rows reserve a two-column right inset 
 
 [`detail.go`](../internal/tui/detail.go) implements the detail pane:
 
-- It appears automatically at terminal width ≥ 100 columns.
+- It is opt-in: `enter` opens or closes it.
 - [`splitWidths`](../internal/tui/detail.go) gives 62% to the tree and the rest to detail, enforcing a 24-column minimum for detail.
 - [`splitTreeRows`](../internal/tui/detail.go) renders the left line, a `│` divider, and the right line side by side.
-- `enter` pins the pane open or closed; the override is global, not per tab.
+- The override is global, not per tab.
 
 ### Borderless shell
 

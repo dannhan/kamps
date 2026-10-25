@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/ruyam/kamps/internal/core"
@@ -80,14 +79,27 @@ func taskNodeDefaultOpen(n node) bool {
 	if n.kind == nodeTask {
 		return false
 	}
-	return n.kind != nodeBucket || n.bucket != "closed"
+	if n.kind == nodeBucket {
+		for _, bucket := range taskBuckets {
+			if bucket.name == n.bucket {
+				return bucket.open
+			}
+		}
+	}
+	return true
 }
 
 // isOpen defaults to open: a tree that arrives collapsed is a tree nobody
 // asked for. Collapsing is the explicit act.
 func (m *App) isOpen(key string) bool {
 	v, ok := m.expanded[key]
-	return !ok || v
+	if ok {
+		return v
+	}
+	if strings.HasPrefix(key, "ms:") || strings.HasPrefix(key, "mf:") {
+		return false
+	}
+	return true
 }
 
 func (m *App) setOpen(key string, open bool) {
@@ -147,42 +159,6 @@ func allSelected(set map[string]bool, ids []string) bool {
 	return true
 }
 
-func treeConnectors() (string, string, string) {
-	term := strings.ToLower(os.Getenv("TERM"))
-	if term == "dumb" || strings.Contains(term, "ascii") {
-		return "|  ", "|-- ", "`-- "
-	}
-	return "│  ", "├─ ", "╰─ "
-}
-
 func treeGuides(nodes []node, index int) string {
-	vertical, branch, last := treeConnectors()
-	depth := nodes[index].depth()
-	var guides strings.Builder
-	for slot := 0; slot < depth; slot++ {
-		continues := false
-		for next := index + 1; next < len(nodes); next++ {
-			if nodes[next].depth() <= slot {
-				break
-			}
-			if nodes[next].depth() == slot+1 {
-				continues = true
-				break
-			}
-		}
-		if slot+1 < depth {
-			if continues {
-				guides.WriteString(vertical)
-			} else {
-				guides.WriteString("   ")
-			}
-			continue
-		}
-		if continues {
-			guides.WriteString(branch)
-		} else {
-			guides.WriteString(last)
-		}
-	}
-	return guides.String()
+	return strings.Repeat("  ", nodes[index].depth())
 }

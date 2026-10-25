@@ -15,18 +15,14 @@ func TestDetailPaneFollowsWidthAndEnter(t *testing.T) {
 	app.tab = TabTasks
 
 	app.width = 100
-	if !app.detailVisible() {
-		t.Fatal("detail pane should show at 100 columns")
-	}
-	app.width = 80
 	if app.detailVisible() {
-		t.Fatal("detail pane should auto-hide at 80 columns")
+		t.Fatal("detail pane should be opt-in")
 	}
 
 	app.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 
 	if !app.detailVisible() {
-		t.Fatal("enter should pin the detail pane open at 80 columns")
+		t.Fatal("enter should pin the detail pane open")
 	}
 	if app.tab != TabTasks {
 		t.Fatal("enter must not jump to the commit tab")
@@ -71,7 +67,7 @@ func TestEnterTogglesDetailOnMaterials(t *testing.T) {
 	app.width = 80
 
 	if app.detailVisible() {
-		t.Fatal("materials detail should auto-hide at 80 columns")
+		t.Fatal("materials detail should be opt-in")
 	}
 	app.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 	if !app.detailVisible() {

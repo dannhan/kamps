@@ -15,7 +15,7 @@ var taskBuckets = []struct {
 	open bool
 }{
 	{"needs decision", func(a model.Assignment) bool { return a.Triage == model.Undecided }, true},
-	{"tracked", func(a model.Assignment) bool { return a.Triage == model.Tracked }, true},
+	{"tracked", func(a model.Assignment) bool { return a.Triage == model.Tracked }, false},
 	{"closed", func(a model.Assignment) bool { return a.Triage == model.Missed || a.Triage == model.Ignored }, false},
 }
 

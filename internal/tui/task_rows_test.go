@@ -6,14 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 	"github.com/ruyam/kamps/internal/model"
 )
 
 func TestTaskFooterKeepsPriorityAndMoreHint(t *testing.T) {
 	full := taskFooterHints(200)
-	want := "↑↓ move · h/l fold · space select · V range · t/m/i decide · c commit · f filter · enter detail · ? more"
+	want := "↑↓ move · t/m/i decide · c commit · f filter · enter detail · ? more"
 	if got := stripANSI(full); got != want {
 		t.Fatalf("full footer = %q, want %q", got, want)
 	}
@@ -31,7 +29,7 @@ func TestTaskFooterKeepsQueueAtRightEdge(t *testing.T) {
 	app := demoApp(t)
 	app.width = 100
 	line := stripANSI(app.taskFooter(99))
-	if !strings.HasPrefix(line, "↑↓ move") || !strings.HasSuffix(line, "queue empty") {
+	if !strings.HasPrefix(line, "↑↓ move") || strings.Contains(line, "queue") {
 		t.Fatalf("footer alignment = %q", line)
 	}
 	if strings.Contains(line, "[") || strings.Contains(line, "v view") || strings.Contains(line, "mouse") {
@@ -47,8 +45,9 @@ func TestTaskFooterKeepsQueueAtRightEdge(t *testing.T) {
 func TestFooterKeepsQueueWhenHintsDoNotFit(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabTasks
+	app.queue.Set("tracked", model.Tracked)
 	line := stripANSI(app.helpBar(24, []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", "c commit", "f filter"}))
-	if !strings.HasSuffix(line, "queue empty") {
+	if !strings.HasSuffix(line, "queue: 1 track") {
 		t.Fatalf("footer dropped queue: %q", line)
 	}
 }
@@ -69,7 +68,7 @@ func TestFooterShowsToasts(t *testing.T) {
 
 func TestTaskQueueLabels(t *testing.T) {
 	app := demoApp(t)
-	if got := stripANSI(app.taskQueueLabel()); got != "queue empty" {
+	if got := stripANSI(app.taskQueueLabel()); got != "" {
 		t.Fatalf("empty queue label = %q", got)
 	}
 	app.queue.Set("a", model.Tracked)
@@ -95,11 +94,8 @@ func TestCursorAndMarksAreVisuallyDistinct(t *testing.T) {
 
 	markedRow := stripANSI(app.taskTreeRow(nodes, marked, 98))
 	unmarkedRow := stripANSI(app.taskTreeRow(nodes, unmarked, 98))
-	if !strings.Contains(markedRow, markFull) || strings.Contains(markedRow, markEmpty) {
-		t.Fatalf("marked row should show %q only: %q", markFull, markedRow)
-	}
-	if !strings.Contains(unmarkedRow, markEmpty) || strings.Contains(unmarkedRow, markFull) {
-		t.Fatalf("unmarked row should show %q only: %q", markEmpty, unmarkedRow)
+	if !strings.Contains(markedRow, markFull) || strings.Contains(unmarkedRow, markFull) || strings.Contains(unmarkedRow, "▫") {
+		t.Fatalf("mark glyphs = %q / %q", markedRow, unmarkedRow)
 	}
 	if !strings.Contains(unmarkedRow, "▌") {
 		t.Fatalf("cursor row lacks its accent gutter: %q", unmarkedRow)
@@ -121,14 +117,14 @@ func TestParentRowsShowCaretAndMark(t *testing.T) {
 
 	// Course rows are the top-level parents, without a placeholder term row.
 	course := findTaskNode(nodes, nodeCourse, "")
-	if row := stripANSI(app.taskTreeRow(nodes, course, 98)); !strings.Contains(row, "▾ "+markEmpty+" Proyek Perangkat Lunak A") {
-		t.Fatalf("course should be top-level with a down caret and hollow mark: %q", row)
+	if row := stripANSI(app.taskTreeRow(nodes, course, 98)); !strings.Contains(row, "▾") || !strings.Contains(row, "Proyek Perangkat Lunak A") || strings.Contains(row, "▫") {
+		t.Fatalf("course should be top-level with a down caret and no placeholder mark: %q", row)
 	}
 
 	// The demo tree's "closed" bucket starts folded.
 	closed := findTaskNode(nodes, nodeBucket, "closed")
 	row := stripANSI(app.taskTreeRow(nodes, closed, 98))
-	if !strings.Contains(row, "▸ "+markEmpty+" closed") {
+	if !strings.Contains(row, "▸") || !strings.Contains(row, "closed") || strings.Contains(row, "▫") {
 		t.Fatalf("folded bucket should show a right caret: %q", row)
 	}
 
@@ -138,39 +134,15 @@ func TestParentRowsShowCaretAndMark(t *testing.T) {
 	for _, id := range ids {
 		app.selected[id] = true
 	}
+	app.expanded[nodes[tracked].key] = true
 	row = stripANSI(app.taskTreeRow(nodes, tracked, 98))
 	if !strings.Contains(row, "▾ "+markFull+" tracked") {
 		t.Fatalf("fully marked parent should show %q: %q", markFull, row)
 	}
 	delete(app.selected, ids[0])
 	row = stripANSI(app.taskTreeRow(nodes, tracked, 98))
-	if !strings.Contains(row, "▾ "+markEmpty+" tracked") {
-		t.Fatalf("partially marked parent should show %q: %q", markEmpty, row)
-	}
-}
-
-func TestCourseCountsKeepTheCursorBand(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
-
-	app := demoApp(t)
-	app.tab = TabTasks
-	nodes := app.taskNodes()
-	course := findTaskNode(nodes, nodeCourse, "")
-	app.taskCursor = course
-
-	row := app.taskTreeRow(nodes, course, 98)
-	if !strings.Contains(stripANSI(row), "○ 6") {
-		t.Fatalf("course row is missing its state counts: %q", stripANSI(row))
-	}
-	// Every cell of a cursor row carries the band background. A reset followed
-	// by literal spaces means the counts broke the band, which is the bug this
-	// guards against.
-	if strings.Contains(row, "\x1b[0m ") || strings.Contains(row, "\x1b[0m  ") {
-		t.Fatalf("counts punched holes in the cursor band: %q", row)
-	}
-	if strings.Count(row, "48;") < 5 {
-		t.Fatalf("cursor band is not painted across every cell: %q", row)
+	if strings.Contains(row, markFull) || strings.Contains(row, "▫") {
+		t.Fatalf("partially marked parent should show no filled mark: %q", row)
 	}
 }
 

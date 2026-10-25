@@ -94,8 +94,7 @@ Handy keys:
 | `?` | help |
 | `q` | quit |
 
-The detail pane follows the cursor and opens on its own when the terminal is
-wide enough; `enter` pins it open or closed either way. Search narrows both
+The detail pane is opt-in: `enter` opens or closes it. It still follows the cursor. Search narrows both
 trees as you type, and `enter` leaves the query on while you move through the
 matches.
 

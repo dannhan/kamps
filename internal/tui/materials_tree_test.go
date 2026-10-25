@@ -62,7 +62,7 @@ func TestMaterialRowsShowMarkState(t *testing.T) {
 	}
 	markedRow := stripANSI(app.matTreeRow(nodes, file, 98, true))
 	unmarkedRow := stripANSI(app.matTreeRow(nodes, file, 98, false))
-	if !strings.Contains(markedRow, markFull) || !strings.Contains(unmarkedRow, markEmpty) {
+	if !strings.Contains(markedRow, markFull) || strings.Contains(unmarkedRow, markFull) || strings.Contains(unmarkedRow, "▫") {
 		t.Fatalf("material mark glyphs = %q / %q", markedRow, unmarkedRow)
 	}
 }
@@ -90,8 +90,8 @@ func TestMaterialParentRowsShowCaretAndMark(t *testing.T) {
 	}
 
 	row := stripANSI(app.matTreeRow(nodes, courseIndex, 98, app.materialNodeSelected(nodes[courseIndex])))
-	if !strings.Contains(row, "▾ "+markEmpty) {
-		t.Fatalf("open course should show a down caret and hollow mark: %q", row)
+	if !strings.Contains(row, "▾") || strings.Contains(row, "▫") {
+		t.Fatalf("open course should show a down caret and no placeholder mark: %q", row)
 	}
 	for _, id := range app.materialNodeIDs(nodes[courseIndex]) {
 		app.selectedM[id] = true
@@ -104,13 +104,13 @@ func TestMaterialParentRowsShowCaretAndMark(t *testing.T) {
 	fileKey := nodes[fileIndex].key
 	app.expanded[fileKey] = true
 	row = stripANSI(app.matTreeRow(nodes, fileIndex, 98, false))
-	if !strings.Contains(row, markEmpty+" ▾ ") {
-		t.Fatalf("expandable file should show a down caret before its name: %q", row)
+	if !strings.Contains(row, "▾") || strings.Contains(row, "▫") {
+		t.Fatalf("expandable file should show a down caret: %q", row)
 	}
 	app.expanded[fileKey] = false
 	row = stripANSI(app.matTreeRow(nodes, fileIndex, 98, false))
-	if !strings.Contains(row, markEmpty+" ▸ ") {
-		t.Fatalf("folded file should show a right caret before its name: %q", row)
+	if !strings.Contains(row, "▸") || strings.Contains(row, "▫") {
+		t.Fatalf("folded file should show a right caret: %q", row)
 	}
 }
 
@@ -138,5 +138,20 @@ func TestMaterialRowsShowDownloadedMarkerOnly(t *testing.T) {
 	}
 	if row := stripANSI(app.matTreeRow(nodes, fresh, 98, false)); !strings.Contains(row, "○") {
 		t.Fatalf("new file row = %q", row)
+	}
+}
+
+func TestMaterialsStartCollapsed(t *testing.T) {
+	app := demoApp(t)
+	app.expanded = map[string]bool{}
+	app.tab = TabMaterials
+	nodes := app.matNodes()
+	foundSection, foundFile := false, false
+	for _, n := range nodes {
+		foundSection = foundSection || n.kind == nodeMaterialSection
+		foundFile = foundFile || n.kind == nodeFile
+	}
+	if !foundSection || foundFile {
+		t.Fatalf("materials should start with weeks collapsed: section=%v file=%v", foundSection, foundFile)
 	}
 }
