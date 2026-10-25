@@ -18,14 +18,39 @@ const version = 1
 // ErrNotFound means no session has been saved yet.
 var ErrNotFound = errors.New("no saved session")
 
+// DefaultLifetime is Moodle's usual sessiontimeout (8 hours) when the server
+// does not report one.
+const DefaultLifetime = 8 * time.Hour
+
 // Session is the persisted login. Cookie is the MoodleSession value.
 type Session struct {
-	Version int       `json:"version"`
-	SiteURL string    `json:"site_url"`
-	Cookie  string    `json:"cookie"`
-	UserID  int       `json:"user_id,omitempty"`
-	SessKey string    `json:"sesskey,omitempty"`
-	SavedAt time.Time `json:"saved_at"`
+	Version   int       `json:"version"`
+	SiteURL   string    `json:"site_url"`
+	Cookie    string    `json:"cookie"`
+	UserID    int       `json:"user_id,omitempty"`
+	SessKey   string    `json:"sesskey,omitempty"`
+	SavedAt   time.Time `json:"saved_at"`
+	ExpiresAt time.Time `json:"expires_at,omitempty"`
+}
+
+// Expiry returns the best-known expiry for the session.
+func (s Session) Expiry() time.Time {
+	if !s.ExpiresAt.IsZero() {
+		return s.ExpiresAt
+	}
+	if s.SavedAt.IsZero() {
+		return time.Time{}
+	}
+	return s.SavedAt.Add(DefaultLifetime)
+}
+
+// Remaining returns the time left before the session is likely expired.
+func (s Session) Remaining(now time.Time) time.Duration {
+	expiry := s.Expiry()
+	if expiry.IsZero() {
+		return 0
+	}
+	return expiry.Sub(now)
 }
 
 // Load reads path. A missing file returns ErrNotFound.

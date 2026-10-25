@@ -136,6 +136,11 @@ func NewDemo() *Demo {
 
 func (d *Demo) Label() string { return "demo (no network)" }
 
+// Capabilities reports what the bundled demo can provide.
+func (d *Demo) Capabilities() Capabilities {
+	return Capabilities{Assignments: true, Materials: true}
+}
+
 // Load returns a copy of the demo dataset so callers can sort and mutate it
 // without touching the source.
 func (d *Demo) Load(ctx context.Context) (Snapshot, error) {

@@ -7,6 +7,7 @@ package source
 
 import (
 	"context"
+	"time"
 
 	"github.com/ruyam/kamps/internal/model"
 )
@@ -29,6 +30,17 @@ type Source interface {
 	// Load returns all coursework in one pass. A network source can fetch
 	// shared pages once, and the caller gets one consistent error path.
 	Load(ctx context.Context) (Snapshot, error)
+}
+
+// SessionStatus describes the source's authenticated session.
+type SessionStatus struct {
+	ExpiresAt time.Time
+	OK        bool
+}
+
+// SessionReporter is implemented by sources with an expiring browser session.
+type SessionReporter interface {
+	SessionStatus() SessionStatus
 }
 
 // Downloader is implemented by sources that can fetch a material's bytes.
