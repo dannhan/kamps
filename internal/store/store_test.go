@@ -28,7 +28,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	if got := loaded.Decision("K901001"); got != model.Missed {
 		t.Fatalf("decision = %v, want missed", got)
 	}
-	if !loaded.Downloads["M165401"] {
+	if _, ok := loaded.Downloads["M165401"]; !ok {
 		t.Fatal("download flag did not survive the round trip")
 	}
 	if loaded.Version != version {

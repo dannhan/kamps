@@ -27,10 +27,20 @@ type Config struct {
 	SiteURL string
 	// LibraryDir is where downloaded materials are stored.
 	LibraryDir string
-	// StateDir holds kamps' own data (decisions, download flags, session).
+	// StateDir holds kamps' own data (decisions, download flags, session, cache).
 	StateDir string
 	// ConfigDir holds config.toml.
 	ConfigDir string
+	// Source is the in-tree source name selected at startup.
+	Source string
+	// WorkspaceRoots are folders scanned for course.json mapping files.
+	WorkspaceRoots []string
+	// CommitFile is the default export target for the Commit tab.
+	CommitFile string
+	// ExportFormat is markdown, todo, or taskwarrior.
+	ExportFormat string
+	// AutoTrackSubmitted derives Tracked for assignments the LMS marks submitted.
+	AutoTrackSubmitted bool
 	// NoAnim disables cheerful motion.
 	NoAnim bool
 }
@@ -39,10 +49,13 @@ type Config struct {
 func Default() Config {
 	home, _ := os.UserHomeDir()
 	return Config{
-		SiteURL:    defaultSiteURL,
-		LibraryDir: filepath.Join(home, "Documents", appName),
-		StateDir:   xdg("XDG_STATE_HOME", filepath.Join(home, ".local", "state")),
-		ConfigDir:  xdg("XDG_CONFIG_HOME", filepath.Join(home, ".config")),
+		SiteURL:            defaultSiteURL,
+		LibraryDir:         filepath.Join(home, "Documents", appName),
+		StateDir:           xdg("XDG_STATE_HOME", filepath.Join(home, ".local", "state")),
+		ConfigDir:          xdg("XDG_CONFIG_HOME", filepath.Join(home, ".config")),
+		Source:             "kulon2",
+		ExportFormat:       "markdown",
+		AutoTrackSubmitted: true,
 	}
 }
 
@@ -89,12 +102,51 @@ func LoadFrom(path string) (Config, error) {
 		}
 		cfg.LibraryDir = expanded
 	}
+	if source := strings.TrimSpace(file.Source); source != "" {
+		cfg.Source = source
+	}
+	for _, root := range file.WorkspaceRoots {
+		expanded, err := expandHome(strings.TrimSpace(root))
+		if err != nil {
+			return cfg, fmt.Errorf("%s: workspace_roots: %w", path, err)
+		}
+		if !filepath.IsAbs(expanded) {
+			return cfg, fmt.Errorf("%s: workspace_roots must be absolute or start with ~", path)
+		}
+		cfg.WorkspaceRoots = append(cfg.WorkspaceRoots, expanded)
+	}
+	if target := strings.TrimSpace(file.CommitFile); target != "" {
+		expanded, err := expandHome(target)
+		if err != nil {
+			return cfg, fmt.Errorf("%s: commit_file: %w", path, err)
+		}
+		if !filepath.IsAbs(expanded) {
+			return cfg, fmt.Errorf("%s: commit_file must be absolute or start with ~", path)
+		}
+		cfg.CommitFile = expanded
+	}
+	if format := strings.ToLower(strings.TrimSpace(file.ExportFormat)); format != "" {
+		switch format {
+		case "markdown", "todo", "taskwarrior":
+			cfg.ExportFormat = format
+		default:
+			return cfg, fmt.Errorf("%s: export_format must be markdown, todo, or taskwarrior", path)
+		}
+	}
+	if file.AutoTrackSubmitted != nil {
+		cfg.AutoTrackSubmitted = *file.AutoTrackSubmitted
+	}
 	return cfg, nil
 }
 
 type fileConfig struct {
-	SiteURL    string `toml:"site_url"`
-	LibraryDir string `toml:"library_dir"`
+	SiteURL            string   `toml:"site_url"`
+	LibraryDir         string   `toml:"library_dir"`
+	Source             string   `toml:"source"`
+	WorkspaceRoots     []string `toml:"workspace_roots"`
+	CommitFile         string   `toml:"commit_file"`
+	ExportFormat       string   `toml:"export_format"`
+	AutoTrackSubmitted *bool    `toml:"auto_track_submitted"`
 }
 
 // ConfigPath is the TOML file read by Load.
@@ -120,6 +172,47 @@ func (c Config) SessionPath() string {
 		return ""
 	}
 	return filepath.Join(c.StateDir, "session.json")
+}
+
+// LockPath is the advisory lock that serializes state.json updates.
+func (c Config) LockPath() string {
+	if c.StateDir == "" {
+		return ""
+	}
+	return filepath.Join(c.StateDir, "state.lock")
+}
+
+// CachePath is the last successful snapshot used for offline mode.
+func (c Config) CachePath() string {
+	if c.StateDir == "" {
+		return ""
+	}
+	return filepath.Join(c.StateDir, "cache.json")
+}
+
+// EnsureLibraryDir creates and validates the material library root.
+func (c Config) EnsureLibraryDir() error {
+	if c.LibraryDir == "" {
+		return errors.New("library_dir is not configured")
+	}
+	if err := os.MkdirAll(c.LibraryDir, 0o755); err != nil {
+		return fmt.Errorf("create library_dir: %w", err)
+	}
+	info, err := os.Stat(c.LibraryDir)
+	if err != nil {
+		return fmt.Errorf("inspect library_dir: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("library_dir is not a directory: %s", c.LibraryDir)
+	}
+	probe, err := os.CreateTemp(c.LibraryDir, ".kamps-write-*")
+	if err != nil {
+		return fmt.Errorf("library_dir is not writable: %w", err)
+	}
+	name := probe.Name()
+	_ = probe.Close()
+	_ = os.Remove(name)
+	return nil
 }
 
 func expandHome(path string) (string, error) {

@@ -1,6 +1,6 @@
 GO ?= go
 
-.PHONY: run build test fmt vet check
+.PHONY: run build test test-race fmt vet check
 
 run:
 	$(GO) run ./cmd/kamps
@@ -10,6 +10,9 @@ build:
 
 test:
 	$(GO) test ./...
+
+test-race:
+	$(GO) test -race ./...
 
 fmt:
 	gofmt -w .
