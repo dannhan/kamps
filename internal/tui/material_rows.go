@@ -106,7 +106,7 @@ func (m *App) materialsContent(width, height int) (string, string, []string, []s
 	if m.detailVisible() {
 		detailHint = "enter hide"
 	}
-	hints := []string{"↑↓ move", "h/l fold", "space select", detailHint, "d download"}
+	hints := []string{"↑↓ move", "h/l fold", "space select", detailHint, "d download", "o open"}
 	if m.filter != "all" {
 		hints = append(hints, "esc clear")
 	}

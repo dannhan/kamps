@@ -86,7 +86,7 @@ func TestEnterTogglesDetailOnMaterials(t *testing.T) {
 
 	nodes := app.matNodes()
 	for i, n := range nodes {
-		if n.kind == nodeFile && !n.mat.Downloaded {
+		if n.kind == nodeFile && !n.mat.Downloaded && n.mat.Kind == "file" {
 			app.matCursor = i
 			break
 		}

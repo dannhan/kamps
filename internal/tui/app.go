@@ -42,11 +42,12 @@ func (t Tab) String() string {
 
 // App is the root model.
 type App struct {
-	src  source.Source
-	cfg  config.Config
-	ver  string
-	keys KeyMap
-	help help.Model
+	src     source.Source
+	cfg     config.Config
+	ver     string
+	keys    KeyMap
+	help    help.Model
+	program *tea.Program
 
 	courses     []model.Course
 	assignments []model.Assignment
@@ -54,6 +55,7 @@ type App struct {
 	loaded      bool
 	loadError   string
 	loadNotice  string
+	downloads   map[string]bool
 
 	tab    Tab
 	filter string
@@ -135,6 +137,7 @@ func New(src source.Source, cfg config.Config, version string) *App {
 		selected:    map[string]bool{},
 		selectedM:   map[string]bool{},
 		pending:     map[string]model.Triage{},
+		downloads:   map[string]bool{},
 		state:       state,
 		statePath:   statePath,
 		stateErr:    stateErr,
@@ -205,6 +208,35 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.toast = "copy failed: " + msg.err.Error()
 		} else {
 			m.toast = fmt.Sprintf("copied %d %s", msg.lines, plural(msg.lines, "line", "lines"))
+		}
+		m.toastTicks = 24
+		return m, nil
+
+	case downloadProgressMsg:
+		if material := m.materialByID(msg.id); material != nil {
+			m.toast = downloadProgressText(*material, msg.done, msg.total)
+			m.toastTicks = 24
+		}
+		return m, nil
+
+	case downloadDoneMsg:
+		delete(m.downloads, msg.id)
+		if msg.err != nil {
+			m.toast = "download failed: " + downloadErrorText(msg.err)
+			m.toastTicks = 40
+			return m, nil
+		}
+		m.markDownloaded(msg.id)
+		m.saveState()
+		m.toast = "saved " + savedFileLabel(msg.path)
+		m.toastTicks = 24
+		return m, nil
+
+	case openURLMsg:
+		if msg.err != nil {
+			m.toast = "could not open browser: " + msg.err.Error()
+		} else {
+			m.toast = "opened in browser"
 		}
 		m.toastTicks = 24
 		return m, nil

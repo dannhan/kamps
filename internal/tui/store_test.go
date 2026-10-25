@@ -61,7 +61,7 @@ func TestDownloadsSurviveRestart(t *testing.T) {
 
 	id := ""
 	for _, material := range app.materials {
-		if !material.Downloaded {
+		if !material.Downloaded && material.Kind == "file" {
 			id = material.ID
 			break
 		}

@@ -98,7 +98,9 @@ func main() {
 
 	// Full-screen: kamps takes over the terminal (ink-style) and restores your
 	// shell exactly as it was on exit.
-	p := tea.NewProgram(tui.New(src, cfg, version), tea.WithAltScreen())
+	app := tui.New(src, cfg, version)
+	p := tea.NewProgram(app, tea.WithAltScreen())
+	app.Attach(p)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "kamps:", err)
 		os.Exit(1)

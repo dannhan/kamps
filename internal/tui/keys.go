@@ -27,6 +27,7 @@ type KeyMap struct {
 	Filter      key.Binding
 	Sync        key.Binding
 	Download    key.Binding
+	Open        key.Binding
 	Confirm     key.Binding
 	Back        key.Binding
 	Help        key.Binding
@@ -56,6 +57,7 @@ func DefaultKeys() KeyMap {
 		Filter:   key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter")),
 		Sync:     key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sync")),
 		Download: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "download")),
+		Open:     key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open link")),
 		Confirm:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "detail / copy")),
 		Back:     key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		Help:     key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "more")),
@@ -73,7 +75,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right, k.NextTab, k.PrevTab, k.Tabs},
 		{k.Select, k.All, k.Track, k.Missed, k.Ignore, k.Undecide},
-		{k.Search, k.Filter, k.Commit, k.Copy, k.Drop, k.Sync, k.Download},
+		{k.Search, k.Filter, k.Commit, k.Copy, k.Drop, k.Sync, k.Download, k.Open},
 		{k.Back, k.Help, k.Quit},
 	}
 }
@@ -149,7 +151,9 @@ func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "s":
 		return m, m.startSync()
 	case "d":
-		m.download()
+		return m, m.download()
+	case "o":
+		return m, m.openExternal()
 	case "y":
 		if m.tab == TabCommit {
 			return m, m.copyCommitPreview()

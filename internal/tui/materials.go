@@ -5,7 +5,10 @@ import (
 	"sort"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/ruyam/kamps/internal/model"
+	"github.com/ruyam/kamps/internal/source"
 )
 
 // visibleMaterials returns the Materials-tab files after the active filter and
@@ -145,62 +148,65 @@ func (m *App) courseFiles(courseID int) []model.Material {
 	return out
 }
 
-func (m *App) download() {
+// download fetches the selected or focused materials. Sources that cannot
+// transfer bytes (the demo dataset) keep the old flag-only behaviour.
+func (m *App) download() tea.Cmd {
 	if m.tab != TabMaterials {
 		m.toast = "switch to Materials to download"
 		m.toastTicks = 20
-		return
+		return nil
 	}
-	// The selection first; with nothing selected, the cursor does the work —
-	// on a course or week row, d fetches everything underneath it.
-	var targets []string
-	for _, mt := range m.materials {
-		if m.selectedM[mt.ID] {
-			targets = append(targets, mt.ID)
-		}
-	}
-	if len(targets) == 0 {
-		nodes := m.matNodes()
-		if m.matCursor >= 0 && m.matCursor < len(nodes) {
-			var files []model.Material
-			n := nodes[m.matCursor]
-			switch n.kind {
-			case nodeFile:
-				files = []model.Material{n.mat}
-			case nodeMaterialBucket:
-				for _, material := range m.courseFiles(n.courseID) {
-					if n.bucket == "downloaded" && material.Downloaded || n.bucket == "new" && !material.Downloaded {
-						files = append(files, material)
-					}
-				}
-			case nodeCourse:
-				files = m.courseFiles(n.courseID)
-			}
-			for _, f := range files {
-				if !f.Downloaded {
-					targets = append(targets, f.ID)
-				}
-			}
-		}
-	}
+	targets := m.materialTargets()
 	if len(targets) == 0 {
 		m.toast = "nothing new to download"
 		m.toastTicks = 20
-		return
+		return nil
 	}
-	for i := range m.materials {
-		for _, id := range targets {
-			if m.materials[i].ID == id && !m.materials[i].Downloaded {
-				m.materials[i].Downloaded = true
-				m.state.SetDownloaded(m.materials[i].ID, true)
-				break
-			}
+
+	_, canDownload := m.src.(source.Downloader)
+	var cmds []tea.Cmd
+	started, links, flagged, missing := 0, 0, 0, 0
+	for _, material := range targets {
+		if material.Downloaded {
+			continue
 		}
+		if material.Kind == "url" || material.Kind == "praktikum" {
+			links++
+			continue
+		}
+		if !canDownload {
+			m.markDownloaded(material.ID)
+			flagged++
+			continue
+		}
+		if material.URL == "" {
+			missing++
+			continue
+		}
+		if m.downloads[material.ID] {
+			continue
+		}
+		m.downloads[material.ID] = true
+		cmds = append(cmds, m.startDownload(material))
+		started++
 	}
+
 	m.selectedM = map[string]bool{}
-	m.toast = fmt.Sprintf("downloaded %d %s", len(targets), plural(len(targets), "file", "files"))
+	switch {
+	case started > 0:
+		m.toast = fmt.Sprintf("downloading %d %s…", started, plural(started, "file", "files"))
+	case links > 0:
+		m.toast = "external link: press o to open in browser"
+	case missing > 0:
+		m.toast = "no download link on this row"
+	case flagged > 0:
+		m.toast = fmt.Sprintf("marked %d %s downloaded", flagged, plural(flagged, "file", "files"))
+	default:
+		m.toast = "nothing new to download"
+	}
 	m.toastTicks = 24
 	m.saveState()
+	return tea.Batch(cmds...)
 }
 
 func (m *App) downloadedMaterials() int {
