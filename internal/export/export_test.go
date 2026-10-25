@@ -85,3 +85,20 @@ func TestTaskwarriorWriteUsesRunner(t *testing.T) {
 		t.Fatalf("add args = %v", calls[1])
 	}
 }
+
+func TestTaskwarriorPreviewSkipsExisting(t *testing.T) {
+	oldLook, oldRun := lookTask, runner
+	lookTask = func(string) (string, error) { return "/usr/bin/task", nil }
+	runner = func(args ...string) ([]byte, error) {
+		return []byte(`[{"description":"Report 1 (K1)"}]`), nil
+	}
+	t.Cleanup(func() { lookTask, runner = oldLook, oldRun })
+
+	text, result := (Taskwarrior{}).Preview(sampleItems())
+	if result.Added != 1 || result.Skipped != 1 {
+		t.Fatalf("result = %+v", result)
+	}
+	if strings.Contains(text, "(K1)") || !strings.Contains(text, "(K2)") {
+		t.Fatalf("preview = %q", text)
+	}
+}

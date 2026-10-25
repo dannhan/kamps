@@ -53,6 +53,16 @@ func taskCommand(item Item) string {
 	return "task " + strings.Join(args, " ")
 }
 
+// Preview queries existing tasks so the preview shows the same skip set as a
+// real write.
+func (w Taskwarrior) Preview(items []Item) (string, Result) {
+	if _, err := lookTask("task"); err != nil {
+		return "", Result{}
+	}
+	existing, _ := runner("export", "+kamps")
+	return w.Render(items, existing)
+}
+
 func (w Taskwarrior) Write(path string, items []Item) (Result, error) {
 	if _, err := lookTask("task"); err != nil {
 		return Result{}, fmt.Errorf("taskwarrior is not installed")

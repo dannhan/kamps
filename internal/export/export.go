@@ -37,6 +37,12 @@ type Writer interface {
 	Write(path string, items []Item) (Result, error)
 }
 
+// Previewer is implemented by writers that need their own existing-target
+// lookup (Taskwarrior queries the task CLI).
+type Previewer interface {
+	Preview(items []Item) (string, Result)
+}
+
 // For returns the writer for a configured format.
 func For(format string) (Writer, error) {
 	switch strings.ToLower(strings.TrimSpace(format)) {

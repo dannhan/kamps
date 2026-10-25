@@ -41,11 +41,16 @@ func (m *App) commitPreviewTextForFormat() string {
 	if err != nil {
 		return ""
 	}
+	items := m.exportItems()
+	if previewer, ok := writer.(export.Previewer); ok {
+		text, _ := previewer.Preview(items)
+		return text
+	}
 	var existing []byte
-	if writer.Format() != "taskwarrior" && m.cfg.CommitFile != "" {
+	if m.cfg.CommitFile != "" {
 		existing, _ = os.ReadFile(m.cfg.CommitFile)
 	}
-	text, _ := writer.Render(m.exportItems(), existing)
+	text, _ := writer.Render(items, existing)
 	return text
 }
 
