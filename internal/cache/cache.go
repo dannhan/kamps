@@ -27,6 +27,9 @@ func Save(path, siteURL string, snapshot source.Snapshot) error {
 	if path == "" {
 		return errors.New("empty cache path")
 	}
+	if len(snapshot.Courses) == 0 && len(snapshot.Assignments) == 0 && len(snapshot.Materials) == 0 {
+		return errors.New("refusing to cache an empty snapshot")
+	}
 	data, err := json.MarshalIndent(file{
 		Version:  version,
 		SiteURL:  siteURL,
