@@ -62,15 +62,23 @@ func TestParseAssignmentPageDateAndAttachments(t *testing.T) {
 
 func TestMapCourseModules(t *testing.T) {
 	course := model.Course{ID: 17638, Short: "MIK1624302"}
-	assignment, material := MapModule(course, Module{Type: "assign", CMID: "155170", Name: "Assignment", Section: "5"})
+	const site = "https://kulon2.undip.ac.id"
+	assignment, material := MapModule(course, Module{Type: "assign", CMID: "155170", Name: "Assignment", Section: "5"}, site)
 	if assignment == nil || assignment.ID != "K155170" || material != nil {
 		t.Fatalf("assignment=%+v material=%+v", assignment, material)
 	}
-	assignment, material = MapModule(course, Module{Type: "resource", CMID: "165401", Name: "Slides", Section: "5"})
+	assignment, material = MapModule(course, Module{Type: "resource", CMID: "165401", Name: "Slides", Section: "5", URL: "/mod/resource/view.php?id=165401"}, site)
 	if material == nil || material.ID != "M165401" || material.Section != "5" || assignment != nil {
 		t.Fatalf("assignment=%+v material=%+v", assignment, material)
 	}
-	if a, m := MapModule(course, Module{Type: "forum", CMID: "1"}); a != nil || m != nil {
+	if want := "https://kulon2.undip.ac.id/mod/resource/view.php?id=165401"; material.URL != want {
+		t.Fatalf("material URL = %q, want %q", material.URL, want)
+	}
+	_, external := MapModule(course, Module{Type: "url", CMID: "9", Name: "Reading", URL: "/mod/url/view.php?id=9"}, site)
+	if external == nil || external.Kind != "url" || external.URL != "https://kulon2.undip.ac.id/mod/url/view.php?id=9" {
+		t.Fatalf("external material = %+v", external)
+	}
+	if a, m := MapModule(course, Module{Type: "forum", CMID: "1"}, site); a != nil || m != nil {
 		t.Fatalf("unknown module mapped: %v %v", a, m)
 	}
 }

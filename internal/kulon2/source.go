@@ -133,7 +133,7 @@ func (s *LiveSource) Load(ctx context.Context) (source.Snapshot, error) {
 	for courseIndex, modules := range modulesByCourse {
 		course := courses[courseIndex]
 		for _, module := range modules {
-			assignment, material := MapModule(course, module)
+			assignment, material := MapModule(course, module, s.siteURL)
 			if assignment != nil {
 				snapshot.Assignments = append(snapshot.Assignments, *assignment)
 			}
@@ -165,7 +165,7 @@ func (s *LiveSource) Load(ctx context.Context) (source.Snapshot, error) {
 	assignmentIndex := 0
 	for courseIndex, modules := range modulesByCourse {
 		for _, module := range modules {
-			assignment, _ := MapModule(courses[courseIndex], module)
+			assignment, _ := MapModule(courses[courseIndex], module, s.siteURL)
 			if assignment == nil || module.Type != "assign" {
 				continue
 			}
@@ -308,3 +308,4 @@ func sameSite(a, b string) bool {
 }
 
 var _ source.Source = (*LiveSource)(nil)
+var _ source.Downloader = (*LiveSource)(nil)

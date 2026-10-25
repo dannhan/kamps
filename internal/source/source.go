@@ -30,3 +30,10 @@ type Source interface {
 	// shared pages once, and the caller gets one consistent error path.
 	Load(ctx context.Context) (Snapshot, error)
 }
+
+// Downloader is implemented by sources that can fetch a material's bytes.
+// DestPath is the caller's chosen location; the returned path may differ when
+// the downloader preserves an existing file by writing a versioned name.
+type Downloader interface {
+	Download(ctx context.Context, material model.Material, destPath string, progress func(done, total int64)) (string, error)
+}

@@ -3,6 +3,7 @@ package kulon2
 import (
 	"fmt"
 	stdhtml "html"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -31,8 +32,8 @@ var (
 type Section struct{ ID, Name string }
 
 // Module is a Moodle activity whose type and course-module ID were parsed from
-// a course page.
-type Module struct{ Type, CMID, Name, Section string }
+// a course page. URL is the activity link exactly as found on the page.
+type Module struct{ Type, CMID, Name, Section, URL string }
 
 type Attachment struct{ ID, Filename, URL, ItemID string }
 
@@ -71,7 +72,7 @@ func ParseCoursePage(page []byte) ([]Section, []Module, error) {
 			if instance := instancePattern.FindSubmatch(block); len(instance) > 1 {
 				name = textContent(instance[1])
 			}
-			modules = append(modules, Module{Type: string(typeMatch[1]), CMID: string(linkMatch[3]), Name: name, Section: sectionID})
+			modules = append(modules, Module{Type: string(typeMatch[1]), CMID: string(linkMatch[3]), Name: name, Section: sectionID, URL: string(linkMatch[1])})
 		}
 	}
 	return sections, modules, nil
@@ -282,7 +283,7 @@ func textContent(raw []byte) string {
 func AssignmentID(cmid string) string { return "K" + cmid }
 func MaterialID(cmid string) string   { return "M" + cmid }
 
-func MapModule(course model.Course, module Module) (assignment *model.Assignment, material *model.Material) {
+func MapModule(course model.Course, module Module, siteURL string) (assignment *model.Assignment, material *model.Material) {
 	switch module.Type {
 	case "assign", "quiz":
 		return &model.Assignment{ID: AssignmentID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name}, nil
@@ -291,8 +292,24 @@ func MapModule(course model.Course, module Module) (assignment *model.Assignment
 		if module.Type == "url" {
 			kind = "url"
 		}
-		return nil, &model.Material{ID: MaterialID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name, Section: module.Section, Kind: kind}
+		return nil, &model.Material{ID: MaterialID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name, Section: module.Section, Kind: kind, URL: moduleURL(siteURL, module)}
 	default:
 		return nil, nil
 	}
+}
+
+// moduleURL resolves a course-page activity link against the LMS base URL.
+func moduleURL(siteURL string, module Module) string {
+	if module.URL == "" {
+		return ""
+	}
+	base, err := url.Parse(strings.TrimRight(siteURL, "/") + "/")
+	if err != nil {
+		return ""
+	}
+	ref, err := url.Parse(module.URL)
+	if err != nil {
+		return ""
+	}
+	return base.ResolveReference(ref).String()
 }

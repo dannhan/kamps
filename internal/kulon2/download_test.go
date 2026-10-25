@@ -1,0 +1,72 @@
+package kulon2
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/ruyam/kamps/internal/model"
+	"github.com/ruyam/kamps/internal/session"
+)
+
+func TestLiveSourceDownloadWritesFile(t *testing.T) {
+	body := []byte("course material")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/pluginfile.php/1/mod_resource/content/0/slides.pdf" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Length", fmt.Sprint(len(body)))
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+
+	src := newTestSource(t, srv.URL, session.Session{Cookie: "cookie", SessKey: "saved-key"})
+	dest := filepath.Join(t.TempDir(), "metnum", "week-1", "slides.pdf")
+	material := model.Material{
+		ID:   "M165401",
+		Kind: "file",
+		URL:  srv.URL + "/pluginfile.php/1/mod_resource/content/0/slides.pdf",
+		Size: int64(len(body)),
+	}
+
+	got, err := src.Download(context.Background(), material, dest, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != dest {
+		t.Fatalf("path = %q, want %q", got, dest)
+	}
+	saved, err := os.ReadFile(dest)
+	if err != nil || string(saved) != string(body) {
+		t.Fatalf("saved = %q, err = %v", saved, err)
+	}
+}
+
+func TestLiveSourceDownloadRejectsExternalLink(t *testing.T) {
+	src := newTestSource(t, "https://lms.test", session.Session{Cookie: "cookie"})
+	_, err := src.Download(context.Background(), model.Material{ID: "M1", Kind: "url", URL: "https://example.test"}, filepath.Join(t.TempDir(), "f"), nil)
+	if err == nil || !strings.Contains(err.Error(), "external link") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestLiveSourceDownloadReportsExpiredSession(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte("<html>login</html>"))
+	}))
+	defer srv.Close()
+
+	src := newTestSource(t, srv.URL, session.Session{Cookie: "cookie"})
+	_, err := src.Download(context.Background(), model.Material{ID: "M1", Kind: "file", URL: srv.URL + "/pluginfile.php/1/x.pdf"}, filepath.Join(t.TempDir(), "x.pdf"), nil)
+	if err == nil || !strings.Contains(err.Error(), "kamps login") {
+		t.Fatalf("err = %v", err)
+	}
+}
