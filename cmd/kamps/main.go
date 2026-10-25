@@ -38,6 +38,21 @@ func main() {
 		case "help", "--help", "-h":
 			printHelp()
 			return
+		case "workspace":
+			if len(rest) > 1 && rest[1] == "init" {
+				opts, err := parseWorkspaceInit(rest[2:])
+				if err != nil {
+					fmt.Fprintln(os.Stderr, "kamps:", err)
+					os.Exit(1)
+				}
+				if err := printWorkspaceTemplate(os.Stdout, opts); err != nil {
+					fmt.Fprintln(os.Stderr, "kamps:", err)
+					os.Exit(1)
+				}
+				return
+			}
+			fmt.Fprintln(os.Stderr, "usage: kamps workspace init [--lms-id N] [--shortname S] [--path P]")
+			os.Exit(1)
 		}
 	}
 
@@ -123,6 +138,8 @@ USAGE
   kamps login [--browser[=auto|firefox|chromium]]
                    verify and save a Moodle session cookie
   kamps logout     remove the saved session
+  kamps workspace init [--lms-id N] [--shortname S] [--path P]
+                   print a starter course.json (does not write it)
   kamps version    print the version
   kamps help       print this help
 

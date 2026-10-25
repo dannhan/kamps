@@ -154,7 +154,7 @@ func (s *LiveSource) Load(ctx context.Context) (source.Snapshot, error) {
 			if material != nil {
 				snapshot.Materials = append(snapshot.Materials, *material)
 			}
-			if assignment != nil && module.Type == "assign" {
+			if assignment != nil && (module.Type == "assign" || module.Type == "quiz") {
 				tasks = append(tasks, assignmentTask{course: course, module: module})
 			}
 			if module.Type == "folder" {
@@ -166,7 +166,7 @@ func (s *LiveSource) Load(ctx context.Context) (source.Snapshot, error) {
 	assignmentErrors := make([]string, len(tasks))
 	s.fetchConcurrent(ctx, len(tasks), func(index int) {
 		task := tasks[index]
-		pageURL := strings.TrimRight(s.siteURL, "/") + "/mod/assign/view.php?id=" + task.module.CMID
+		pageURL := strings.TrimRight(s.siteURL, "/") + "/mod/" + task.module.Type + "/view.php?id=" + task.module.CMID
 		page, fetchErr := s.getPage(ctx, pageURL)
 		if fetchErr != nil {
 			assignmentErrors[index] = fmt.Sprintf("%s: %v", task.module.Name, fetchErr)
@@ -183,7 +183,7 @@ func (s *LiveSource) Load(ctx context.Context) (source.Snapshot, error) {
 	for courseIndex, modules := range modulesByCourse {
 		for _, module := range modules {
 			assignment, _ := MapModule(courses[courseIndex], module, s.siteURL)
-			if assignment == nil || module.Type != "assign" {
+			if assignment == nil || (module.Type != "assign" && module.Type != "quiz") {
 				continue
 			}
 			page := assignmentPages[assignmentIndex]
@@ -192,7 +192,7 @@ func (s *LiveSource) Load(ctx context.Context) (source.Snapshot, error) {
 				snapshot.Notice = appendNotice(snapshot.Notice, "some assignment details failed: "+failure)
 			}
 			if page != nil {
-				parsedPage, parseErr := ParseAssignmentPage(page, module.CMID)
+				parsedPage, parseErr := parseActivityPageForModule(module.Type, page, module.CMID)
 				if parseErr != nil {
 					snapshot.Notice = appendNotice(snapshot.Notice, "assignment detail parse failed: "+module.Name)
 				} else {
@@ -275,6 +275,13 @@ func (s *LiveSource) Load(ctx context.Context) (source.Snapshot, error) {
 		}
 	}
 	return snapshot, nil
+}
+
+func parseActivityPageForModule(moduleType string, page []byte, cmid string) (AssignmentPage, error) {
+	if moduleType == "quiz" {
+		return ParseQuizPage(page, cmid)
+	}
+	return ParseAssignmentPage(page, cmid)
 }
 
 func appendNotice(notice, addition string) string {

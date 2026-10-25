@@ -41,6 +41,20 @@ Create one `course.json` per repo (checked in, gitignored, or local):
 
 Kamps only reads `course.json`; it never creates or edits it.
 
+## Template helper
+
+To print a starter file without writing it:
+
+```sh
+kamps workspace init --lms-id 17964 --shortname MIK1624303 --path .
+```
+
+Redirect it yourself if you want the file:
+
+```sh
+kamps workspace init --lms-id 17964 --shortname MIK1624303 --path . > course.json
+```
+
 ## Discovery
 
 `workspace_roots` entries are walked up to three directories deep. `.git`,

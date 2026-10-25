@@ -252,7 +252,7 @@ func (m *App) download() tea.Cmd {
 		if material.Downloaded {
 			continue
 		}
-		if material.Kind == "url" || material.Kind == "praktikum" || material.Kind == "book" {
+		if material.Kind == "url" || material.Kind == "praktikum" || material.Kind == "book" || material.Kind == "page" {
 			links++
 			continue
 		}

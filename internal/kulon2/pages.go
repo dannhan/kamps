@@ -84,6 +84,16 @@ func ParseCoursePage(page []byte) ([]Section, []Module, error) {
 }
 
 func ParseAssignmentPage(page []byte, cmid string) (AssignmentPage, error) {
+	return parseActivityPage(page, cmid, "/mod_assign/")
+}
+
+// ParseQuizPage extracts due dates, submission state, and attachments from a
+// quiz page.
+func ParseQuizPage(page []byte, cmid string) (AssignmentPage, error) {
+	return parseActivityPage(page, cmid, "/mod_quiz/")
+}
+
+func parseActivityPage(page []byte, cmid, modulePath string) (AssignmentPage, error) {
 	result := AssignmentPage{LMSStatus: "unknown", Attachments: []Attachment{}}
 	if region := findDataRegion(page, "activity-dates"); len(region) > 0 {
 		for _, pair := range datePairPattern.FindAllSubmatch(region, -1) {
@@ -114,16 +124,16 @@ func ParseAssignmentPage(page []byte, cmid string) (AssignmentPage, error) {
 	} else if notSubmittedPattern.Match(page) {
 		result.LMSStatus = "not_submitted"
 	}
-	result.Attachments = parseFileAnchors(page, cmid, true)
+	result.Attachments = parseFileAnchors(page, cmid, modulePath)
 	return result, nil
 }
 
 // ParseFolderPage extracts the individual files behind a folder module.
 func ParseFolderPage(page []byte, cmid string) []Attachment {
-	return parseFileAnchors(page, cmid, false)
+	return parseFileAnchors(page, cmid, "")
 }
 
-func parseFileAnchors(page []byte, cmid string, requireAssign bool) []Attachment {
+func parseFileAnchors(page []byte, cmid, modulePath string) []Attachment {
 	seenNames := map[string]int{}
 	seenHrefs := map[string]bool{}
 	out := []Attachment{}
@@ -132,7 +142,7 @@ func parseFileAnchors(page []byte, cmid string, requireAssign bool) []Attachment
 		if !strings.Contains(href, "pluginfile.php") {
 			continue
 		}
-		if requireAssign && !strings.Contains(href, "/mod_assign/") {
+		if modulePath != "" && !strings.Contains(href, modulePath) {
 			continue
 		}
 		rawURL := strings.ReplaceAll(href, "&amp;", "&")
@@ -320,6 +330,8 @@ func MapModule(course model.Course, module Module, siteURL string) (assignment *
 		return nil, &model.Material{ID: MaterialID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name, Section: module.Section, Kind: "url", URL: ResolveURL(siteURL, module.URL)}
 	case "book":
 		return nil, &model.Material{ID: MaterialID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name, Section: module.Section, Kind: "book", URL: ResolveURL(siteURL, module.URL)}
+	case "page":
+		return nil, &model.Material{ID: MaterialID(module.CMID), CourseID: course.ID, CourseCode: course.Short, Name: module.Name, Section: module.Section, Kind: "page", URL: ResolveURL(siteURL, module.URL)}
 	default:
 		return nil, nil
 	}

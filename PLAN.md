@@ -25,8 +25,8 @@ Instead of navigating browser tabs and ad-hoc spreadsheets, students use `kamps`
 | **Plain Mode Output** | Implemented | `internal/plain` | Non-TTY stdout snapshot (for `kamps \| less` or CI). |
 | **Moodle Cookie Auth** | Implemented | `cmd/kamps/auth.go`, `internal/session` | Manual cookie capture (`kamps login`/`logout`), verification, and private storage (`0600`). |
 | **LMS Course List Ingestion** | Implemented | `internal/kulon2/courses.go` | Fetches enrolled in-progress courses via Moodle timeline AJAX service. |
-| **LMS Course Page Parsing** | Implemented | `internal/kulon2/pages.go` | Scrapes course HTML for weekly sections, assignments, and resource files. |
-| **LMS Assignment Page Parsing** | Implemented | `internal/kulon2/pages.go` | Scrapes assignment deadline ISOs, submission state, and attached files. |
+| **LMS Course Page Parsing** | Implemented | `internal/kulon2/pages.go` | Scrapes course HTML for sections, assignments/quizzes, resources, folders, books, and pages. |
+| **LMS Assignment Page Parsing** | Implemented | `internal/kulon2/pages.go` | Scrapes assignment/quiz deadline ISOs, submission state, and attached files. |
 | **Atomic State Persistence** | Implemented | `internal/store` | Persists user triage decisions and download flags atomically to `state.json`. |
 | **Live Search & Filters** | Implemented | `internal/tui/search.go`, `filters.go` | Case-insensitive multi-field search composing with status filters. |
 | **Commit Queue & OSC 52** | Implemented | `internal/tui/commit.go` | Stages session decisions as Markdown tasks, copies to clipboard via OSC 52. |

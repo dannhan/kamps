@@ -42,6 +42,7 @@ go build -o kamps ./cmd/kamps
 ./kamps login        # sign in through your browser, then paste MoodleSession
 kamps login --browser  # extract the cookie from a local Firefox/Chromium profile
 ./kamps logout       # remove the saved session
+./kamps workspace init  # print a starter course.json (does not write it)
 ./kamps version      # print the version
 kamps | less         # no TTY? prints a plain-text snapshot instead
 ```
@@ -119,11 +120,10 @@ See [`docs/export.md`](docs/export.md), [`docs/workspace.md`](docs/workspace.md)
 
 ## Status & roadmap
 
-The core roadmap is implemented: live parsing/downloads, resumable transfers, library scan, state locking, real sync, auto-triage, session expiry, offline cache, browser cookie login, exporters, workspace mapping, and the source registry. Next up, in order:
+The core roadmap is implemented: live parsing/downloads, resumable transfers, library scan, state locking, real sync, auto-triage, session expiry, offline cache, browser cookie login, exporters, workspace mapping, the `workspace init` template helper, quiz deadlines/status, page links, and the source registry. Next up, in order:
 
-1. Broaden LMS module coverage (quizzes with attachments, pages, and other content types).
-2. Add an opt-in `kamps workspace init` helper that prints a `course.json` template without writing it.
-3. Add optional Todoist/out-of-process source integrations.
-4. Polish offline cache retention and Library views for files kamps did not download.
+1. Parse quiz questions and more module-specific attachments.
+2. Add optional Todoist/out-of-process source integrations.
+3. Polish offline cache retention and Library views for files kamps did not download.
 
 Implemented in this pass: assignment attachments, folder files, resumable downloads, download retries/concurrency, startup library scan, state locking/merge, real sync, auto-triage of submitted work, session expiry, offline cache, browser cookie login, Markdown/todo.txt/Taskwarrior exporters, `course.json` workspace mapping, source registry, and range/bulk selection.
