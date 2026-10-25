@@ -250,6 +250,11 @@ func (m *App) download() tea.Cmd {
 		m.toastTicks = 20
 		return nil
 	}
+	if m.offline {
+		m.toast = "offline · press s to retry"
+		m.toastTicks = 30
+		return nil
+	}
 	targets := m.materialTargets()
 	if len(targets) == 0 {
 		m.toast = "nothing new to download"

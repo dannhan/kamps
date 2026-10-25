@@ -66,3 +66,16 @@ func TestUnknownFilesFilterShowsLocalFiles(t *testing.T) {
 		t.Fatalf("toast = %q", app.toast)
 	}
 }
+
+func TestDownloadBlockedWhileOffline(t *testing.T) {
+	src := downloadTestSource()
+	app := downloadTestApp(t, src)
+	app.offline = true
+	focusMaterial(t, app, "M1")
+	if cmd := app.download(); cmd != nil {
+		t.Fatal("offline mode should not start a download")
+	}
+	if !strings.Contains(app.toast, "offline") {
+		t.Fatalf("toast = %q", app.toast)
+	}
+}
