@@ -74,7 +74,10 @@ type App struct {
 	filter string
 	search string
 
-	searching bool
+	searching     bool
+	paletteOn     bool
+	paletteQuery  string
+	paletteCursor int
 
 	taskCursor   int
 	matCursor    int

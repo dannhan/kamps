@@ -74,23 +74,25 @@ Handy keys:
 | key | action |
 |---|---|
 | `↑↓` / `jk` | move |
+| `g` / `G`, `ctrl+d/u` | top / bottom, half-page |
 | `hl` | fold / open (courses, sections, folders, task buckets) |
-| `tab`, `1`–`4` | switch tabs |
+| `tab` / `[` `]`, `1`–`4` | switch tabs |
 | `enter` | open / close the detail pane (Tasks, Materials); write the queue (Commit) |
 | `space`, `a` | select item / select all |
-| `V`, `*` | range-select / invert visible |
-| `ctrl+z` | undo the last bulk triage |
-| `t` / `m` / `i` / `u` | decide: track / missed / ignore / undecided |
+| `v`, `*` | range-select / invert visible |
+| `u` | undo the last bulk triage |
+| `t` / `m` / `i` / `n` | decide: track / missed / ignore / new |
 | `f` | cycle the filter (Materials: all / new / downloaded / link / unknown) |
 | `/` | search the tree (composes with the filter) |
-| `esc` | clear the search, then the filter, then drop back |
+| `esc` | close detail / clear search or filter / back |
 | `c` | review & commit |
 | `w` | write the queue to `commit_file` (Commit) |
 | `y` | copy the queue lines (Commit) |
 | `x` / `X` | drop one item / drop all queued (Commit) |
-| `s` | reload the source |
+| `s` / `r` | reload the source |
 | `d` | download (Materials) |
 | `o` | open an external link in the browser (Materials) |
+| `:` / `ctrl+k` | command palette |
 | `?` | help |
 | `q` | quit |
 

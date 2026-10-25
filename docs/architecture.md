@@ -233,7 +233,7 @@ Both tree tabs render a flat `[]node` list. [`node`](../internal/tui/tree.go) st
 
 ### Commit queue
 
-- `t`, `m`, `i`, `u` update in-memory assignments, store the decision, and add/remove the item in `App.pending`.
+- `t`, `m`, `i`, `n` update in-memory assignments, store the decision, and add/remove the item in `App.pending`; `u` restores the previous triage batch.
 - `c` opens the Commit tab; `esc` returns to the previous tab.
 - The preview groups items by action and shows the exact task lines.
 - `y` (or `enter`) copies the preview with OSC 52; `x` removes the focused item from the queue only.

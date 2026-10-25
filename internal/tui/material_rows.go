@@ -41,7 +41,17 @@ func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 		} else if course, ok := m.courseByID(n.courseID); ok && course.Name != "" {
 			name = course.Name
 		}
-		content = lead + background(stCode.Bold(true)).Render(name)
+		meta := m.materialCourseMeta(n.courseID, h)
+		nameWidth := inner - lipgloss.Width(meta) - 3
+		if meta == "" {
+			nameWidth = inner
+		}
+		if nameWidth < 4 {
+			meta = ""
+			nameWidth = inner
+		}
+		name = ansi.Truncate(name, maxInt(1, nameWidth-lipgloss.Width(lead)), "…")
+		content = h.alignRight(lead+h.style(courseStyle(n.courseID).Bold(true)).Render(name), meta, inner)
 	case nodeMaterialSection:
 		content = lead + background(stRow).Render(fmt.Sprintf("%s (%d)", n.section, len(m.materialNodeFiles(n))))
 	case nodeMaterialFolder:

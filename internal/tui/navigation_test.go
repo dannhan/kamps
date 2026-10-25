@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/ruyam/kamps/internal/model"
 )
 
 func TestEscapeClearsFilterBeforeSelections(t *testing.T) {
@@ -108,5 +110,51 @@ func TestFoldOnAlreadyFoldedGroupMovesCursorToParent(t *testing.T) {
 	app.moveX(-1)
 	if app.taskCursor != expected {
 		t.Fatalf("h on an already-folded course moved the cursor to %d, want term at %d", app.taskCursor, expected)
+	}
+}
+
+func TestNaturalNavigationKeys(t *testing.T) {
+	app := demoApp(t)
+	app.tab = TabTasks
+	nodes := app.taskNodes()
+	app.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	if app.taskCursor != len(nodes)-1 {
+		t.Fatalf("G moved to %d, want %d", app.taskCursor, len(nodes)-1)
+	}
+	app.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	if app.taskCursor != 0 {
+		t.Fatalf("g moved to %d, want 0", app.taskCursor)
+	}
+}
+
+func TestBracketKeysSwitchTabs(t *testing.T) {
+	app := demoApp(t)
+	app.tab = TabTasks
+	app.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	if app.tab != TabMaterials {
+		t.Fatalf("] switched to %v", app.tab)
+	}
+	app.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+	if app.tab != TabTasks {
+		t.Fatalf("[ switched to %v", app.tab)
+	}
+}
+
+func TestNewAndUndoKeys(t *testing.T) {
+	app := demoApp(t)
+	app.tab = TabTasks
+	id := "K901017"
+	app.taskCursor = findTaskNode(app.taskNodes(), nodeTask, id)
+	app.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	if app.byID(id).Triage != model.Tracked {
+		t.Fatalf("t triage = %v", app.byID(id).Triage)
+	}
+	app.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
+	if app.byID(id).Triage != model.Undecided {
+		t.Fatalf("u did not undo: %v", app.byID(id).Triage)
+	}
+	app.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	if app.byID(id).Triage != model.Undecided {
+		t.Fatalf("n triage = %v", app.byID(id).Triage)
 	}
 }

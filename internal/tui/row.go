@@ -83,6 +83,17 @@ func (h rowHighlight) markCell(marked bool) string {
 	return h.style(stRow).Render(" ")
 }
 
+func (h rowHighlight) alignRight(content, meta string, width int) string {
+	if meta == "" {
+		return content
+	}
+	gap := width - lipgloss.Width(content) - lipgloss.Width(meta)
+	if gap < 1 {
+		return content
+	}
+	return content + h.style(stRow).Render(strings.Repeat(" ", gap)) + meta
+}
+
 func sharedFocusRow(content string, width int, focused bool) string {
 	content = ansiTruncate(content, maxInt(0, width))
 	padding := strings.Repeat(" ", maxInt(0, width-lipgloss.Width(content)))

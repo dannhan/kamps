@@ -195,16 +195,19 @@ SCREENS
   /  search     f  filter     esc  clear search/filter/selection
 
 KEYS
-  ↑/k ↓/j    move            space   select
-  ←/h →/l    fold / open     a       select all
-  V          range select    *       invert visible
-  ctrl+z     undo triage
+  ↑/k ↓/j    move            g/G     top / bottom
+  ctrl+d/u   half-page       ←/h →/l fold / open
+  [ ]        prev / next tab 1-4     tabs
+  space      select          a       select all
+  v          range select    *       invert visible
+  u          undo triage
   t          track           m       missed
-  i          ignore          u       undecided
+  i          ignore          n       new / undecided
+  :          command palette
   c          review & commit w       write queue
   y          copy queue      x       drop from queue
   X          drop all queued
-  d          download        s       sync
+  d          download        s/r     sync
   o          open link       ?       help
   q          quit
 

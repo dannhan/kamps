@@ -119,7 +119,9 @@ Every keystroke arrives as a `tea.KeyMsg` and goes through [`App.handleKey`](../
 | `←`/`h`, `→`/`l` | Fold / open the focused container; on a folded leaf, move to parent |
 | `space` | Select the focused row |
 | `a` | Select all |
-| `t`, `m`, `i`, `u` | Apply triage (Tasks only) |
+| `t`, `m`, `i`, `n` | Apply triage (Tasks only; `n` = undecided) |
+| `u` | Undo the last triage batch |
+| `:` / `ctrl+k` | Open the command palette |
 | `c` | Open Commit tab |
 | `esc` | Close Commit; otherwise clear search, then filter, then selections/back |
 | `enter` | Toggle detail on Tasks/Materials; copy preview on Commit |

@@ -57,6 +57,17 @@ func (m *App) clampCursor() {
 	}
 }
 
+// moveTop and moveBottom jump to the first or last row in the active list.
+func (m *App) moveTop() { m.move(-1 << 20) }
+
+func (m *App) moveBottom() { m.move(1 << 20) }
+
+// movePage moves by roughly half a screen, matching ctrl+d/ctrl+u conventions.
+func (m *App) movePage(direction int) {
+	step := maxInt(1, (m.height-5)/2)
+	m.move(direction * step)
+}
+
 // moveX is horizontal: folding everywhere the trees are. `l` opens the cursor's
 // container, `h` closes it.
 func (m *App) moveX(delta int) {

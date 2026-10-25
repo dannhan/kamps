@@ -52,6 +52,15 @@ var themeTokens = themeColors{
 	Missed:  lipgloss.AdaptiveColor{Light: "#C0392B", Dark: "#F7768E"},
 }
 
+var courseAccents = []lipgloss.AdaptiveColor{
+	{Light: "#3F64A8", Dark: "#8DB4E2"},
+	{Light: "#1F7A6A", Dark: "#6FD0BE"},
+	{Light: "#A5680F", Dark: "#E0AF68"},
+	{Light: "#7651A8", Dark: "#B59AE0"},
+	{Light: "#A63D5C", Dark: "#F08AA8"},
+	{Light: "#3E7D3E", Dark: "#8FD08F"},
+}
+
 func quietHex(foreground, background string) string {
 	parse := func(value string) ([3]float64, bool) {
 		var rgb [3]float64

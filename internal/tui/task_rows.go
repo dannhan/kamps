@@ -36,7 +36,18 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 		if course, ok := m.courseByID(n.courseID); ok && course.Name != "" {
 			name = course.Name
 		}
-		content = h.containerLead(open, selected) + background(stCode.Bold(true)).Render(name)
+		meta := m.taskCourseMeta(n.courseID, h)
+		nameWidth := available - lipgloss.Width(meta) - 3
+		if meta == "" {
+			nameWidth = available
+		}
+		if nameWidth < 4 {
+			meta = ""
+			nameWidth = available
+		}
+		lead := h.containerLead(open, selected)
+		name = ansi.Truncate(name, maxInt(1, nameWidth-lipgloss.Width(lead)), "…")
+		content = h.alignRight(lead+h.style(courseStyle(n.courseID).Bold(true)).Render(name), meta, available)
 	case nodeBucket:
 		content = h.containerLead(open, selected) + background(stRow).Render(fmt.Sprintf("%s (%d)", n.bucket, len(m.taskGroupIDs(n))))
 	case nodeTask:

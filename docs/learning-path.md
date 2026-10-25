@@ -38,7 +38,7 @@ to fix. Start with [Source Code Tour](code-tour.md).
 Trace a triage decision end to end:
 
 1. In [`internal/tui/keys.go`](../internal/tui/keys.go), find `handleKey` and the
-   `t`/`m`/`i`/`u` cases.
+   `t`/`m`/`i`/`n` cases.
 2. Follow `applyTriage` in [`tasks.go`](../internal/tui/tasks.go).
 3. Notice the three separate things it does:
    - changes the in-memory assignment;

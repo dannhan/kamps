@@ -28,7 +28,9 @@ func (m *App) View() string {
 	} else if !m.loaded {
 		rows = []string{stDim.Render("loading… fetching courses, assignments, and materials")}
 	}
-	if m.helpOn {
+	if m.paletteOn {
+		title, right, hints, rows = "commands", "", []string{"type to filter", "↑↓ move", "enter run", "esc close"}, m.paletteLines(maxInt(1, w))
+	} else if m.helpOn {
 		title, right, hints, rows = "help", "", []string{"↑↓ move", "tab switch", "? close"}, m.helpLines(maxInt(1, w))
 	}
 	if m.cacheNotice != "" && !m.helpOn {
@@ -64,11 +66,14 @@ func (m *App) tabBar(w int) string {
 	for i, label := range labels {
 		cells = append(cells, fixedTabCell(" "+label, m.tab == Tab(i), cellWidth))
 	}
-	return fitLine(strings.Join(cells, ""), w)
+	return barLine(strings.Join(cells, ""), m.tabSummary(), w)
 }
 
 func (m *App) helpBar(w int, items []string) string {
 	inner := w - 1
+	if m.paletteOn || m.helpOn {
+		return " " + barLine(hints(items), "", inner)
+	}
 	if m.searching {
 		left := hints([]string{"type to search", "↑↓ move", "enter done", "esc cancel"})
 		return " " + barLine(left, m.taskQueueLabel(), inner)
