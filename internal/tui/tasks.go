@@ -3,42 +3,16 @@ package tui
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/ruyam/kamps/internal/format"
+	"github.com/ruyam/kamps/internal/core"
 	"github.com/ruyam/kamps/internal/model"
 )
 
 // visible returns the Tasks-tab assignments after the active filter and
 // search, sorted.
 func (m *App) visible() []model.Assignment {
-	now := time.Now()
-	out := make([]model.Assignment, 0, len(m.assignments))
-	for _, a := range m.assignments {
-		if !m.matchesFilter(a, now) || !m.matchesTaskSearch(a) {
-			continue
-		}
-		out = append(out, a)
-	}
-	format.SortAssignments(out)
-	return out
-}
-
-func (m *App) matchesFilter(a model.Assignment, now time.Time) bool {
-	switch m.filter {
-	case "undecided":
-		return a.Triage == model.Undecided
-	case "overdue":
-		return a.Overdue(now)
-	case "tracked":
-		return a.Triage == model.Tracked
-	case "missed":
-		return a.Triage == model.Missed
-	case "ignored":
-		return a.Triage == model.Ignored
-	}
-	return true
+	return m.service.Tasks(core.Query{Filter: m.filter, Search: m.search})
 }
 
 // cursorAssignmentID is the item the keyboard is pointing at, or "". On the
@@ -109,11 +83,7 @@ func (m *App) applyTriage(t model.Triage) {
 	decisions := make(map[string]model.Triage, len(ids))
 	for _, id := range ids {
 		decisions[id] = t
-		if t == model.Undecided {
-			delete(m.pending, id)
-		} else {
-			m.pending[id] = t
-		}
+		m.queue.Set(id, t)
 	}
 	if _, err := m.service.SetDecisions(decisions); err != nil {
 		m.toast = "could not save state: " + err.Error()

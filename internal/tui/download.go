@@ -15,8 +15,6 @@ import (
 	"github.com/ruyam/kamps/internal/format"
 	"github.com/ruyam/kamps/internal/library"
 	"github.com/ruyam/kamps/internal/model"
-	"github.com/ruyam/kamps/internal/source"
-	"github.com/ruyam/kamps/internal/store"
 )
 
 type downloadProgressMsg struct {
@@ -69,35 +67,20 @@ func (m *App) materialByID(id string) *model.Material {
 	return nil
 }
 
-func (m *App) markDownloaded(id, path string) {
-	material := m.materialByID(id)
-	if material == nil {
-		return
-	}
-	material.Downloaded = true
-	m.updateState(func(s *store.State) {
-		s.SetDownloadRecord(id, store.DownloadRecord{Path: path})
-	})
-}
-
 // startDownload runs one material download off the UI goroutine.
 func (m *App) startDownload(material model.Material) tea.Cmd {
-	downloader, ok := m.src.(source.Downloader)
-	if !ok {
-		return nil
-	}
 	program := m.program
 	id := material.ID
-	dest := m.materialDestination(material)
 	ctx, cancel := context.WithCancel(context.Background())
 	m.downloadCancels[id] = cancel
+	service := m.service
 	return func() tea.Msg {
-		path, err := downloader.Download(ctx, material, dest, func(done, total int64) {
+		result, err := service.DownloadOne(ctx, material, func(_ string, done, total int64) {
 			if program != nil {
 				program.Send(downloadProgressMsg{id: id, done: done, total: total})
 			}
 		})
-		return downloadDoneMsg{id: id, path: path, err: err}
+		return downloadDoneMsg{id: id, path: result.Path, err: err}
 	}
 }
 

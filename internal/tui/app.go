@@ -95,7 +95,7 @@ type App struct {
 
 	selected  map[string]bool // assignment id -> checked
 	selectedM map[string]bool // material id -> checked
-	pending   map[string]model.Triage
+	queue     *core.Queue
 
 	visual          bool
 	rangeAnchor     int
@@ -150,7 +150,7 @@ func New(src source.Source, cfg config.Config, version string) *App {
 		expanded:        map[string]bool{},
 		selected:        map[string]bool{},
 		selectedM:       map[string]bool{},
-		pending:         map[string]model.Triage{},
+		queue:           core.NewQueue(),
 		undoDecisions:   map[string]model.Triage{},
 		downloads:       map[string]bool{},
 		downloadCancels: map[string]context.CancelFunc{},
@@ -277,7 +277,6 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.toastTicks = 40
 			return m, nil
 		}
-		m.markDownloaded(msg.id, msg.path)
 		m.toast = "saved " + savedFileLabel(msg.path)
 		m.toastTicks = 24
 		return m, nil

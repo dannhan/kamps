@@ -37,7 +37,7 @@ func TestTaskFooterKeepsQueueAtRightEdge(t *testing.T) {
 	if strings.Contains(line, "[") || strings.Contains(line, "v view") || strings.Contains(line, "mouse") {
 		t.Fatalf("footer contains secondary controls or brackets: %q", line)
 	}
-	app.pending["tracked"] = model.Tracked
+	app.queue.Set("tracked", model.Tracked)
 	line = stripANSI(app.taskFooter(99))
 	if !strings.HasSuffix(line, "queue: 1 track") {
 		t.Fatalf("populated queue is not right aligned: %q", line)
@@ -72,9 +72,9 @@ func TestTaskQueueLabels(t *testing.T) {
 	if got := stripANSI(app.taskQueueLabel()); got != "queue empty" {
 		t.Fatalf("empty queue label = %q", got)
 	}
-	app.pending["a"] = model.Tracked
-	app.pending["b"] = model.Tracked
-	app.pending["c"] = model.Missed
+	app.queue.Set("a", model.Tracked)
+	app.queue.Set("b", model.Tracked)
+	app.queue.Set("c", model.Missed)
 	if got := stripANSI(app.taskQueueLabel()); got != "queue: 2 track · 1 missed" {
 		t.Fatalf("populated queue label = %q", got)
 	}

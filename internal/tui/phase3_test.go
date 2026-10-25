@@ -24,7 +24,7 @@ func TestWriteCommitPreviewWritesExactlyPreview(t *testing.T) {
 	})
 	app.tab = TabCommit
 	id := app.assignments[0].ID
-	app.pending = map[string]model.Triage{id: model.Tracked}
+	setPendingForTest(app, map[string]model.Triage{id: model.Tracked})
 	app.byID(id).Triage = model.Tracked
 
 	preview := app.commitPreviewText()

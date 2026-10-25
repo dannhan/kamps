@@ -29,8 +29,8 @@ func TestDecisionsSurviveRestart(t *testing.T) {
 	if assignment.Triage != model.Tracked {
 		t.Fatalf("triage = %v, want tracked", assignment.Triage)
 	}
-	if len(again.pending) != 0 {
-		t.Fatalf("restart should not rebuild the export queue, got %d items", len(again.pending))
+	if again.queue.Len() != 0 {
+		t.Fatalf("restart should not rebuild the export queue, got %d items", again.queue.Len())
 	}
 }
 

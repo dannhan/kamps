@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/ruyam/kamps/internal/core"
 	"github.com/ruyam/kamps/internal/model"
 	"github.com/ruyam/kamps/internal/source"
 	"github.com/ruyam/kamps/internal/store"
@@ -25,26 +26,7 @@ func (m *App) visibleMaterials() []model.Material {
 		}
 		return out
 	}
-	out := make([]model.Material, 0, len(m.materials))
-	for _, material := range m.materials {
-		if !m.matchesMaterialFilter(material) || !m.matchesMaterialSearch(material) {
-			continue
-		}
-		out = append(out, material)
-	}
-	return out
-}
-
-func (m *App) matchesMaterialFilter(material model.Material) bool {
-	switch m.filter {
-	case "new":
-		return !material.Downloaded
-	case "downloaded":
-		return material.Downloaded
-	case "link":
-		return material.Kind == "url"
-	}
-	return true
+	return m.service.Materials(core.Query{Filter: m.filter, Search: m.search})
 }
 
 // matNodes is the Materials pane: course ▸ week ▸ folder ▸ file. Weeks keep

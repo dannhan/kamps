@@ -62,6 +62,37 @@ type DownloadResult struct {
 	Bytes int64  `json:"bytes"`
 }
 
+// DownloadOne fetches one material and records the result.
+func (s *Service) DownloadOne(ctx context.Context, material model.Material, progress DownloadProgress) (DownloadResult, error) {
+	downloader, ok := s.src.(source.Downloader)
+	if !ok {
+		return DownloadResult{}, fmt.Errorf("source %q cannot download files", s.src.Label())
+	}
+	path, err := downloader.Download(ctx, material, s.Destination(material), func(done, total int64) {
+		if progress != nil {
+			progress(material.ID, done, total)
+		}
+	})
+	if err != nil {
+		return DownloadResult{}, err
+	}
+	size := int64(0)
+	if info, err := os.Stat(path); err == nil {
+		size = info.Size()
+	}
+	for i := range s.snapshot.Materials {
+		if s.snapshot.Materials[i].ID == material.ID {
+			s.snapshot.Materials[i].Downloaded = true
+		}
+	}
+	if err := s.Update(func(state *store.State) {
+		state.SetDownloadRecord(material.ID, store.DownloadRecord{Path: path, Size: size})
+	}); err != nil {
+		return DownloadResult{ID: material.ID, Path: path, Bytes: size}, err
+	}
+	return DownloadResult{ID: material.ID, Path: path, Bytes: size}, nil
+}
+
 // Download fetches the requested materials through the source downloader.
 func (s *Service) Download(ctx context.Context, ids []string, progress DownloadProgress) ([]DownloadResult, error) {
 	downloader, ok := s.src.(source.Downloader)

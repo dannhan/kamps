@@ -10,7 +10,7 @@ import (
 func TestCommitPreviewAndDrop(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabCommit
-	app.pending = map[string]model.Triage{"K901000": model.Tracked, "K901001": model.Missed}
+	setPendingForTest(app, map[string]model.Triage{"K901000": model.Tracked, "K901001": model.Missed})
 	app.byID("K901000").Triage = model.Tracked
 
 	closed := strings.Replace(app.taskLine(*app.byID("K901001")), "- [ ]", "- [x]", 1) + " #missed"
@@ -23,11 +23,11 @@ func TestCommitPreviewAndDrop(t *testing.T) {
 	app.commitCursor = 0
 	app.dropCommitItem()
 
-	if _, ok := app.pending["K901000"]; ok {
+	if ok := app.queue.Has("K901000"); ok {
 		t.Fatal("drop should remove the focused decision from the queue")
 	}
-	if len(app.pending) != 1 {
-		t.Fatalf("queue has %d items after drop, want 1", len(app.pending))
+	if app.queue.Len() != 1 {
+		t.Fatalf("queue has %d items after drop, want 1", app.queue.Len())
 	}
 	if got := app.byID("K901000"); got == nil || got.Triage != model.Tracked {
 		t.Fatal("drop should not revert the decision itself")
@@ -37,7 +37,7 @@ func TestCommitPreviewAndDrop(t *testing.T) {
 func TestCommitEmptyQueueExplainsAndSkipsCopy(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabCommit
-	app.pending = map[string]model.Triage{}
+	setPendingForTest(app, map[string]model.Triage{})
 
 	if got := app.commitPreviewText(); got != "" {
 		t.Fatalf("empty queue preview = %q", got)
@@ -59,7 +59,7 @@ func TestCommitRowsClipWithEllipsis(t *testing.T) {
 	app.tab = TabCommit
 	id := app.assignments[0].ID
 	app.byID(id).Name = strings.Repeat("a very long assignment name ", 10)
-	app.pending = map[string]model.Triage{id: model.Tracked}
+	setPendingForTest(app, map[string]model.Triage{id: model.Tracked})
 
 	body := stripANSI(strings.Join(app.commitBody(60, 20), "\n"))
 	if !strings.Contains(body, "…") {
@@ -71,12 +71,12 @@ func TestCommitPreviewContainsGroupedExactLinesAndMarkers(t *testing.T) {
 	app := demoApp(t)
 	app.width, app.height = 100, 30
 	app.tab = TabCommit
-	app.pending = map[string]model.Triage{
+	setPendingForTest(app, map[string]model.Triage{
 		"K901000": model.Tracked,
 		"K901001": model.Missed,
 		"K901002": model.Ignored,
 		"K163827": model.Tracked,
-	}
+	})
 	view := stripANSI(app.View())
 	for _, want := range []string{"done (track)", "missed", "ignore", "K901000 · ppl · Progress Report 1", "- [ ] [ppl] Progress Report 1 (K901000)", "will show as OVERDUE", `similar manual task: "Submit ppl Report 5"`} {
 		if !strings.Contains(view, want) {

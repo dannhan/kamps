@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/ruyam/kamps/internal/config"
+	"github.com/ruyam/kamps/internal/core"
+	"github.com/ruyam/kamps/internal/model"
 	"github.com/ruyam/kamps/internal/source"
 )
 
@@ -44,6 +46,13 @@ func findTaskNode(nodes []node, kind nodeKind, value string) int {
 		}
 	}
 	return -1
+}
+
+func setPendingForTest(app *App, pending map[string]model.Triage) {
+	app.queue = core.NewQueue()
+	for id, action := range pending {
+		app.queue.Set(id, action)
+	}
 }
 
 func taskTreeRowForTest(t *testing.T) string {

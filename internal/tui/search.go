@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"strings"
 	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -47,37 +46,12 @@ func (m *App) clearSearch() bool {
 	return true
 }
 
-// searchMatches is the shared text predicate: an empty query matches
-// everything, otherwise any field may contain it, case-insensitively.
-func (m *App) searchMatches(fields ...string) bool {
-	query := strings.ToLower(strings.TrimSpace(m.search))
-	if query == "" {
-		return true
-	}
-	for _, field := range fields {
-		if strings.Contains(strings.ToLower(field), query) {
-			return true
-		}
-	}
-	return false
-}
-
 func (m *App) matchesTaskSearch(assignment model.Assignment) bool {
-	if strings.TrimSpace(m.search) == "" {
-		return true
-	}
-	course, _ := m.courseByID(assignment.CourseID)
-	return m.searchMatches(assignment.Name, assignment.ID, assignment.Goal, assignment.Section, assignment.SectionName,
-		course.Name, course.Code, course.Short)
+	return m.service.MatchesTask(assignment, m.search)
 }
 
 func (m *App) matchesMaterialSearch(material model.Material) bool {
-	if strings.TrimSpace(m.search) == "" {
-		return true
-	}
-	course, _ := m.courseByID(material.CourseID)
-	return m.searchMatches(material.Name, material.ID, material.Section, material.SectionName, material.Kind,
-		material.CourseCode, course.Name, course.Code, course.Short)
+	return m.service.MatchesMaterial(material, m.search)
 }
 
 // deleteLastSearchWord mirrors readline's ctrl+w: drop trailing whitespace and

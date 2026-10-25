@@ -54,6 +54,18 @@ func (s *Service) Materials(query Query) []model.Material {
 	return out
 }
 
+// MatchesTask reports whether an assignment matches a search query.
+func (s *Service) MatchesTask(assignment model.Assignment, search string) bool {
+	search = strings.ToLower(strings.TrimSpace(search))
+	return search == "" || taskMatches(assignment, search, s.snapshot.Courses)
+}
+
+// MatchesMaterial reports whether a material matches a search query.
+func (s *Service) MatchesMaterial(material model.Material, search string) bool {
+	search = strings.ToLower(strings.TrimSpace(search))
+	return search == "" || materialMatches(material, search, s.snapshot.Courses)
+}
+
 // Course resolves a numeric ID or a code/short/name fragment.
 func (s *Service) Course(raw string) (model.Course, bool) {
 	raw = strings.TrimSpace(raw)

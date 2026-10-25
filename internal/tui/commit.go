@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -15,17 +14,7 @@ import (
 
 // pendingCounts returns how many uncommitted decisions of each kind are queued.
 func (m *App) pendingCounts() (tracked, missed, ignored int) {
-	for _, t := range m.pending {
-		switch t {
-		case model.Tracked:
-			tracked++
-		case model.Missed:
-			missed++
-		case model.Ignored:
-			ignored++
-		}
-	}
-	return
+	return m.queue.Counts()
 }
 
 // clipboardMsg reports the result of handing the preview to the terminal.
@@ -69,7 +58,7 @@ func (m *App) dropCommitItem() {
 		return
 	}
 	item := items[m.commitCursor]
-	delete(m.pending, item.assignment.ID)
+	m.queue.Remove(item.assignment.ID)
 	m.clampCursor()
 	m.toast = "dropped " + item.assignment.ID + " from the queue"
 	m.toastTicks = 20
@@ -110,19 +99,12 @@ type commitItem struct {
 }
 
 func (m *App) commitItems() []commitItem {
-	items := make([]commitItem, 0, len(m.pending))
-	for id, action := range m.pending {
-		if assignment := m.byID(id); assignment != nil {
-			items = append(items, commitItem{assignment: *assignment, action: action})
-		}
+	items := m.queue.Items(m.assignments)
+	out := make([]commitItem, 0, len(items))
+	for _, item := range items {
+		out = append(out, commitItem{assignment: item.Assignment, action: item.Action})
 	}
-	sort.Slice(items, func(i, j int) bool {
-		if items[i].action != items[j].action {
-			return items[i].action < items[j].action
-		}
-		return items[i].assignment.ID < items[j].assignment.ID
-	})
-	return items
+	return out
 }
 
 func (m *App) commitBody(width, height int) []string {

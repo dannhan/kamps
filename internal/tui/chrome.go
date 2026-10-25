@@ -94,7 +94,7 @@ func (m *App) helpBar(w int, items []string) string {
 	}
 	right := m.queueLabel()
 	if m.tab == TabCommit {
-		right = stKey.Render(fmt.Sprintf("queue: %d", len(m.pending)))
+		right = stKey.Render(fmt.Sprintf("queue: %d", m.queue.Len()))
 	}
 	if f := m.footer(); f != "" {
 		right = f

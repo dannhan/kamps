@@ -116,11 +116,7 @@ func (m *App) undoTriage() {
 	ids := make([]string, 0, len(m.undoDecisions))
 	for id, previous := range m.undoDecisions {
 		ids = append(ids, id)
-		if previous == model.Undecided {
-			delete(m.pending, id)
-		} else {
-			m.pending[id] = previous
-		}
+		m.queue.Set(id, previous)
 	}
 	if _, err := m.service.SetDecisions(m.undoDecisions); err != nil {
 		m.toast = "could not save state: " + err.Error()
@@ -135,7 +131,7 @@ func (m *App) undoTriage() {
 
 // dropAllCommit requires a second press so a stray key cannot empty the queue.
 func (m *App) dropAllCommit() {
-	count := len(m.pending)
+	count := m.queue.Len()
 	if count == 0 {
 		m.toast = "queue empty"
 		m.toastTicks = 20
@@ -147,7 +143,7 @@ func (m *App) dropAllCommit() {
 		m.toastTicks = 40
 		return
 	}
-	m.pending = map[string]model.Triage{}
+	m.queue.Clear()
 	m.dropAllArmed = false
 	m.clampCursor()
 	m.toast = fmt.Sprintf("dropped %d queued %s", count, plural(count, "item", "items"))

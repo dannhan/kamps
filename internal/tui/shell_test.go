@@ -79,7 +79,7 @@ func TestSharedShellAllTabsAtRequestedSizes(t *testing.T) {
 			app.width, app.height = size[0], size[1]
 			app.tab = active
 			if active == TabCommit {
-				app.pending = map[string]model.Triage{"K901000": model.Tracked}
+				setPendingForTest(app, map[string]model.Triage{"K901000": model.Tracked})
 			}
 			view := stripANSI(app.View())
 			lines := strings.Split(view, "\n")
