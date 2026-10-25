@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ruyam/kamps/internal/lockfile"
 )
 
 // DownloadOptions controls one transfer.
@@ -49,13 +51,17 @@ func DownloadFileWithOptions(ctx context.Context, client *http.Client, downloadU
 		client = http.DefaultClient
 	}
 
-	resolvedPath, action := ResolveDestination(destPath, opts.ExpectedSize)
+	resolvedPath, action, destLock, err := reserveDestination(destPath, opts.ExpectedSize)
+	if err != nil {
+		return DownloadResult{}, err
+	}
 	if action == ActionSkip {
 		if progress != nil && opts.ExpectedSize > 0 {
 			progress(opts.ExpectedSize, opts.ExpectedSize)
 		}
 		return DownloadResult{Path: resolvedPath, Bytes: opts.ExpectedSize}, nil
 	}
+	defer destLock.Unlock()
 
 	destDir := filepath.Dir(resolvedPath)
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
@@ -291,6 +297,31 @@ func DownloadFileWithOptions(ctx context.Context, client *http.Client, downloadU
 	}
 	success = true
 	return DownloadResult{Path: resolvedPath, Bytes: written, Resumed: resumed}, nil
+}
+
+// reserveDestination serializes writers targeting the same file. The lock is
+// held through the final rename so two kamps processes cannot both claim the
+// same versioned name.
+func reserveDestination(destPath string, expectedSize int64) (string, DestinationAction, *lockfile.Lock, error) {
+	for {
+		resolved, action := ResolveDestination(destPath, expectedSize)
+		if action == ActionSkip {
+			return resolved, action, nil, nil
+		}
+		lock, err := lockfile.Acquire(resolved + ".lock")
+		if err != nil {
+			return "", ActionDownload, nil, err
+		}
+		rechecked, reAction := ResolveDestination(destPath, expectedSize)
+		if reAction == ActionSkip {
+			lock.Unlock()
+			return rechecked, reAction, nil, nil
+		}
+		if rechecked == resolved {
+			return resolved, reAction, lock, nil
+		}
+		lock.Unlock()
+	}
 }
 
 func loadPart(partPath, metaPath, downloadURL string, resume bool) (int64, partMeta) {

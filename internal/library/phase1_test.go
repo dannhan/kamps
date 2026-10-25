@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -108,5 +109,39 @@ func TestNoSpaceDetection(t *testing.T) {
 	}
 	if isNoSpace(errors.New("permission denied")) {
 		t.Fatal("unrelated error was treated as ENOSPC")
+	}
+}
+
+func TestDownloadSerializesSameDestination(t *testing.T) {
+	body := []byte("hello")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(10 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Length", fmt.Sprint(len(body)))
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+
+	dest := filepath.Join(t.TempDir(), "slides.pdf")
+	paths := make([]string, 2)
+	errs := make([]error, 2)
+	var group sync.WaitGroup
+	for i := range paths {
+		group.Add(1)
+		go func(i int) {
+			defer group.Done()
+			result, err := DownloadFileWithOptions(context.Background(), srv.Client(), srv.URL+"/file", dest, DownloadOptions{ExpectedSize: int64(len(body)), Resume: true}, nil)
+			paths[i], errs[i] = result.Path, err
+		}(i)
+	}
+	group.Wait()
+	for i := range errs {
+		if errs[i] != nil {
+			t.Fatalf("download %d: %v", i, errs[i])
+		}
+	}
+	saved, err := os.ReadFile(paths[0])
+	if err != nil || string(saved) != string(body) {
+		t.Fatalf("saved = %q, err = %v", saved, err)
 	}
 }
