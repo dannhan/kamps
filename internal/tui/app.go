@@ -186,7 +186,13 @@ func loadCmd(src source.Source) tea.Cmd {
 	}
 }
 
-func (m *App) Init() tea.Cmd { return loadCmd(m.src) }
+func (m *App) Init() tea.Cmd {
+	m.loading = true
+	if !strings.HasPrefix(m.src.Label(), "demo") && m.loadCache() {
+		m.loaded = true
+	}
+	return loadCmd(m.src)
+}
 
 func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -251,7 +257,7 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.loadCache() {
 			m.offline = true
 			m.loadError = ""
-			m.toast = "offline · " + m.cacheNotice
+			m.toast = "offline · cached from " + m.cacheNotice
 			m.toastTicks = 40
 			return m, nil
 		}

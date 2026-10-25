@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ruyam/kamps/internal/cache"
 	"github.com/ruyam/kamps/internal/config"
 	"github.com/ruyam/kamps/internal/model"
 	"github.com/ruyam/kamps/internal/source"
@@ -84,5 +85,22 @@ func TestSessionExpiryWarning(t *testing.T) {
 	app.Update(app.Init()())
 	if !strings.Contains(app.toast, "session expires in") {
 		t.Fatalf("toast = %q", app.toast)
+	}
+}
+
+func TestInitShowsCacheBeforeRefresh(t *testing.T) {
+	cfg := config.Config{StateDir: t.TempDir(), LibraryDir: t.TempDir(), SiteURL: "https://lms.test"}
+	if err := cache.Save(cfg.CachePath(), cfg.SiteURL, source.Snapshot{Courses: []model.Course{{ID: 1, Name: "Cached"}}}); err != nil {
+		t.Fatal(err)
+	}
+	app := New(&expiringSource{expiry: time.Now().Add(time.Hour)}, cfg, "test")
+	if cmd := app.Init(); cmd == nil {
+		t.Fatal("expected a refresh command")
+	}
+	if !app.loaded || len(app.courses) != 1 || app.courses[0].Name != "Cached" {
+		t.Fatalf("cache was not shown: loaded=%v courses=%+v", app.loaded, app.courses)
+	}
+	if app.cacheNotice == "" {
+		t.Fatal("cache notice is empty")
 	}
 }

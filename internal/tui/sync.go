@@ -151,7 +151,7 @@ func (m *App) syncBody(width, height int) []string {
 		values = append(values, [2]string{"notice", m.loadNotice})
 	}
 	if m.cacheNotice != "" {
-		values = append(values, [2]string{"offline", m.cacheNotice})
+		values = append(values, [2]string{"cache", "cached from " + m.cacheNotice})
 	}
 	start, end := windowRange(len(values), m.syncCursor, height)
 	rows := make([]string, 0, end-start)

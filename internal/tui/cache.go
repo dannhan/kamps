@@ -16,7 +16,7 @@ func (m *App) loadCache() bool {
 		return false
 	}
 	m.loadNotice = snapshot.Notice
-	m.cacheNotice = "cached from " + savedAt.Format("2006-01-02 15:04")
+	m.cacheNotice = savedAt.Format("2006-01-02 15:04")
 	m.lastSync = savedAt
 	m.courses = snapshot.Courses
 	resolved, notices := workspace.Resolve(m.courses, m.cfg.WorkspaceRoots)

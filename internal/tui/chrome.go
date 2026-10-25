@@ -26,13 +26,17 @@ func (m *App) View() string {
 	if m.loadError != "" {
 		rows = []string{stOverdue.Render("error · " + m.loadError)}
 	} else if !m.loaded {
-		rows = []string{stDim.Render("loading…")}
+		rows = []string{stDim.Render("loading… fetching courses, assignments, and materials")}
 	}
 	if m.helpOn {
 		title, right, hints, rows = "help", "", []string{"↑↓ move", "tab switch", "? close"}, m.helpLines(maxInt(1, w))
 	}
-	if m.offline && m.cacheNotice != "" && !m.helpOn {
-		right = rightAligned(right, stDim.Render("offline · "+m.cacheNotice))
+	if m.cacheNotice != "" && !m.helpOn {
+		label := "cached · "
+		if m.offline {
+			label = "offline · "
+		}
+		right = rightAligned(right, stDim.Render(label+m.cacheNotice))
 	} else if m.loadNotice != "" && !m.helpOn {
 		right = rightAligned(right, stDim.Render("partial · "+m.loadNotice))
 	}
