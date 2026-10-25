@@ -45,6 +45,11 @@ kamps login --browser  # extract the cookie from a local Firefox/Chromium profil
 ./kamps workspace init  # print a starter course.json (does not write it)
 ./kamps version      # print the version
 kamps | less         # no TTY? prints a plain-text snapshot instead
+./kamps tasks --json # headless tasks for agents and scripts
+./kamps status --json
+./kamps triage K901017 --tracked
+./kamps download --all-new --dry-run --json
+./kamps export --format markdown --out ~/notes/tasks.md
 ```
 
 Login requires `site_url` in `~/.config/kamps/config.toml` (or the XDG config
@@ -100,6 +105,7 @@ matches.
 cmd/kamps/          entry point, flags, login, source registration
 internal/model/     Course, Assignment, Material — data types
 internal/core/      application pipeline: load, state merge, auto-triage, reconcile
+internal/api/       JSON DTOs for headless commands
 internal/source/    Source interface, registry, capabilities, demo data
 internal/kulon2/    live Moodle parser, session, downloads
 internal/library/   safe paths, resumable downloads, library scan

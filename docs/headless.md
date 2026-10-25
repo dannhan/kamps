@@ -9,7 +9,10 @@ service as JSON CLI commands so an agent can read and mutate kamps without openi
 - Implemented: `core.Service` load pipeline (workspace mapping, sorting, saved state,
   auto-triage, library reconciliation, cache save/fallback), shared by `tui` and `plain`.
 - Implemented: import guard ensuring `internal/core` never imports the TUI or Lip Gloss.
-- Planned: JSON subcommands and the `run(args, stdout, stderr) int` CLI shell.
+- Implemented: `courses`, `tasks`, `materials`, `status`, `sync`, `triage`, `download`,
+  and `export` commands, with `--json` and a structured error envelope.
+- Planned: full `run(args, stdout, stderr) int` refactor, per-command help, and the
+  optional localhost/MCP surface.
 
 ## Planned commands
 
@@ -26,6 +29,9 @@ kamps export    --format markdown|todo|taskwarrior [--out PATH] [--json]
 
 Existing `login`, `logout`, `version`, and `workspace init` stay unchanged. Running `kamps`
 with no subcommand still opens the TUI (or prints plain text when stdout is not a TTY).
+
+`download` supports `--all-new`, `--course`, and `--dry-run`. `export` defaults to tracked
+items and accepts `--ids A,B`; `--format` defaults to `export_format` from config.
 
 ## JSON shape
 
@@ -45,8 +51,13 @@ Planned item fields:
 - `courses`: `id`, `code`, `short`, `name`, `term`, `workspace_path`
 - `tasks`: `id`, `course_id`, `course_code`, `name`, `due` (RFC3339 or null), `triage`
   (`undecided|tracked|missed|ignored`), `submission`, `section`, `overdue`, `attachments`
-- `materials`: `id`, `course_id`, `name`, `section`, `folder`, `kind`, `size`,
-  `downloaded`, `assignment_id`
+- `materials`: `id`, `course_id`, `course_code`, `name`, `section`, `section_name`,
+  `folder`, `kind`, `size`, `downloaded`, `url`, `assignment_id`
+- `status`: `source`, `session_ok`, `session_expires_at`, `last_sync`, `from_cache`,
+  `courses`, `assignments`, `materials`, `downloaded`
+
+Material filters are `all`, `new`, `downloaded`, and `link`. Task filters are `all`,
+`undecided`, `overdue`, `tracked`, `missed`, and `ignored`.
 
 Errors use a structured object on stderr and a non-zero exit code:
 
@@ -61,6 +72,7 @@ Exit codes: `0` success, `2` usage, `3` auth/session, `4` source/network, `5` pa
 ```sh
 kamps status --json
 kamps tasks --json --filter undecided
+kamps materials --json --course MIK1624302
 kamps triage K901017 --tracked --json
 kamps download M165402 --dry-run --json
 kamps download M165402 --json

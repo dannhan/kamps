@@ -78,6 +78,7 @@ There is no HTTP server, database, or daemon. Kamps is a single local binary.
 | `workspace` | [`internal/workspace`](../internal/workspace) | Discover and resolve `course.json` workspace mappings. | `Resolve` |
 | `session` | [`internal/session`](../internal/session) | Private session file, expiry, save/load/delete. | `Session`, `Load`, `Save` |
 | `core` | [`internal/core`](../internal/core) | UI-free application layer: load, workspace resolve, state merge, auto-triage, library reconcile, cache save/fallback. | [`Service`](../internal/core/core.go), `Load`, `LoadCached`, `Destination` |
+| `api` | [`internal/api`](../internal/api/api.go) | Stable JSON DTOs and envelopes for headless commands. | `Envelope`, `Tasks`, `Materials`, `Courses` |
 | `plain` | [`internal/plain`](../internal/plain/plain.go) | Non-interactive snapshot for pipes, files, and CI. Consumes `core`. | [`PrintPlain()`](../internal/plain/plain.go) |
 | `tui` | [`internal/tui`](../internal/tui/app.go) | Bubble Tea rendering: tabs, trees, search, detail pane, styles, key dispatch. | [`App`](../internal/tui/app.go), [`New()`](../internal/tui/app.go) |
 | `lockfile` | [`internal/lockfile`](../internal/lockfile) | Cross-platform advisory locks for state and destinations. | `Acquire`, `Unlock` |

@@ -108,6 +108,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	if handled, code := runHeadless(rest, cfg, src, os.Stdout, os.Stderr); handled {
+		if code != 0 {
+			os.Exit(code)
+		}
+		return
+	}
+
 	// Non-interactive fallback: piping `kamps | less` should still work.
 	if !isTTY(os.Stdout) {
 		if err := plain.PrintPlain(os.Stdout, src, cfg); err != nil {
@@ -146,6 +153,14 @@ USAGE
   kamps logout     remove the saved session
   kamps workspace init [--lms-id N] [--shortname S] [--path P]
                    print a starter course.json (does not write it)
+  kamps courses [--json]
+  kamps tasks [--json] [--filter F] [--search Q] [--course C]
+  kamps materials [--json] [--filter F] [--search Q] [--course C]
+  kamps status [--json]
+  kamps sync [--json]
+  kamps triage <id...> --tracked|--missed|--ignored|--undecided [--json]
+  kamps download <id...> | --all-new | --course C [--dry-run] [--json]
+  kamps export --format markdown|todo|taskwarrior [--out PATH] [--json]
   kamps version    print the version
   kamps help       print this help
 
