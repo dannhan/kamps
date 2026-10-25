@@ -33,7 +33,7 @@ LMS / lab drive data (read-only)
   Commit preview ──▶ OSC 52 clipboard
 ```
 
-The UI ships with both bundled demo data and an early live Kulon2 course-list source. `kamps login` verifies and securely saves a session; live mode fetches courses only. Assignments, materials, and actual downloads are not implemented yet; see [Kulon2 / Moodle notes](kulon2.md).
+The UI ships with both bundled demo data and a live Kulon2 source. `kamps login` verifies and securely saves a session; live mode fetches courses, parses course pages into assignments and materials, and downloads resource files into the configured library directory. Assignment attachments and folder modules are not downloaded yet; see [Kulon2 / Moodle notes](kulon2.md).
 
 ---
 
@@ -79,7 +79,7 @@ Appendix: [TUI research](../TUI_RESEARCH.md) records the design comparison that 
 | Materials tree | Course → downloaded/new bucket → file → linked assignment | Attachments can link back to an assignment |
 | Search | Live, case-insensitive, composes with `f` | `ctrl+w`, `alt+backspace`, and `ctrl+backspace` delete a word |
 | Detail pane | Auto-opens at ≥ 100 columns; `enter` pins it | 62/38 split with a 24-column detail minimum |
-| Downloads | Marks material as downloaded and persists it | Does not fetch bytes yet; default future library is `~/Documents/kamps` |
+| Downloads | Streams resource files to `library_dir`, skips identical files, versions changed ones | External links open with `o`; folder and assignment attachments are not downloaded yet |
 | Sync | Animated status and toast | Simulated; does not reload the source |
 | Commit | Preview + copy via OSC 52 (`y` or `enter`) | `x` drops a queue item; the stored decision remains |
 | Plain mode | Non-TTY snapshot | Applies saved state; source errors exit non-zero |

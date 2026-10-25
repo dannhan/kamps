@@ -150,7 +150,7 @@ Every keystroke arrives as a `tea.KeyMsg` and goes through [`App.handleKey`](../
 
 #### Downloads
 
-[`App.download()`](../internal/tui/materials.go) only acts on Materials. It prefers checked files; with no selection it uses the focused file, bucket, or course row. It marks each target `Downloaded`, records it in the store, clears selections, shows a toast, and saves. No bytes are transferred yet.
+[`App.download()`](../internal/tui/materials.go) only acts on Materials. It prefers checked files; with no selection it uses the focused file, bucket, or course row. Files are streamed by the source's `Download` method into `<library_dir>/<course>/<section>/<filename>` as a `tea.Cmd`; on completion the material is marked `Downloaded`, recorded in the store, and saved. External links are not downloaded: `o` opens them in the browser. Demo mode has no downloader and keeps the flag-only behaviour.
 
 #### Commit queue
 

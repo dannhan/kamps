@@ -30,8 +30,8 @@ Instead of navigating browser tabs and ad-hoc spreadsheets, students use `kamps`
 | **Atomic State Persistence** | Implemented | `internal/store` | Persists user triage decisions and download flags atomically to `state.json`. |
 | **Live Search & Filters** | Implemented | `internal/tui/search.go`, `filters.go` | Case-insensitive multi-field search composing with status filters. |
 | **Commit Queue & OSC 52** | Implemented | `internal/tui/commit.go` | Stages session decisions as Markdown tasks, copies to clipboard via OSC 52. |
-| **Material File Downloads** | *Planned* | `internal/kulon2/download.go` | Streaming file downloads from `pluginfile.php` to disk with polite rate-limiting. |
-| **Local Library Management** | *Planned* | `internal/config`, `internal/store` | Auto-detecting existing files on disk, directory scaffolding (`library_dir`). |
+| **Material File Downloads** | Implemented | `internal/library`, `internal/kulon2/download.go` | Streams `mod/resource` files to disk; skips identical files, versions changed ones, and surfaces failures. Folder modules and assignment attachments are still planned. |
+| **Local Library Management** | Partial | `internal/config`, `internal/library` | `library_dir` scaffolding, `~` expansion, and per-file skip/version rules are done; scanning the library on startup is still planned. |
 | **Workspace Course Mapping** | *Planned* | `internal/config`, `internal/source` | Optional `course.json` in local project repos to bind workspace folders to LMS course IDs. |
 | **Direct File Commit Writers** | *Planned* | `internal/tui/commit.go` | Direct file appending (e.g. `tasks.md`, `todo.txt`) beyond OSC 52 clipboard. |
 | **Automated Triage Sync** | *Planned* | `internal/kulon2/source.go` | Automatically triaging assignments marked "Submitted for grading" on the LMS as `tracked`. |
@@ -151,10 +151,12 @@ Since Kulon2 uses enterprise Microsoft Azure AD SSO and disables local passwords
 - [ ] Parse embedded attachment URLs from assignment detail descriptions.
 
 ### Phase 2: Downloader Engine & Local File Library
-- [ ] Implement `internal/kulon2/download.go` for streaming `pluginfile.php` downloads.
-- [ ] Create directory builder honoring `library_dir` (`<course>/<section>/<file>`).
-- [ ] Add safe-skip / non-destructive versioning if destination files already exist.
-- [ ] Connect `d` hotkey in Materials tab to background download tasks with progress ticker.
+- [x] Implement `internal/kulon2/download.go` for streaming `pluginfile.php` downloads.
+- [x] Create directory builder honoring `library_dir` (`<course>/<section>/<file>`).
+- [x] Add safe-skip / non-destructive versioning if destination files already exist.
+- [x] Connect `d` hotkey in Materials tab to background download tasks with progress ticker.
+- [ ] Download assignment attachments and folder modules.
+- [ ] Resume interrupted downloads instead of restarting them.
 
 ### Phase 3: Authentication Enhancements
 - [ ] Add `kamps login --browser` to automatically discover and extract `MoodleSession` from local Chromium/Firefox SQLite cookie jars on Linux.

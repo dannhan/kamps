@@ -273,7 +273,7 @@ Both tree tabs render a flat `[]node` list. [`node`](../internal/tui/tree.go) st
 These are current limitations, not mysteries:
 
 - **Config supports site URL and library directory.** Login/session verification and live course-list retrieval are implemented; course-page parsing and downloads are not.
-- **The live source is partial.** It verifies the saved session, fetches in-progress courses, and parses course-page activities into assignments/materials. Due dates and assignment attachments are not yet parsed, and downloads are not implemented.
+- **The live source is partial.** It verifies the saved session, fetches in-progress courses, parses course-page activities into assignments/materials, reads assignment due dates, and downloads `mod/resource` files. Assignment attachment downloads and folder modules are not implemented.
 - **The demo source seeds triage values.** They are useful for screenshots but are not user state; real sources should return `Undecided`.
 - **Downloads do not transfer bytes.** `d` flips the flag and saves it.
 - **Sync is simulated.** `s` runs an animation and a toast; it does not reload the source.

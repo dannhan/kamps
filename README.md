@@ -60,7 +60,7 @@ site_url = "https://kulon2.undip.ac.id/"
 library_dir = "~/projects/university"
 ```
 
-The `~/projects/university` mapping is **not implemented yet**. Live mode shows the in-progress course list and parses course pages into assignments and materials; assignment due dates, attachments, and downloads are not available yet. Use `./kamps --demo` for the complete bundled UI.
+The `~/projects/university` mapping is **not implemented yet**. Live mode shows the in-progress course list, parses course pages into assignments and materials, and downloads resource files into the library directory. Assignment attachments, folder modules, and resume-after-interruption are not available yet. Use `./kamps --demo` for the complete bundled UI.
 
 Handy keys:
 
@@ -80,6 +80,7 @@ Handy keys:
 | `x` | drop an item from the queue (Commit) |
 | `s` | sync |
 | `d` | download (Materials) |
+| `o` | open an external link in the browser (Materials) |
 | `?` | help |
 | `q` | quit |
 
@@ -102,15 +103,15 @@ docs/             developer guides and Kulon2 notes
 
 Everything is built against one interface, `source.Source`. Choose the bundled
 demo dataset with `--demo`, or use the live Kulon2 course-list source after
-logging in. The Courses tab displays fetched course names and IDs. Course pages currently supply activity names and sections; assignment due dates, attachment parsing, and downloads remain future work.
+logging in. Course pages supply activity names, sections, assignments, and downloadable resources; assignment attachment parsing and folder downloads remain future work.
 
 ## Status & roadmap
 
-Early days: the UI is complete and runs against demo data; live Kulon2 mode currently loads courses only. Next up, in order:
+Early days: the UI is complete and runs against demo data; live Kulon2 mode loads courses, parses course pages, and downloads resource files into the library directory. Next up, in order:
 
-1. Parse course pages into assignments and materials. See `docs/kulon2.md`.
+1. Parse assignment attachments and folder modules as downloadable materials. See `docs/kulon2.md`.
 2. Optionally map LMS courses to `course.json` in a user's workspace, without requiring that layout.
-3. Add real downloads with progress and safe, no-delete behavior under the configured library directory.
+3. Resume interrupted downloads and guard `state.json` against multiple running instances.
 4. Add a real commit writer behind the queue preview (today `y` copies the lines).
 
 Later, not now: bulk actions and a plugin surface for new sources.
