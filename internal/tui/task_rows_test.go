@@ -13,7 +13,7 @@ func TestFooterKeepsPriorityAndSafetyHint(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabTasks
 	full := renderHintItems(app.footerHintItems(), 200)
-	want := "↑↓ move · enter detail · space select · t/m/i decide · c review · / search · f filter · ? all keys"
+	want := "↑↓ move · enter detail · t/m/i decide · / search · f filter · ? all keys"
 	if got := stripANSI(full); got != want {
 		t.Fatalf("full footer = %q, want %q", got, want)
 	}

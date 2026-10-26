@@ -231,7 +231,7 @@ func buildStyles() {
 	stEmpty = fgStyle(themeTokens.Subtle).Italic(true)
 	stHelpKey = fgStyle(themeTokens.Bright)
 	stHelpTxt = fgStyle(themeTokens.Subtle)
-	stHelpSep = fgStyle(themeTokens.Border)
+	stHelpSep = fgStyle(themeTokens.Subtle)
 
 	stRow = stPrimary
 	stRowDim = fgStyle(themeTokens.Subtle)

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -32,9 +33,6 @@ func TestLayoutBreakpoints(t *testing.T) {
 			}
 			if !strings.Contains(view, "? all keys") {
 				t.Fatalf("%dx%d tab %s lost the safety hint: %q", size[0], size[1], tab, view)
-			}
-			if sizeClassFor(size[0], size[1]) == sizeTiny && !strings.Contains(view, "q quit") {
-				t.Fatalf("%dx%d tab %s tiny footer lost quit: %q", size[0], size[1], tab, view)
 			}
 		}
 	}
@@ -72,34 +70,33 @@ func TestFooterStatusShowsSelectionQueueFilterAndError(t *testing.T) {
 	}
 }
 
-func TestHelpSectionsAreTabAware(t *testing.T) {
+func TestHelpGroupsCoverEveryKey(t *testing.T) {
 	app := demoApp(t)
-	app.width, app.height = 120, 40
-
-	app.tab = TabTasks
-	tasks := stripANSI(strings.Join(app.helpContent(120), "\n"))
-	for _, want := range []string{"NAVIGATION", "MODES", "SELECTION & BULK", "DECIDE", "QUEUE", "LEGEND", "! overdue", "▪ selected"} {
-		if !strings.Contains(tasks, want) {
-			t.Fatalf("task help is missing %q:\n%s", want, tasks)
+	app.width, app.height = 200, 80
+	content := stripANSI(strings.Join(app.helpContent(200), "\n"))
+	for _, want := range []string{"NAVIGATION", "ACTIONS", "VIEW", "LEGEND", "! overdue", "▪ selected"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("help is missing %q:\n%s", want, content)
 		}
 	}
-	if strings.Contains(tasks, "● done") {
-		t.Fatalf("help still advertises the impossible done state:\n%s", tasks)
+	if strings.Contains(content, "● done") {
+		t.Fatalf("help still advertises the impossible done state:\n%s", content)
 	}
 
-	app.tab = TabMaterials
-	materials := stripANSI(strings.Join(app.helpContent(120), "\n"))
-	if !strings.Contains(materials, "MATERIALS") || strings.Contains(materials, "DECIDE") {
-		t.Fatalf("materials help is not tab-aware:\n%s", materials)
+	bindings := []key.Binding{app.keys.Confirm}
+	for _, group := range app.keys.FullHelp() {
+		bindings = append(bindings, group...)
+	}
+	for _, binding := range bindings {
+		help := binding.Help()
+		if !strings.Contains(content, help.Key) {
+			t.Errorf("help is missing key %q (%q)", help.Key, help.Desc)
+		}
+		if !strings.Contains(content, help.Desc) {
+			t.Errorf("help is missing description %q", help.Desc)
+		}
 	}
 
-	app.tab = TabCommit
-	commit := stripANSI(strings.Join(app.helpContent(120), "\n"))
-	if !strings.Contains(commit, "QUEUE") || strings.Contains(commit, "DECIDE") || strings.Contains(commit, "MATERIALS") {
-		t.Fatalf("commit help is not tab-aware:\n%s", commit)
-	}
-
-	app.tab = TabTasks
 	app.width, app.height = 80, 24
 	if app.helpMaxScroll() == 0 {
 		t.Fatal("help should scroll at 80x24")

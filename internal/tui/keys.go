@@ -77,7 +77,7 @@ func DefaultKeys() KeyMap {
 		Open:     key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open link")),
 		Confirm:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "detail / write")),
 		Back:     key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
-		Help:     key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "more")),
+		Help:     key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "all keys")),
 		Palette:  key.NewBinding(key.WithKeys(":", "ctrl+k"), key.WithHelp(":", "commands")),
 		Quit:     key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
 	}

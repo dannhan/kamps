@@ -168,8 +168,69 @@ func (m *App) footerRowCount() int {
 	return 1
 }
 
-// footerHintItems is the single hint list for the footer. Search, palette and
-// help own their own modes; the trees and queue use the tab's priority list.
+// footerHint is one core footer hint. tabs lists where it applies; a nil tabs
+// slice means every tab.
+type footerHint struct {
+	key   string
+	label string
+	tabs  []Tab
+}
+
+// footerHintOrder is the single priority order for the footer. Hints are
+// filtered to the active tab, capped at six, and dropped from the right as the
+// line narrows. "? all keys" is last and is never dropped.
+var footerHintOrder = []footerHint{
+	{key: "↑↓", label: "move", tabs: []Tab{TabTasks, TabMaterials, TabCommit}},
+	{key: "enter", label: "detail", tabs: []Tab{TabTasks, TabMaterials}},
+	{key: "t/m/i", label: "decide", tabs: []Tab{TabTasks}},
+	{key: "d", label: "download", tabs: []Tab{TabMaterials}},
+	{key: "w", label: "write", tabs: []Tab{TabCommit}},
+	{key: "y", label: "copy", tabs: []Tab{TabCommit}},
+	{key: "x", label: "drop", tabs: []Tab{TabCommit}},
+	{key: "/", label: "search", tabs: []Tab{TabTasks, TabMaterials}},
+	{key: "f", label: "filter", tabs: []Tab{TabTasks, TabMaterials}},
+	{key: "esc", label: "back", tabs: []Tab{TabCommit}},
+	{key: "s", label: "sync", tabs: []Tab{TabSync}},
+	{key: "?", label: "all keys", tabs: []Tab{TabTasks, TabMaterials, TabSync, TabCommit}},
+}
+
+func (h footerHint) applies(tab Tab) bool {
+	if len(h.tabs) == 0 {
+		return true
+	}
+	for _, candidate := range h.tabs {
+		if candidate == tab {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *App) footerHintLabel(hint footerHint) string {
+	if hint.key == "enter" && m.detailVisible() {
+		return "hide"
+	}
+	return hint.label
+}
+
+// coreFooterHints returns at most six hints in priority order for the active
+// tab. The responsive renderer drops from the right, so the tail is the least
+// important hint (except "? all keys", which is always kept).
+func (m *App) coreFooterHints() []string {
+	var items []string
+	for _, hint := range footerHintOrder {
+		if !hint.applies(m.tab) {
+			continue
+		}
+		items = append(items, hint.key+" "+m.footerHintLabel(hint))
+		if len(items) == 6 {
+			break
+		}
+	}
+	return items
+}
+
+// footerHintItems owns mode-specific hints and otherwise returns the core list.
 func (m *App) footerHintItems() []string {
 	switch {
 	case m.helpOn:
@@ -182,56 +243,11 @@ func (m *App) footerHintItems() []string {
 	case m.searching:
 		return []string{"type search", "↑↓ move", keyHintLabel(m.keys.Confirm, "done"), keyHintLabel(m.keys.Back, "cancel")}
 	}
-	detail := keyHintLabel(m.keys.Confirm, "detail")
-	switch m.detailMode() {
-	case detailSplit:
-		detail = keyHintLabel(m.keys.Confirm, "hide")
-	case detailReplace:
-		detail = keyHintLabel(m.keys.Back, "back")
-	}
-	if m.sizeClass() == sizeTiny {
-		return []string{keyHint(m.keys.Tabs), keyHint(m.keys.Quit), keyHintLabel(m.keys.Help, "all keys")}
-	}
-	switch m.tab {
-	case TabTasks:
-		return []string{
-			"↑↓ move", detail, keyHint(m.keys.Select),
-			keyHintGroup("decide", m.keys.Track, m.keys.Missed, m.keys.Ignore),
-			keyHintLabel(m.keys.Commit, "review"), keyHint(m.keys.Search), keyHint(m.keys.Filter),
-			keyHintLabel(m.keys.Help, "all keys"),
-		}
-	case TabMaterials:
-		return []string{
-			"↑↓ move", detail, keyHint(m.keys.Select), keyHint(m.keys.Download), keyHint(m.keys.Open),
-			keyHint(m.keys.Search), keyHint(m.keys.Filter), keyHintLabel(m.keys.Help, "all keys"),
-		}
-	case TabSync:
-		return []string{keyHint(m.keys.Sync), keyHintLabel(m.keys.Help, "all keys")}
-	case TabCommit:
-		return []string{
-			"↑↓ move", keyHintLabel(m.keys.Write, "write"), keyHintLabel(m.keys.Copy, "copy"),
-			keyHintLabel(m.keys.Drop, "drop"), keyHintLabel(m.keys.Back, "back"),
-			keyHintLabel(m.keys.Help, "all keys"),
-		}
-	}
-	return []string{keyHintLabel(m.keys.Help, "all keys")}
-}
-
-func keyHint(binding key.Binding) string {
-	help := binding.Help()
-	return help.Key + " " + help.Desc
+	return m.coreFooterHints()
 }
 
 func keyHintLabel(binding key.Binding, label string) string {
 	return binding.Help().Key + " " + label
-}
-
-func keyHintGroup(label string, bindings ...key.Binding) string {
-	keys := make([]string, 0, len(bindings))
-	for _, binding := range bindings {
-		keys = append(keys, binding.Help().Key)
-	}
-	return strings.Join(keys, "/") + " " + label
 }
 
 // renderHintItems keeps the last item (the safety hint) and drops lower-priority
@@ -380,37 +396,26 @@ type helpSection struct {
 	items []key.Binding
 }
 
-// helpSections is tab-aware: only bindings that do something on the current
-// tab are listed. The bindings themselves are the single source of truth.
+// helpSections is the full reference, independent of the active tab. The three
+// groups cover every binding in KeyMap so nothing removed from the footer is
+// lost from help.
 func (m *App) helpSections() []helpSection {
-	navigation := []key.Binding{
-		m.keys.Up, m.keys.Down, m.keys.Top, m.keys.Bottom,
-		m.keys.PageUp, m.keys.PageDown, m.keys.Left, m.keys.Right,
-		m.keys.NextTab, m.keys.PrevTab, m.keys.Tabs, m.keys.Confirm, m.keys.Back,
+	return []helpSection{
+		{title: "Navigation", items: []key.Binding{
+			m.keys.Up, m.keys.Down, m.keys.Top, m.keys.Bottom,
+			m.keys.PageUp, m.keys.PageDown, m.keys.Left, m.keys.Right,
+			m.keys.NextTab, m.keys.PrevTab, m.keys.Tabs, m.keys.Confirm, m.keys.Back,
+		}},
+		{title: "Actions", items: []key.Binding{
+			m.keys.Select, m.keys.All, m.keys.Range, m.keys.Invert,
+			m.keys.Track, m.keys.Missed, m.keys.Ignore, m.keys.Undecide, m.keys.Undo,
+			m.keys.Download, m.keys.Open, m.keys.Sync,
+			m.keys.Commit, m.keys.Write, m.keys.Copy, m.keys.Drop, m.keys.DropAll,
+		}},
+		{title: "View", items: []key.Binding{
+			m.keys.Search, m.keys.Filter, m.keys.Palette, m.keys.Help, m.keys.Quit,
+		}},
 	}
-	modes := []key.Binding{m.keys.Search, m.keys.Filter, m.keys.Palette, m.keys.Help, m.keys.Quit}
-	sections := []helpSection{
-		{title: "Navigation", items: navigation},
-		{title: "Modes", items: modes},
-	}
-	switch m.tab {
-	case TabTasks:
-		sections = append(sections,
-			helpSection{title: "Selection & bulk", items: []key.Binding{m.keys.Select, m.keys.All, m.keys.Range, m.keys.Invert, m.keys.Undo}},
-			helpSection{title: "Decide", items: []key.Binding{m.keys.Track, m.keys.Missed, m.keys.Ignore, m.keys.Undecide}},
-			helpSection{title: "Queue", items: []key.Binding{m.keys.Commit, m.keys.Write, m.keys.Copy, m.keys.Drop, m.keys.DropAll}},
-		)
-	case TabMaterials:
-		sections = append(sections,
-			helpSection{title: "Materials", items: []key.Binding{m.keys.Select, m.keys.Download, m.keys.Open, m.keys.Filter}},
-			helpSection{title: "Queue", items: []key.Binding{m.keys.Commit, m.keys.Write, m.keys.Copy}},
-		)
-	case TabCommit:
-		sections = append(sections,
-			helpSection{title: "Queue", items: []key.Binding{m.keys.Write, m.keys.Copy, m.keys.Drop, m.keys.DropAll}},
-		)
-	}
-	return sections
 }
 
 func (m *App) helpContent(width int) []string {
@@ -444,27 +449,31 @@ func (m *App) helpContent(width int) []string {
 	return rows
 }
 
+// splitHelpSections picks the column break with the smallest height
+// difference, so Navigation / Actions / View do not stack into one tall column.
 func splitHelpSections(sections []helpSection) int {
+	if len(sections) <= 1 {
+		return len(sections)
+	}
 	total := 0
 	for _, section := range sections {
 		total += 1 + len(section.items)
 	}
-	half := total / 2
-	acc, split := 0, 0
-	for i, section := range sections {
-		if acc >= half {
-			break
+	bestSplit, bestDiff := 1, total
+	left := 0
+	for i, section := range sections[:len(sections)-1] {
+		left += 1 + len(section.items)
+		right := total - left
+		diff := left - right
+		if diff < 0 {
+			diff = -diff
 		}
-		acc += 1 + len(section.items)
-		split = i + 1
+		if diff < bestDiff {
+			bestDiff = diff
+			bestSplit = i + 1
+		}
 	}
-	if split == 0 {
-		split = 1
-	}
-	if split > len(sections) {
-		split = len(sections)
-	}
-	return split
+	return bestSplit
 }
 
 func flattenHelp(sections []helpSection, width int) []string {
