@@ -28,28 +28,63 @@ func (s *Service) Decide(ids []string, triage model.Triage) ([]Decision, error) 
 	return s.SetDecisions(decisions)
 }
 
-// SetDecisions applies a set of decisions in one state write. It is used by
-// triage and by undo, which can restore several different prior values.
+// SetDecisions applies a set of decisions and writes them in one state update.
+// It is used by headless commands; the TUI applies in memory and persists from
+// a tea.Cmd.
 func (s *Service) SetDecisions(decisions map[string]model.Triage) ([]Decision, error) {
-	var changed []Decision
-	for i := range s.snapshot.Assignments {
-		assignment := &s.snapshot.Assignments[i]
-		triage, ok := decisions[assignment.ID]
-		if !ok {
-			continue
-		}
-		assignment.Triage = triage
-		changed = append(changed, Decision{ID: assignment.ID, Triage: triage})
-	}
+	changed := s.ApplyDecisions(decisions)
 	if len(changed) == 0 {
 		return nil, fmt.Errorf("no matching assignments")
 	}
-	err := s.Update(func(state *store.State) {
+	err := s.Persist(func(state *store.State) {
 		for _, decision := range changed {
 			state.SetDecision(decision.ID, decision.Triage)
 		}
 	})
 	return changed, err
+}
+
+// ApplyDecisions updates the in-memory snapshot and state without touching
+// disk. It replaces the assignments slice instead of mutating it in place, so a
+// view holding the previous slice never observes a concurrent change.
+func (s *Service) ApplyDecisions(decisions map[string]model.Triage) []Decision {
+	assignments := append([]model.Assignment(nil), s.snapshot.Assignments...)
+	var changed []Decision
+	for i := range assignments {
+		triage, ok := decisions[assignments[i].ID]
+		if !ok {
+			continue
+		}
+		assignments[i].Triage = triage
+		changed = append(changed, Decision{ID: assignments[i].ID, Triage: triage})
+	}
+	if len(changed) == 0 {
+		return nil
+	}
+	s.snapshot.Assignments = assignments
+	for _, decision := range changed {
+		s.state.SetDecision(decision.ID, decision.Triage)
+	}
+	return changed
+}
+
+// ApplyDownloaded marks materials as downloaded in the in-memory snapshot
+// without writing state. It is used by the TUI's flag-only demo path.
+func (s *Service) ApplyDownloaded(ids []string) {
+	if len(ids) == 0 {
+		return
+	}
+	wanted := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		wanted[id] = true
+	}
+	materials := append([]model.Material(nil), s.snapshot.Materials...)
+	for i := range materials {
+		if wanted[materials[i].ID] {
+			materials[i].Downloaded = true
+		}
+	}
+	s.snapshot.Materials = materials
 }
 
 // DownloadProgress receives per-material byte progress.

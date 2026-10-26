@@ -90,9 +90,23 @@ func (s *Service) StateErr() string { return s.stateErr }
 func (s *Service) Snapshot() Snapshot { return s.snapshot }
 
 // Update mutates the in-memory state and merges the same change into the
-// on-disk state under the cross-process lock.
+// on-disk state under the cross-process lock. UI callers should use ApplyState
+// plus Persist so the disk write can happen in a tea.Cmd.
 func (s *Service) Update(fn func(*store.State)) error {
 	fn(&s.state)
+	return s.Persist(fn)
+}
+
+// ApplyState mutates only the in-memory state. It performs no I/O and is safe
+// to call from Update.
+func (s *Service) ApplyState(fn func(*store.State)) {
+	fn(&s.state)
+}
+
+// Persist merges fn into the on-disk state under the cross-process lock. It
+// does not touch the in-memory state, so a slow disk write cannot revert a
+// newer decision made while the command was in flight.
+func (s *Service) Persist(fn func(*store.State)) error {
 	if s.statePath == "" {
 		return nil
 	}
