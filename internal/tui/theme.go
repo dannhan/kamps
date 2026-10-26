@@ -7,58 +7,274 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+	"github.com/ruyam/kamps/internal/model"
 )
 
+type themeMode string
+
+const (
+	themeAuto  themeMode = "auto"
+	themeDark  themeMode = "dark"
+	themeLight themeMode = "light"
+	themeMono  themeMode = "mono"
+)
+
+// themeColors holds one resolved palette. Every field is a concrete color so a
+// theme override and monochrome mode behave the same on every terminal. An
+// empty color means "leave the terminal default alone" (mono).
 type themeColors struct {
-	Bg       lipgloss.AdaptiveColor
-	Surface  lipgloss.AdaptiveColor
-	Marked   lipgloss.AdaptiveColor
-	Overlay  lipgloss.AdaptiveColor
-	Border   lipgloss.AdaptiveColor
-	Bright   lipgloss.AdaptiveColor
-	Primary  lipgloss.AdaptiveColor
-	Dim      lipgloss.AdaptiveColor
-	Subtle   lipgloss.AdaptiveColor
-	TreeLine lipgloss.AdaptiveColor
-	Accent   lipgloss.AdaptiveColor
-	Accent2  lipgloss.AdaptiveColor
-	New      lipgloss.AdaptiveColor
-	Tracked  lipgloss.AdaptiveColor
-	Done     lipgloss.AdaptiveColor
-	Ignored  lipgloss.AdaptiveColor
-	Missed   lipgloss.AdaptiveColor
+	Surface  lipgloss.Color
+	Marked   lipgloss.Color
+	Border   lipgloss.Color
+	Bright   lipgloss.Color
+	Primary  lipgloss.Color
+	Dim      lipgloss.Color
+	Subtle   lipgloss.Color
+	Guide    lipgloss.Color
+	TreeLine lipgloss.Color
+	Accent   lipgloss.Color
+
+	New     lipgloss.Color
+	Tracked lipgloss.Color
+	Done    lipgloss.Color
+	Ignored lipgloss.Color
+	Missed  lipgloss.Color
+
+	Mono bool
 }
 
-var themeTokens = themeColors{
-	Bg:      lipgloss.AdaptiveColor{Light: "#FFFFFF", Dark: "#1B1B26"},
-	Surface: lipgloss.AdaptiveColor{Light: "#E4E4E4", Dark: "#333355"},
-	Marked:  lipgloss.AdaptiveColor{Light: "#E2E2F4", Dark: "#413A66"},
-	Overlay: lipgloss.AdaptiveColor{Light: "#F2F2F2", Dark: "#292940"},
-	Border:  lipgloss.AdaptiveColor{Light: "#C8C8D0", Dark: "#3B3E5E"},
-	Bright:  lipgloss.AdaptiveColor{Light: "#1B1B26", Dark: "#EDEDED"},
-	Primary: lipgloss.AdaptiveColor{Light: "#1B1B26", Dark: "#EDEDED"},
-	Dim:     lipgloss.AdaptiveColor{Light: "#5C5C5C", Dark: "#C6C6C6"},
-	Subtle:  lipgloss.AdaptiveColor{Light: "#8A8A8A", Dark: "#8A8A8A"},
-	TreeLine: lipgloss.AdaptiveColor{
-		Light: quietHex("#1B1B26", "#E4E4E4"),
-		Dark:  quietHex("#EDEDED", "#333355"),
-	},
-	Accent:  lipgloss.AdaptiveColor{Light: "#4B4FA0", Dark: "#8288B8"},
-	Accent2: lipgloss.AdaptiveColor{Light: "#4B4FA0", Dark: "#8288B8"},
-	New:     lipgloss.AdaptiveColor{Light: "#8A8A8A", Dark: "#8A8A8A"},
-	Tracked: lipgloss.AdaptiveColor{Light: "#A5680F", Dark: "#E0AF68"},
-	Done:    lipgloss.AdaptiveColor{Light: "#1F8A4C", Dark: "#6FCF97"},
-	Ignored: lipgloss.AdaptiveColor{Light: "#7651A8", Dark: "#B59AE0"},
-	Missed:  lipgloss.AdaptiveColor{Light: "#C0392B", Dark: "#F7768E"},
+func darkColors() themeColors {
+	return themeColors{
+		Surface:  "#3A3A5C",
+		Marked:   "#4D4478",
+		Border:   "#3B3E5E",
+		Bright:   "#EDEDED",
+		Primary:  "#EDEDED",
+		Dim:      "#C6C6C6",
+		Subtle:   "#9A9AA4",
+		Guide:    "#8A8A8A",
+		TreeLine: lipgloss.Color(quietHex("#EDEDED", "#1B1B26")),
+		Accent:   "#9AA0D0",
+		New:      "#9A9AA4",
+		Tracked:  "#E0AF68",
+		Done:     "#6FCF97",
+		Ignored:  "#B59AE0",
+		Missed:   "#F7768E",
+	}
 }
 
-var courseAccents = []lipgloss.AdaptiveColor{
-	{Light: "#3F64A8", Dark: "#8DB4E2"},
-	{Light: "#1F7A6A", Dark: "#6FD0BE"},
-	{Light: "#A5680F", Dark: "#E0AF68"},
-	{Light: "#7651A8", Dark: "#B59AE0"},
-	{Light: "#A63D5C", Dark: "#F08AA8"},
-	{Light: "#3E7D3E", Dark: "#8FD08F"},
+func lightColors() themeColors {
+	return themeColors{
+		Surface:  "#D4D4DE",
+		Marked:   "#CFCFE8",
+		Border:   "#C8C8D0",
+		Bright:   "#1B1B26",
+		Primary:  "#1B1B26",
+		Dim:      "#55555E",
+		Subtle:   "#6B6B75",
+		Guide:    "#8A8A8A",
+		TreeLine: lipgloss.Color(quietHex("#1B1B26", "#FFFFFF")),
+		Accent:   "#3F4390",
+		New:      "#6B6B75",
+		Tracked:  "#96590B",
+		Done:     "#177A43",
+		Ignored:  "#7651A8",
+		Missed:   "#C0392B",
+	}
+}
+
+func monoColors() themeColors {
+	return themeColors{Mono: true}
+}
+
+// themeTokens is the active palette. applyTheme replaces it once before the
+// first render; widgets read styles, never hex values, after that.
+var themeTokens = darkColors()
+
+var courseAccents = darkCourseAccents()
+
+func darkCourseAccents() []lipgloss.Color {
+	return []lipgloss.Color{"#8DB4E2", "#6FD0BE", "#E0AF68", "#B59AE0", "#F08AA8", "#8FD08F"}
+}
+
+func lightCourseAccents() []lipgloss.Color {
+	return []lipgloss.Color{"#3F64A8", "#1F7A6A", "#A63D5C", "#7651A8", "#A5680F", "#3E7D3E"}
+}
+
+func normalizeTheme(value string) themeMode {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "dark":
+		return themeDark
+	case "light":
+		return themeLight
+	case "mono":
+		return themeMono
+	default:
+		return themeAuto
+	}
+}
+
+// resolveTheme turns a configured value into the palette actually used. Auto
+// follows the terminal background; NO_COLOR always wins.
+func resolveTheme(value string) themeMode {
+	mode := normalizeTheme(value)
+	if termenv.EnvNoColor() {
+		return themeMono
+	}
+	if mode != themeAuto {
+		return mode
+	}
+	if lipgloss.HasDarkBackground() {
+		return themeDark
+	}
+	return themeLight
+}
+
+// applyTheme resolves and installs the palette. It is called once from New so
+// tests and the running app see the same styles.
+func applyTheme(value string) {
+	mode := resolveTheme(value)
+	themeTokens = colorsFor(mode)
+	switch {
+	case themeTokens.Mono:
+		courseAccents = nil
+	case mode == themeLight:
+		courseAccents = lightCourseAccents()
+	default:
+		courseAccents = darkCourseAccents()
+	}
+	buildStyles()
+}
+
+func colorsFor(mode themeMode) themeColors {
+	switch mode {
+	case themeLight:
+		return lightColors()
+	case themeMono:
+		return monoColors()
+	default:
+		return darkColors()
+	}
+}
+
+// Styles. These are the only places a color is applied to a widget.
+var (
+	stPrimary  lipgloss.Style
+	stDim      lipgloss.Style
+	stGuide    lipgloss.Style
+	stTreeLine lipgloss.Style
+	stFaint    lipgloss.Style
+	stEmpty    lipgloss.Style
+	stHelpKey  lipgloss.Style
+	stHelpTxt  lipgloss.Style
+	stHelpSep  lipgloss.Style
+
+	stRow     lipgloss.Style
+	stRowDim  lipgloss.Style
+	stCursor  lipgloss.Style
+	stSelMark lipgloss.Style
+
+	stDone    lipgloss.Style
+	stSoon    lipgloss.Style
+	stOverdue lipgloss.Style
+	stCode    lipgloss.Style
+
+	stPaneTitle lipgloss.Style
+	stRule      lipgloss.Style
+	stKey       lipgloss.Style
+
+	stFlagNew lipgloss.Style
+	stFlagT   lipgloss.Style
+	stFlagM   lipgloss.Style
+	stFlagI   lipgloss.Style
+)
+
+func buildStyles() {
+	stPrimary = fgStyle(themeTokens.Primary)
+	stDim = fgStyle(themeTokens.Dim)
+	stGuide = fgStyle(themeTokens.Guide)
+	stTreeLine = fgStyle(themeTokens.TreeLine)
+	stFaint = fgStyle(themeTokens.Subtle)
+	stEmpty = fgStyle(themeTokens.Subtle).Italic(true)
+	stHelpKey = fgStyle(themeTokens.Bright)
+	stHelpTxt = fgStyle(themeTokens.Subtle)
+	stHelpSep = fgStyle(themeTokens.Border)
+
+	stRow = stPrimary
+	stRowDim = fgStyle(themeTokens.Subtle)
+	stCursor = fgStyle(themeTokens.Accent)
+	stSelMark = fgStyle(themeTokens.Accent)
+
+	stDone = fgStyle(themeTokens.Done)
+	stSoon = fgStyle(themeTokens.Dim)
+	stOverdue = fgStyle(themeTokens.Missed).Bold(true)
+	stCode = fgStyle(themeTokens.Accent)
+
+	stPaneTitle = fgStyle(themeTokens.Bright)
+	stRule = fgStyle(themeTokens.Border)
+	stKey = fgStyle(themeTokens.Accent)
+
+	stFlagNew = fgStyle(themeTokens.New)
+	stFlagT = fgStyle(themeTokens.Tracked)
+	stFlagM = fgStyle(themeTokens.Missed)
+	stFlagI = fgStyle(themeTokens.Ignored)
+}
+
+// fgStyle leaves the color alone in mono mode.
+func fgStyle(color lipgloss.Color) lipgloss.Style {
+	if color == "" {
+		return lipgloss.NewStyle()
+	}
+	return lipgloss.NewStyle().Foreground(color)
+}
+
+// bandStyle paints a background band, except in mono mode where the band would
+// be noise and the gutter/mark glyph carries the state.
+func bandStyle(style lipgloss.Style, color lipgloss.Color) lipgloss.Style {
+	if color == "" {
+		return style
+	}
+	return style.Background(color)
+}
+
+// tabCellStyle is the tab strip: the active tab is bold and underlined, not a
+// filled block, so it cannot mismatch the user's terminal background.
+func tabCellStyle(active bool) lipgloss.Style {
+	if active {
+		return fgStyle(themeTokens.Accent).Bold(true).Underline(true)
+	}
+	return fgStyle(themeTokens.Subtle)
+}
+
+func courseStyle(courseID int) lipgloss.Style {
+	if len(courseAccents) == 0 {
+		return lipgloss.NewStyle()
+	}
+	index := courseID % len(courseAccents)
+	if index < 0 {
+		index = -index
+	}
+	return fgStyle(courseAccents[index])
+}
+
+func triageStyle(t model.Triage) lipgloss.Style {
+	switch t {
+	case model.Tracked:
+		return stFlagT
+	case model.Missed:
+		return stFlagM
+	case model.Ignored:
+		return stFlagI
+	}
+	return stFlagNew
+}
+
+func materialStateStyle(downloaded bool) lipgloss.Style {
+	if downloaded {
+		return stDone
+	}
+	return stFlagNew
 }
 
 func quietHex(foreground, background string) string {
@@ -102,33 +318,3 @@ func quietHex(foreground, background string) string {
 	}
 	return value.String()
 }
-
-var (
-	stPrimary  = lipgloss.NewStyle().Foreground(themeTokens.Primary)
-	stDim      = lipgloss.NewStyle().Foreground(themeTokens.Dim)
-	stTreeLine = lipgloss.NewStyle().Foreground(themeTokens.TreeLine)
-	stFaint    = lipgloss.NewStyle().Foreground(themeTokens.Subtle)
-	stEmpty    = lipgloss.NewStyle().Foreground(themeTokens.Subtle).Italic(true)
-	stHelpKey  = lipgloss.NewStyle().Foreground(themeTokens.Bright)
-	stHelpTxt  = lipgloss.NewStyle().Foreground(themeTokens.Subtle)
-	stHelpSep  = lipgloss.NewStyle().Foreground(themeTokens.Border)
-
-	stRow     = stPrimary
-	stRowDim  = lipgloss.NewStyle().Foreground(themeTokens.Subtle)
-	stCursor  = lipgloss.NewStyle().Foreground(themeTokens.Accent)
-	stSelMark = lipgloss.NewStyle().Foreground(themeTokens.Accent)
-
-	stDone    = lipgloss.NewStyle().Foreground(themeTokens.Done)
-	stSoon    = lipgloss.NewStyle().Foreground(themeTokens.Dim)
-	stOverdue = lipgloss.NewStyle().Foreground(themeTokens.Missed)
-	stCode    = lipgloss.NewStyle().Foreground(themeTokens.Accent)
-
-	stPaneTitle = lipgloss.NewStyle().Foreground(themeTokens.Bright)
-	stRule      = lipgloss.NewStyle().Foreground(themeTokens.Border)
-	stKey       = lipgloss.NewStyle().Foreground(themeTokens.Accent)
-
-	stFlagNew = lipgloss.NewStyle().Foreground(themeTokens.New)
-	stFlagT   = lipgloss.NewStyle().Foreground(themeTokens.Tracked)
-	stFlagM   = lipgloss.NewStyle().Foreground(themeTokens.Missed)
-	stFlagI   = lipgloss.NewStyle().Foreground(themeTokens.Ignored)
-)

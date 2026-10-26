@@ -6,86 +6,67 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/ruyam/kamps/internal/model"
 )
 
-// taskRowRightPad keeps the tree's right edge (course counts, state labels)
-// off the pane divider and the terminal edge. The padding is painted with the
-// row highlight, so a cursor row still reaches the edge as one band.
-const taskRowRightPad = 2
-
 func (m *App) taskTreeRow(nodes []node, index, width int) string {
 	n := nodes[index]
+	group := m.isTaskGroup(n)
+	ids := m.taskGroupIDs(n)
 	selected := false
 	if n.kind == nodeTask {
 		selected = m.selected[n.task.ID]
-	} else if m.isTaskGroup(n) {
-		selected = allSelected(m.selected, m.taskGroupIDs(n))
+	} else if group {
+		selected = allSelected(m.selected, ids)
 	}
-	h := rowHighlight{cursor: index == m.taskCursor, mark: selected}
-	background := h.style
-	prefix := h.gutter() + background(stFaint).Render(treeGuides(nodes, index))
-	available := maxInt(1, width-lipgloss.Width(prefix)-taskRowRightPad)
-	group := m.isTaskGroup(n)
 	open := group && m.taskIsOpen(n.key, taskNodeDefaultOpen(n))
-	content := ""
+	spec := treeRowSpec{
+		nodes:      nodes,
+		index:      index,
+		width:      width,
+		cursor:     index == m.taskCursor,
+		selected:   selected,
+		partial:    !selected && partialSelected(m.selected, ids),
+		expandable: group,
+		open:       open,
+	}
 	switch n.kind {
 	case nodeCourse:
 		name := m.shortCode(n.courseID)
 		if course, ok := m.courseByID(n.courseID); ok && course.Name != "" {
 			name = course.Name
 		}
-		meta := m.taskCourseMeta(n.courseID, h)
-		nameWidth := available - lipgloss.Width(meta) - 3
-		if meta == "" {
-			nameWidth = available
+		spec.title = func(h rowHighlight) string {
+			return h.style(courseStyle(n.courseID).Bold(true)).Render(name)
 		}
-		if nameWidth < 4 {
-			meta = ""
-			nameWidth = available
-		}
-		lead := h.containerLead(open, selected)
-		name = ansi.Truncate(name, maxInt(1, nameWidth-lipgloss.Width(lead)), "…")
-		content = h.alignRight(lead+h.style(courseStyle(n.courseID).Bold(true)).Render(name), meta, available)
+		spec.meta = func(h rowHighlight) string { return m.taskCourseMeta(n.courseID, h) }
 	case nodeBucket:
-		content = h.containerLead(open, selected) + background(stRow).Render(fmt.Sprintf("%s (%d)", n.bucket, len(m.taskGroupIDs(n))))
-	case nodeTask:
-		marker := h.markCell(selected)
-		caret := ""
-		if group {
-			caret = background(stFaint).Render(caretGlyph(open)) + background(stRow).Render(" ")
+		spec.title = func(h rowHighlight) string {
+			return h.primaryStyle().Render(fmt.Sprintf("%s (%d)", n.bucket, len(ids)))
 		}
-		now := time.Now()
-		age := dueAge(n.task, now)
+	case nodeTask:
+		now := m.currentTime()
 		ageStyle := stRowDim
 		if n.task.HasDue && n.task.Due.Before(now) {
 			ageStyle = stOverdue
 		}
-		ageText := background(ageStyle).Render(age)
-		lead := marker + background(stRow).Render(" ") + caret
-		nameWidth := maxInt(1, available-lipgloss.Width(lead)-lipgloss.Width(ageText)-1)
-		name := background(stRow).Render(ansi.Truncate(n.task.Name, nameWidth, "…"))
-		gap := maxInt(1, available-lipgloss.Width(lead)-lipgloss.Width(name)-lipgloss.Width(ageText))
-		content = lead + name + background(stRow).Render(strings.Repeat(" ", gap)) + ageText
+		due := dueCell(n.task, now)
+		name := taskDisplayName(n.task.Name)
+		spec.title = func(h rowHighlight) string { return h.primaryStyle().Render(name) }
+		spec.meta = func(h rowHighlight) string { return h.style(ageStyle).Render(due) }
 	case nodeTaskMaterial:
-		_, style := materialTreeState(n.mat)
 		glyph := "○"
 		if n.mat.Downloaded {
 			glyph = "●"
 		}
-		label := ansi.Truncate(n.mat.Name, maxInt(1, available-5), "…")
-		space := background(stRow).Render(" ")
-		content = background(style).Render(glyph) + space + background(stFaint).Render("⁝") + space + background(stRow).Render(label)
+		_, style := materialTreeState(n.mat)
+		spec.expandable = false
+		spec.glyph = glyph
+		spec.glyphStyle = style
+		spec.prefix = func(h rowHighlight) string { return h.style(stFaint).Render("⁝ ") }
+		spec.title = func(h rowHighlight) string { return h.primaryStyle().Render(n.mat.Name) }
 	}
-
-	content = ansiTruncate(content, available)
-	row := prefix + content
-	padding := strings.Repeat(" ", maxInt(0, width-lipgloss.Width(row)))
-	if h.band() {
-		padding = background(stRow).Render(padding)
-	}
-	return row + padding
+	return m.treeRow(spec)
 }
 
 func (m *App) isTaskGroup(n node) bool {
@@ -203,25 +184,26 @@ func (m *App) tasksContent(width, height int) (string, string, []string, []strin
 		title = m.searchTitle()
 		right = rightAligned(fmt.Sprintf("%d %s", matches, plural(matches, "match", "matches")), hint)
 	} else {
-		title = fmt.Sprintf("courses · %s · %d assignments", m.filter, matches)
-		right = hint
+		title = fmt.Sprintf("tasks › %s", m.filter)
+		right = rightAligned(fmt.Sprintf("%d assignments", matches), hint)
 	}
 	filterHint := "f filter"
 	if m.filter != "all" || m.search != "" {
 		filterHint = "esc clear"
 	}
 	detailHint := "enter detail"
-	if m.detailVisible() {
+	switch m.detailMode() {
+	case detailSplit:
 		detailHint = "enter hide"
+	case detailReplace:
+		detailHint = "esc back"
 	}
 	hints := []string{"↑↓ move", "t/m/i decide", "c commit", filterHint, detailHint, "? more"}
 	leftWidth := width
-	if m.detailVisible() {
+	if m.detailMode() == detailSplit {
 		leftWidth, _ = splitWidths(width)
 	}
 	rows := m.taskRows(nodes, leftWidth, height)
-	if m.detailVisible() {
-		rows = m.splitTreeRows(rows, nodes, m.taskCursor, width, height)
-	}
+	rows = m.detailBody(rows, nodes, m.taskCursor, width, height)
 	return title, right, hints, rows
 }

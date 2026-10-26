@@ -14,6 +14,7 @@ type options struct {
 	source       string
 	commitFile   string
 	exportFormat string
+	theme        string
 }
 
 // parseOptions strips kamps' global flags from args and returns the remaining
@@ -52,6 +53,14 @@ func parseOptions(args []string) (options, []string, error) {
 			opts.exportFormat = args[i]
 		case strings.HasPrefix(arg, "--export-format="):
 			opts.exportFormat = strings.TrimPrefix(arg, "--export-format=")
+		case arg == "--theme":
+			if i+1 >= len(args) {
+				return opts, nil, fmt.Errorf("--theme needs a value")
+			}
+			i++
+			opts.theme = args[i]
+		case strings.HasPrefix(arg, "--theme="):
+			opts.theme = strings.TrimPrefix(arg, "--theme=")
 		default:
 			rest = append(rest, arg)
 		}
@@ -72,6 +81,13 @@ func (o options) apply(cfg *config.Config) error {
 			return err
 		}
 		cfg.ExportFormat = strings.ToLower(o.exportFormat)
+	}
+	if o.theme != "" {
+		theme, ok := config.NormalizeTheme(o.theme)
+		if !ok {
+			return fmt.Errorf("--theme must be auto, dark, light, or mono")
+		}
+		cfg.Theme = theme
 	}
 	return nil
 }

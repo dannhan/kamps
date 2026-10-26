@@ -2,37 +2,33 @@ package tui
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/ruyam/kamps/internal/model"
 )
 
 func materialTreeState(material model.Material) (string, lipgloss.Style) {
 	if material.Downloaded {
-		return "downloaded", stDone
+		return "downloaded", materialStateStyle(true)
 	}
-	return "new", stFlagNew
+	return "new", materialStateStyle(false)
 }
-
-// matRowRightPad reserves a small gap before the terminal edge. The row-band
-// fill beyond the content keeps the cursor highlight visually continuous.
-const matRowRightPad = 2
 
 func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 	n := nodes[index]
-	h := rowHighlight{cursor: index == m.matCursor, mark: selected}
-	background := h.style
-	prefix := h.gutter() + background(stFaint).Render(treeGuides(nodes, index))
-	inner := maxInt(1, width-matRowRightPad)
+	ids := m.materialNodeIDs(n)
 	parent := m.materialHasChildren(n)
 	open := n.key != "" && m.isOpen(n.key)
-	lead := ""
-	if parent {
-		lead = h.containerLead(open, selected)
+	spec := treeRowSpec{
+		nodes:      nodes,
+		index:      index,
+		width:      width,
+		cursor:     index == m.matCursor,
+		selected:   selected,
+		partial:    !selected && partialSelected(m.selectedM, ids),
+		expandable: parent,
+		open:       open,
 	}
-	content := ""
 	switch n.kind {
 	case nodeCourse:
 		name := m.shortCode(n.courseID)
@@ -41,41 +37,42 @@ func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 		} else if course, ok := m.courseByID(n.courseID); ok && course.Name != "" {
 			name = course.Name
 		}
-		meta := m.materialCourseMeta(n.courseID, h)
-		nameWidth := inner - lipgloss.Width(meta) - 3
-		if meta == "" {
-			nameWidth = inner
+		spec.title = func(h rowHighlight) string {
+			return h.style(courseStyle(n.courseID).Bold(true)).Render(name)
 		}
-		if nameWidth < 4 {
-			meta = ""
-			nameWidth = inner
-		}
-		name = ansi.Truncate(name, maxInt(1, nameWidth-lipgloss.Width(lead)), "…")
-		content = h.alignRight(lead+h.style(courseStyle(n.courseID).Bold(true)).Render(name), meta, inner)
+		spec.meta = func(h rowHighlight) string { return m.materialCourseMeta(n.courseID, h) }
 	case nodeMaterialSection:
-		content = lead + background(stRow).Render(fmt.Sprintf("%s (%d)", n.section, len(m.materialNodeFiles(n))))
+		count := len(m.materialNodeFiles(n))
+		spec.title = func(h rowHighlight) string {
+			return h.primaryStyle().Render(fmt.Sprintf("%s (%d)", n.section, count))
+		}
 	case nodeMaterialFolder:
-		content = lead + background(stRow).Render(fmt.Sprintf("%s/ (%d)", n.mat.Folder, len(m.materialNodeFiles(n))))
+		count := len(m.materialNodeFiles(n))
+		spec.reserveGlyph = true
+		spec.title = func(h rowHighlight) string {
+			return h.primaryStyle().Render(fmt.Sprintf("%s/ (%d)", n.mat.Folder, count))
+		}
 	case nodeFile:
-		_, stateStyle := materialTreeState(n.mat)
-		state := "○"
+		glyph := "○"
 		if n.mat.Downloaded {
-			state = "●"
+			glyph = "●"
 		}
-		caret := ""
-		if parent {
-			caret = h.style(stFaint).Render(caretGlyph(open)) + h.style(stRow).Render(" ")
-		}
-		nameWidth := maxInt(1, inner-lipgloss.Width(prefix)-6-lipgloss.Width(caret))
-		content = background(stateStyle).Render(state) +
-			background(stRow).Render(" ") + h.markCell(selected) + background(stRow).Render(" ") + caret +
-			background(stRow).Render(ansi.Truncate(n.mat.Name, nameWidth, "…"))
+		_, style := materialTreeState(n.mat)
+		spec.reserveGlyph = true
+		spec.glyph = glyph
+		spec.glyphStyle = style
+		spec.title = func(h rowHighlight) string { return h.primaryStyle().Render(n.mat.Name) }
 	case nodeMaterialAssignment:
-		content = background(triageStyle(n.task.Triage)).Render(flagChar(n.task.Triage)) + background(stFaint).Render(" ⁝ ") + background(stRow).Render("assignment: "+n.task.Name) + background(stRowDim).Render(" · "+n.task.ID)
+		spec.reserveGlyph = true
+		spec.glyph = flagChar(n.task.Triage)
+		spec.glyphStyle = triageStyle(n.task.Triage)
+		spec.prefix = func(h rowHighlight) string { return h.style(stFaint).Render("⁝ ") }
+		name := taskDisplayName(n.task.Name)
+		spec.title = func(h rowHighlight) string {
+			return h.primaryStyle().Render("assignment: "+name) + h.style(stRowDim).Render(" · "+n.task.ID)
+		}
 	}
-	row := prefix + content
-	row = ansiTruncate(row, inner)
-	return row + background(stRow).Render(strings.Repeat(" ", maxInt(0, width-lipgloss.Width(row))))
+	return m.treeRow(spec)
 }
 
 func (m *App) materialHasChildren(n node) bool {
@@ -99,28 +96,29 @@ func (m *App) materialsContent(width, height int) (string, string, []string, []s
 		title = m.searchTitle()
 		right = rightAligned(fmt.Sprintf("%d %s", matches, plural(matches, "match", "matches")), hint)
 	} else if m.filter == "unknown" {
-		title = fmt.Sprintf("materials · %d files not in source", len(m.unknownFiles))
-		right = hint
+		title = "materials › unknown"
+		right = rightAligned(fmt.Sprintf("%d files not in source", len(m.unknownFiles)), hint)
 	} else {
-		title = fmt.Sprintf("materials · %d files · %d local", len(m.materials), m.downloadedMaterials())
-		right = hint
+		title = fmt.Sprintf("materials › %s", m.filter)
+		right = rightAligned(fmt.Sprintf("%d files · %d local", len(m.materials), m.downloadedMaterials()), hint)
 	}
 	detailHint := "enter detail"
-	if m.detailVisible() {
+	switch m.detailMode() {
+	case detailSplit:
 		detailHint = "enter hide"
+	case detailReplace:
+		detailHint = "esc back"
 	}
 	hints := []string{"↑↓ move", "d download", "o open", detailHint, "? more"}
 	if m.filter != "all" {
 		hints = append(hints, "esc clear")
 	}
 	leftWidth := width
-	if m.detailVisible() {
+	if m.detailMode() == detailSplit {
 		leftWidth, _ = splitWidths(width)
 	}
 	rows := m.materialRows(nodes, leftWidth, height)
-	if m.detailVisible() {
-		rows = m.splitTreeRows(rows, nodes, m.matCursor, width, height)
-	}
+	rows = m.detailBody(rows, nodes, m.matCursor, width, height)
 	return title, right, hints, rows
 }
 

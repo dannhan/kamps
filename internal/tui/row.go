@@ -6,16 +6,17 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// rowHighlight holds the two independent decorations a list row can carry: the
-// cursor (where the keyboard is) and the mark (what space has selected).
+// rowHighlight holds the independent decorations a list row can carry: the
+// cursor (where the keyboard is), a mark (what space has selected), and a
+// partial mark (a container where only some children are selected).
 //
-// They are deliberately different. The cursor uses the strong Surface band and
-// an accent gutter; marks use the softer Marked band and a filled square. That
-// way a heavily marked tree still shows where the cursor is, and an unmarked
-// row never looks selected.
+// They are deliberately different. The cursor uses the Surface band and an
+// accent gutter; marks use the Marked band and a square. Every band is paired
+// with a glyph so focus and selection survive monochrome.
 type rowHighlight struct {
-	cursor bool
-	mark   bool
+	cursor  bool
+	mark    bool
+	partial bool
 }
 
 func (h rowHighlight) band() bool { return h.cursor || h.mark }
@@ -26,12 +27,21 @@ func (h rowHighlight) band() bool { return h.cursor || h.mark }
 func (h rowHighlight) style(s lipgloss.Style) lipgloss.Style {
 	switch {
 	case h.cursor:
-		return s.Background(themeTokens.Surface)
+		return bandStyle(s, themeTokens.Surface)
 	case h.mark:
-		return s.Background(themeTokens.Marked)
+		return bandStyle(s, themeTokens.Marked)
 	default:
 		return s
 	}
+}
+
+// primaryStyle is the row's main label: the band plus bold on the cursor row.
+func (h rowHighlight) primaryStyle() lipgloss.Style {
+	style := h.style(stRow)
+	if h.cursor {
+		style = style.Bold(true)
+	}
+	return style
 }
 
 // gutter is the row's left-edge cell: an accent bar on the cursor row, a blank
@@ -55,7 +65,10 @@ func (h rowHighlight) blanks(n int) string {
 	return h.style(stRow).Render(strings.Repeat(" ", n))
 }
 
-const markFull = "▪"
+const (
+	markFull    = "▪"
+	markPartial = "▫"
+)
 
 // caretGlyph is the expand/collapse indicator drawn before a parent row's
 // name. Open containers show a down caret, folded ones a right caret.
@@ -66,40 +79,34 @@ func caretGlyph(open bool) string {
 	return "▸"
 }
 
-// containerLead renders the shared first columns of a parent row: the caret
-// that says whether the container is open, then the mark column. It lives in
-// the same slot as a task's triage glyph and mark, so child names line up.
-func (h rowHighlight) containerLead(open, marked bool) string {
-	return h.style(stFaint).Render(caretGlyph(open)) + h.style(stRow).Render(" ") +
-		h.markCell(marked) + h.style(stRow).Render(" ")
-}
-
-// markCell renders the mark column: a hollow square for an unmarked row and a
-// filled accent square for a marked one.
-func (h rowHighlight) markCell(marked bool) string {
-	if marked {
+// markCell renders the mark column: blank, a filled accent square when the row
+// (or its whole group) is selected, and a hollow square when only part of a
+// group is selected.
+func (h rowHighlight) markCell() string {
+	switch {
+	case h.mark:
 		return h.style(stSelMark).Render(markFull)
+	case h.partial:
+		return h.style(stSelMark).Render(markPartial)
+	default:
+		return h.style(stRow).Render(" ")
 	}
-	return h.style(stRow).Render(" ")
 }
 
-func (h rowHighlight) alignRight(content, meta string, width int) string {
-	if meta == "" {
-		return content
+// paneRow is the shared row renderer for lists that do not paint cell by cell:
+// Commit groups and command-palette results. It uses the same cursor language
+// as the trees.
+func paneRow(content string, width int, state rowHighlight) string {
+	prefix := state.style(stRow).Render(" ")
+	if state.cursor {
+		prefix = state.style(stCursor).Render("▌")
 	}
-	gap := width - lipgloss.Width(content) - lipgloss.Width(meta)
-	if gap < 1 {
-		return content
+	available := maxInt(0, width-lipgloss.Width(prefix))
+	content = ansiTruncate(content, available)
+	padding := strings.Repeat(" ", maxInt(0, available-lipgloss.Width(content)))
+	if state.band() {
+		content = state.style(lipgloss.NewStyle()).Render(content)
+		padding = state.style(stRow).Render(padding)
 	}
-	return content + h.style(stRow).Render(strings.Repeat(" ", gap)) + meta
-}
-
-func sharedFocusRow(content string, width int, focused bool) string {
-	content = ansiTruncate(content, maxInt(0, width))
-	padding := strings.Repeat(" ", maxInt(0, width-lipgloss.Width(content)))
-	if focused {
-		content = lipgloss.NewStyle().Background(themeTokens.Surface).Render(content)
-		padding = stRow.Background(themeTokens.Surface).Render(padding)
-	}
-	return content + padding
+	return prefix + content + padding
 }

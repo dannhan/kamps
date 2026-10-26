@@ -141,17 +141,25 @@ func TestMaterialRowsShowDownloadedMarkerOnly(t *testing.T) {
 	}
 }
 
-func TestMaterialsStartCollapsed(t *testing.T) {
+func TestMaterialsStartWithSectionsOpen(t *testing.T) {
 	app := demoApp(t)
 	app.expanded = map[string]bool{}
 	app.tab = TabMaterials
 	nodes := app.matNodes()
-	foundSection, foundFile := false, false
+	foundSection, foundFile, foundFolder := false, false, false
+	folderFile := false
 	for _, n := range nodes {
 		foundSection = foundSection || n.kind == nodeMaterialSection
 		foundFile = foundFile || n.kind == nodeFile
+		foundFolder = foundFolder || n.kind == nodeMaterialFolder
+		if n.kind == nodeFile && n.mat.Folder != "" {
+			folderFile = true
+		}
 	}
-	if !foundSection || foundFile {
-		t.Fatalf("materials should start with weeks collapsed: section=%v file=%v", foundSection, foundFile)
+	if !foundSection || !foundFile {
+		t.Fatalf("materials should start with weeks open: section=%v file=%v", foundSection, foundFile)
+	}
+	if foundFolder && folderFile {
+		t.Fatal("folders should stay closed until the user opens them")
 	}
 }

@@ -80,7 +80,7 @@ func TestTaskTreeIndentAndRowWidth(t *testing.T) {
 	app := demoApp(t)
 	nodes := app.taskNodes()
 	course := findTaskNode(nodes, nodeCourse, "")
-	if got := treeGuides(nodes, course); got != "" {
+	if got := treePrefix(nodes, course); got != "" {
 		t.Fatalf("top-level guide = %q, want empty", got)
 	}
 	app.taskCursor = course
@@ -105,7 +105,7 @@ func TestCoursesTreeViewsAt100And80Columns(t *testing.T) {
 				t.Fatalf("width %d line %d has width %d: %q", width, i+1, got, stripANSI(line))
 			}
 		}
-		if !strings.Contains(view, "courses · all") || !strings.Contains(view, "Proyek Perangkat Lunak A") || strings.Contains(stripANSI(view), "other") {
+		if !strings.Contains(view, "tasks › all") || !strings.Contains(view, "Proyek Perangkat Lunak A") || strings.Contains(stripANSI(view), "other") {
 			t.Fatalf("%d-column view is missing expected content:\n%s", width, stripANSI(view))
 		}
 	}

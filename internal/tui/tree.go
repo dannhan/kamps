@@ -89,14 +89,13 @@ func taskNodeDefaultOpen(n node) bool {
 	return true
 }
 
-// isOpen defaults to open: a tree that arrives collapsed is a tree nobody
-// asked for. Collapsing is the explicit act.
+// isOpen defaults courses and week sections to open so the Materials tab shows
+// files immediately; folders stay folded until asked for.
 func (m *App) isOpen(key string) bool {
-	v, ok := m.expanded[key]
-	if ok {
+	if v, ok := m.expanded[key]; ok {
 		return v
 	}
-	if strings.HasPrefix(key, "ms:") || strings.HasPrefix(key, "mf:") {
+	if strings.HasPrefix(key, "mf:") {
 		return false
 	}
 	return true
@@ -159,6 +158,72 @@ func allSelected(set map[string]bool, ids []string) bool {
 	return true
 }
 
-func treeGuides(nodes []node, index int) string {
-	return strings.Repeat("  ", nodes[index].depth())
+// treePrefix draws the connector prefix for one flat-tree row. Each depth has
+// one three-cell column: ancestors get "│  " while they still have a sibling
+// below them, and the row itself gets "├─ " unless it is the last sibling.
+func treePrefix(nodes []node, index int) string {
+	n := nodes[index]
+	depth := n.depth()
+	if depth == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for column := 0; column < depth; column++ {
+		if column == depth-1 {
+			// The row's own branch depends on later nodes at the same depth
+			// under the same parent chain, not on the parent's siblings.
+			if hasLaterSibling(nodes, index, depth, n.parents) {
+				b.WriteString("├─ ")
+			} else {
+				b.WriteString("└─ ")
+			}
+			continue
+		}
+		// Column 0 belongs to the depth-1 ancestor (the group), not to the
+		// top-level course. Courses are roots: their sibling status is not a
+		// rail inside the tree.
+		ancestorDepth := column + 1
+		chain := n.parents
+		if ancestorDepth < len(chain) {
+			chain = chain[:ancestorDepth]
+		} else {
+			chain = nil
+		}
+		if hasLaterSibling(nodes, index, ancestorDepth, chain) {
+			b.WriteString("│  ")
+		} else {
+			b.WriteString("   ")
+		}
+	}
+	return b.String()
+}
+
+// hasLaterSibling reports whether another row at the same depth shares the same
+// ancestor chain after index.
+func hasLaterSibling(nodes []node, index, level int, chain []string) bool {
+	for j := index + 1; j < len(nodes); j++ {
+		other := nodes[j]
+		if other.depth() < level {
+			return false
+		}
+		if other.depth() != level {
+			continue
+		}
+		if prefixEqual(other.parents, chain) {
+			return true
+		}
+	}
+	return false
+}
+
+func prefixEqual(parents, chain []string) bool {
+	if len(chain) > len(parents) {
+		return false
+	}
+	for i := range chain {
+		if parents[i] != chain[i] {
+			return false
+		}
+	}
+	return true
 }

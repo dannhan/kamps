@@ -2,6 +2,7 @@ package tui
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -23,14 +24,12 @@ type clipboardMsg struct {
 	err   error
 }
 
-// clipboardCmd copies text through OSC 52, which most terminals accept without
-// an extra dependency. The sequence moves no cursor and draws nothing.
-func clipboardCmd(text string) tea.Cmd {
-	return func() tea.Msg {
-		encoded := base64.StdEncoding.EncodeToString([]byte(text))
-		_, err := os.Stdout.WriteString("\x1b]52;c;" + encoded + "\a")
-		return clipboardMsg{lines: len(strings.Split(text, "\n")), err: err}
-	}
+// writeClipboard copies text through OSC 52, which most terminals accept
+// without an extra dependency. The sequence moves no cursor and draws nothing.
+func writeClipboard(text string) clipboardMsg {
+	encoded := base64.StdEncoding.EncodeToString([]byte(text))
+	_, err := os.Stdout.WriteString("\x1b]52;c;" + encoded + "\a")
+	return clipboardMsg{lines: len(strings.Split(text, "\n")), err: err}
 }
 
 // commitPreviewText is exactly what the queue would hand to a todo list.
@@ -38,16 +37,31 @@ func (m *App) commitPreviewText() string {
 	return m.commitPreviewTextForFormat()
 }
 
-// copyCommitPreview puts the preview lines on the clipboard, or explains that
-// there is nothing queued yet.
+// copyCommitPreview puts the preview lines on the clipboard. The preview may
+// read the existing commit file, so it is built inside the command rather than
+// in Update.
 func (m *App) copyCommitPreview() tea.Cmd {
-	text := m.commitPreviewText()
-	if text == "" {
+	if m.queue.Len() == 0 {
 		m.toast = "nothing to copy · decide in Tasks first"
 		m.toastTicks = 20
 		return nil
 	}
-	return clipboardCmd(text)
+	writer, err := m.exportWriter()
+	if err != nil {
+		m.toast = "copy failed"
+		m.statusErr = err.Error()
+		m.toastTicks = 30
+		return nil
+	}
+	items := m.exportItems()
+	commitFile := m.cfg.CommitFile
+	return func() tea.Msg {
+		text := previewText(writer, items, commitFile)
+		if text == "" {
+			return clipboardMsg{err: errors.New("nothing to copy")}
+		}
+		return writeClipboard(text)
+	}
 }
 
 // dropCommitItem removes the focused decision from the queue. The decision
@@ -74,25 +88,6 @@ func (m *App) closeCommit() {
 	}
 }
 
-// queueLabel summarises what `c` would commit.
-func (m *App) queueLabel() string {
-	t, mi, ig := m.pendingCounts()
-	if t == 0 && mi == 0 && ig == 0 {
-		return stFaint.Render("queue empty ")
-	}
-	parts := []string{}
-	if t > 0 {
-		parts = append(parts, stFlagT.Render(fmt.Sprintf("%d track", t)))
-	}
-	if mi > 0 {
-		parts = append(parts, stFlagM.Render(fmt.Sprintf("%d missed", mi)))
-	}
-	if ig > 0 {
-		parts = append(parts, stFlagI.Render(fmt.Sprintf("%d ignore", ig)))
-	}
-	return strings.Join(parts, stFaint.Render(" · ")) + stFaint.Render(" to commit ")
-}
-
 type commitItem struct {
 	assignment model.Assignment
 	action     model.Triage
@@ -108,6 +103,7 @@ func (m *App) commitItems() []commitItem {
 }
 
 func (m *App) commitBody(width, height int) []string {
+	contentWidth := maxInt(1, width-1) // the shared row renderer reserves a gutter
 	items := m.commitItems()
 	type displayRow struct {
 		text    string
@@ -129,18 +125,18 @@ func (m *App) commitBody(width, height int) []string {
 			cursorRow = len(all)
 		}
 		lead := "  " + a.ID + " · " + course + " · "
-		nameWidth := maxInt(1, width-lipgloss.Width(lead))
-		all = append(all, displayRow{text: stRow.Render(lead + truncate(a.Name, nameWidth)), focused: focusIndex == m.commitCursor})
+		nameWidth := maxInt(1, contentWidth-lipgloss.Width(lead))
+		all = append(all, displayRow{text: stRow.Render(lead + truncate(taskDisplayName(a.Name), nameWidth)), focused: focusIndex == m.commitCursor})
 		focusIndex++
 		if item.action == model.Tracked {
-			all = append(all, displayRow{text: "    " + stDim.Render(truncate(m.taskLine(a), maxInt(1, width-4)))})
+			all = append(all, displayRow{text: "    " + stDim.Render(truncate(m.taskLine(a), maxInt(1, contentWidth-4)))})
 		}
 		if a.HasDue && a.Due.Before(time.Now()) {
 			all = append(all, displayRow{text: "    " + stOverdue.Render("will show as OVERDUE")})
 		}
 		if similar := m.similarManualTask(a); similar != "" {
 			line := fmt.Sprintf("similar manual task: %q", similar)
-			all = append(all, displayRow{text: "    " + stDim.Render(truncate(line, maxInt(1, width-4)))})
+			all = append(all, displayRow{text: "    " + stDim.Render(truncate(line, maxInt(1, contentWidth-4)))})
 		}
 		all = append(all, displayRow{text: ""})
 	}
@@ -153,7 +149,7 @@ func (m *App) commitBody(width, height int) []string {
 	start, end := windowRange(len(all), cursorRow, height)
 	rows := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
-		rows = append(rows, sharedFocusRow(all[i].text, width, all[i].focused))
+		rows = append(rows, paneRow(all[i].text, width, rowHighlight{cursor: all[i].focused}))
 	}
 	return rows
 }

@@ -21,6 +21,30 @@ const (
 	defaultSiteURL = "https://kulon2.undip.ac.id"
 )
 
+// Theme names accepted by the tui package.
+const (
+	ThemeAuto  = "auto"
+	ThemeDark  = "dark"
+	ThemeLight = "light"
+	ThemeMono  = "mono"
+)
+
+// NormalizeTheme returns the canonical theme name, or false when value is not
+// one of auto, dark, light, or mono. An empty value means auto.
+func NormalizeTheme(value string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", ThemeAuto:
+		return ThemeAuto, true
+	case ThemeDark:
+		return ThemeDark, true
+	case ThemeLight:
+		return ThemeLight, true
+	case ThemeMono:
+		return ThemeMono, true
+	}
+	return "", false
+}
+
 // Config is the resolved runtime configuration.
 type Config struct {
 	// SiteURL is the LMS base URL (empty until configured).
@@ -43,6 +67,8 @@ type Config struct {
 	AutoTrackSubmitted bool
 	// NoAnim disables cheerful motion.
 	NoAnim bool
+	// Theme is auto, dark, light, or mono.
+	Theme string
 }
 
 // Default returns the XDG-ish default configuration.
@@ -56,6 +82,7 @@ func Default() Config {
 		Source:             "kulon2",
 		ExportFormat:       "markdown",
 		AutoTrackSubmitted: true,
+		Theme:              ThemeAuto,
 	}
 }
 
@@ -136,6 +163,13 @@ func LoadFrom(path string) (Config, error) {
 	if file.AutoTrackSubmitted != nil {
 		cfg.AutoTrackSubmitted = *file.AutoTrackSubmitted
 	}
+	if theme := strings.TrimSpace(file.Theme); theme != "" {
+		normalized, ok := NormalizeTheme(theme)
+		if !ok {
+			return cfg, fmt.Errorf("%s: theme must be auto, dark, light, or mono", path)
+		}
+		cfg.Theme = normalized
+	}
 	return cfg, nil
 }
 
@@ -147,6 +181,7 @@ type fileConfig struct {
 	CommitFile         string   `toml:"commit_file"`
 	ExportFormat       string   `toml:"export_format"`
 	AutoTrackSubmitted *bool    `toml:"auto_track_submitted"`
+	Theme              string   `toml:"theme"`
 }
 
 // ConfigPath is the TOML file read by Load.

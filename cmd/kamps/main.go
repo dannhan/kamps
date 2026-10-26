@@ -176,6 +176,7 @@ FLAGS
   --source NAME                 select an in-tree source (demo, kulon2)
   --commit-file PATH            default export target for the Commit tab
   --export-format FORMAT        markdown, todo, or taskwarrior
+  --theme NAME                  auto, dark, light, or mono
   --no-anim                     no spinner or progress motion
 
 CONFIG
@@ -187,6 +188,7 @@ CONFIG
     commit_file = "~/notes/tasks.md"
     export_format = "markdown"
     auto_track_submitted = true
+    theme = "auto"
 
 SCREENS
   1 Tasks       2 Materials       3 Sync       4 Commit

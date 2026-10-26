@@ -5,34 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
-
 	"github.com/ruyam/kamps/internal/model"
 )
-
-var sparkBlocks = []rune("▁▂▃▄▅▆▇█")
-
-func sparkline(counts []int) string {
-	max := 0
-	for _, count := range counts {
-		if count > max {
-			max = count
-		}
-	}
-	if max == 0 {
-		return ""
-	}
-	var b strings.Builder
-	for _, count := range counts {
-		if count == 0 {
-			b.WriteRune('▁')
-			continue
-		}
-		index := (count*len(sparkBlocks) - 1) / max
-		b.WriteRune(sparkBlocks[index])
-	}
-	return b.String()
-}
 
 func progressBar(filled, total, width int) string {
 	if total <= 0 || width <= 0 {
@@ -61,12 +35,14 @@ func (m *App) tabSummary() string {
 		if total == 0 {
 			return ""
 		}
-		bar := progressBar(local, total, 5)
-		return stFaint.Render(fmt.Sprintf("%d local · %d new  ", local, total-local)) + stDone.Render(bar)
+		summary := stFaint.Render(fmt.Sprintf("%d local · %d new  ", local, total-local))
+		if m.sizeClass() <= sizeCompact {
+			return summary
+		}
+		return summary + stDone.Render(progressBar(local, total, 5))
 	}
-	now := time.Now()
+	now := m.currentTime()
 	overdue, dueSoon, newCount := 0, 0, 0
-	var days [7]int
 	for _, assignment := range m.assignments {
 		if assignment.Triage == model.Undecided {
 			newCount++
@@ -80,11 +56,8 @@ func (m *App) tabSummary() string {
 		dueDay := dateOnly(assignment.Due)
 		today := dateOnly(now)
 		offset := int(dueDay.Sub(today).Hours() / 24)
-		if offset >= 0 && offset < len(days) {
-			days[offset]++
-			if !assignment.Overdue(now) {
-				dueSoon++
-			}
+		if offset >= 0 && offset < 7 && !assignment.Overdue(now) {
+			dueSoon++
 		}
 	}
 	var parts []string
@@ -100,11 +73,18 @@ func (m *App) tabSummary() string {
 	if len(parts) == 0 {
 		return ""
 	}
-	summary := strings.Join(parts, stFaint.Render(" · "))
-	if spark := sparkline(days[:]); spark != "" {
-		summary += "  " + stCode.Render(spark)
+	return strings.Join(parts, stFaint.Render(" · "))
+}
+
+func (m *App) overdueCount() int {
+	now := m.currentTime()
+	n := 0
+	for _, assignment := range m.assignments {
+		if assignment.Overdue(now) {
+			n++
+		}
 	}
-	return summary
+	return n
 }
 
 func dateOnly(value time.Time) time.Time {
@@ -122,7 +102,7 @@ func (m *App) taskCourseMeta(courseID int, h rowHighlight) string {
 			decided++
 		}
 	}
-	return courseMeta(courseID, decided, total, h)
+	return m.courseMeta(courseID, decided, total, h)
 }
 
 func (m *App) materialCourseMeta(courseID int, h rowHighlight) string {
@@ -136,22 +116,17 @@ func (m *App) materialCourseMeta(courseID int, h rowHighlight) string {
 			local++
 		}
 	}
-	return courseMeta(courseID, local, total, h)
+	return m.courseMeta(courseID, local, total, h)
 }
 
-func courseMeta(courseID, filled, total int, h rowHighlight) string {
+func (m *App) courseMeta(courseID, filled, total int, h rowHighlight) string {
 	if total == 0 {
 		return ""
 	}
-	bar := progressBar(filled, total, 5)
 	style := courseStyle(courseID)
-	return h.style(style).Render(bar) + h.style(stFaint).Render(fmt.Sprintf(" %d/%d", filled, total))
-}
-
-func courseStyle(courseID int) lipgloss.Style {
-	index := courseID % len(courseAccents)
-	if index < 0 {
-		index = -index
+	if m.sizeClass() <= sizeCompact {
+		return h.style(style).Render(fmt.Sprintf("%d/%d", filled, total))
 	}
-	return lipgloss.NewStyle().Foreground(courseAccents[index])
+	bar := progressBar(filled, total, 5)
+	return h.style(style).Render(bar) + h.style(stFaint).Render(fmt.Sprintf(" %d/%d", filled, total))
 }

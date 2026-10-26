@@ -45,6 +45,47 @@ library_dir = "~/projects/university"
 	}
 }
 
+func TestNormalizeTheme(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want string
+		ok   bool
+	}{
+		{"", ThemeAuto, true},
+		{"AUTO", ThemeAuto, true},
+		{"dark", ThemeDark, true},
+		{" Light ", ThemeLight, true},
+		{"mono", ThemeMono, true},
+		{"solarized", "", false},
+	} {
+		got, ok := NormalizeTheme(tc.in)
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("NormalizeTheme(%q) = %q, %v; want %q, %v", tc.in, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+func TestLoadFromTheme(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte(`theme = "light"`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFrom(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Theme != ThemeLight {
+		t.Fatalf("theme = %q, want light", cfg.Theme)
+	}
+
+	if err := os.WriteFile(path, []byte(`theme = "neon"`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadFrom(path); err == nil || !strings.Contains(err.Error(), "theme must be") {
+		t.Fatalf("invalid theme error = %v", err)
+	}
+}
+
 func TestLoadFromRejectsUnknownKey(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte(`library_dri = "~/x"`), 0o600); err != nil {

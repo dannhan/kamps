@@ -9,36 +9,42 @@ import (
 	"github.com/ruyam/kamps/internal/model"
 )
 
-func TestTaskFooterKeepsPriorityAndMoreHint(t *testing.T) {
-	full := taskFooterHints(200)
-	want := "↑↓ move · t/m/i decide · c commit · f filter · enter detail · ? more"
+func TestFooterKeepsPriorityAndSafetyHint(t *testing.T) {
+	app := demoApp(t)
+	app.tab = TabTasks
+	full := renderHintItems(app.footerHintItems(), 200)
+	want := "↑↓ move · enter detail · space select · t/m/i decide · c review · / search · f filter · ? all keys"
 	if got := stripANSI(full); got != want {
 		t.Fatalf("full footer = %q, want %q", got, want)
 	}
-	short := taskFooterHints(12)
-	if got := stripANSI(short); got != "? more" {
-		t.Fatalf("short footer = %q, want ? more", got)
+	short := renderHintItems(app.footerHintItems(), 12)
+	if got := stripANSI(short); got != "? all keys" {
+		t.Fatalf("short footer = %q, want ? all keys", got)
 	}
-	medium := stripANSI(taskFooterHints(40))
-	if !strings.HasSuffix(medium, "? more") || strings.Contains(medium, "f filter") {
+	medium := stripANSI(renderHintItems(app.footerHintItems(), 40))
+	if !strings.HasSuffix(medium, "? all keys") || strings.Contains(medium, "f filter") {
 		t.Fatalf("short footer did not drop hints from the right: %q", medium)
 	}
 }
 
-func TestTaskFooterKeepsQueueAtRightEdge(t *testing.T) {
+func TestFooterKeepsQueueAtRightEdge(t *testing.T) {
 	app := demoApp(t)
-	app.width = 100
-	line := stripANSI(app.taskFooter(99))
-	if !strings.HasPrefix(line, "↑↓ move") || strings.Contains(line, "queue") {
-		t.Fatalf("footer alignment = %q", line)
+	app.width, app.height = 100, 24
+	lines := app.footerLines(100, 24)
+	if len(lines) != 2 {
+		t.Fatalf("footer lines = %d, want 2", len(lines))
 	}
-	if strings.Contains(line, "[") || strings.Contains(line, "v view") || strings.Contains(line, "mouse") {
-		t.Fatalf("footer contains secondary controls or brackets: %q", line)
+	hintLine := strings.TrimSpace(stripANSI(lines[0]))
+	if !strings.HasPrefix(hintLine, "↑↓ move") || strings.Contains(hintLine, "queue") {
+		t.Fatalf("footer hint alignment = %q", hintLine)
+	}
+	if strings.Contains(hintLine, "[") || strings.Contains(hintLine, "v view") || strings.Contains(hintLine, "mouse") {
+		t.Fatalf("footer contains secondary controls or brackets: %q", hintLine)
 	}
 	app.queue.Set("tracked", model.Tracked)
-	line = stripANSI(app.taskFooter(99))
-	if !strings.HasSuffix(line, "queue: 1 track") {
-		t.Fatalf("populated queue is not right aligned: %q", line)
+	status := stripANSI(app.footerLines(100, 24)[1])
+	if !strings.HasSuffix(status, "queue: 1 track") {
+		t.Fatalf("populated queue is not right aligned: %q", status)
 	}
 }
 
@@ -46,9 +52,15 @@ func TestFooterKeepsQueueWhenHintsDoNotFit(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabTasks
 	app.queue.Set("tracked", model.Tracked)
-	line := stripANSI(app.helpBar(24, []string{"↑↓ move", "h/l fold", "space select", "t/m/i decide", "c commit", "f filter"}))
-	if !strings.HasSuffix(line, "queue: 1 track") {
-		t.Fatalf("footer dropped queue: %q", line)
+	lines := app.footerLines(24, 24)
+	if len(lines) != 2 {
+		t.Fatalf("footer lines = %d, want 2", len(lines))
+	}
+	if got := stripANSI(lines[0]); !strings.Contains(got, "? all keys") {
+		t.Fatalf("narrow footer dropped the safety hint: %q", got)
+	}
+	if status := stripANSI(lines[1]); !strings.HasSuffix(status, "queue: 1 track") {
+		t.Fatalf("footer dropped queue: %q", status)
 	}
 }
 
@@ -103,7 +115,7 @@ func TestCursorAndMarksAreVisuallyDistinct(t *testing.T) {
 	if strings.Contains(markedRow, "▌") {
 		t.Fatalf("a marked-only row must not look like the cursor: %q", markedRow)
 	}
-	if themeTokens.Surface.Light == themeTokens.Marked.Light || themeTokens.Surface.Dark == themeTokens.Marked.Dark {
+	if themeTokens.Surface == themeTokens.Marked {
 		t.Fatal("cursor and marked rows share the same band colour")
 	}
 }

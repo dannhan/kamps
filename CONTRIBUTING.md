@@ -45,7 +45,10 @@ To fix formatting, run `make fmt`.
 
 ## Code conventions
 
-- Keep the UI borderless: full-width rules, not boxes.
+- Keep the UI borderless: full-width rules, not boxes. The visual system —
+  palette, size classes, footer, help, and focus states — is described in
+  [DESIGN.md](DESIGN.md).
+- Keep colors in `internal/tui/theme.go`; widgets use semantic styles.
 - Trees keep a two-column right inset, and long text ends with `…`.
 - `/` is search; `f` cycles filters. Do not bind `v` as a view key.
 - A user decision is saved immediately; the commit queue is session-only.

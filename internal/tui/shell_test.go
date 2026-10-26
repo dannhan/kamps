@@ -31,8 +31,9 @@ func TestShellUsesRulesInsteadOfABox(t *testing.T) {
 	if rules != 2 {
 		t.Fatalf("want one rule above and one below the body, got %d", rules)
 	}
-	if lines[2] != want || lines[len(lines)-2] != want {
-		t.Fatalf("rules are not fenced around the body: %q / %q", lines[2], lines[len(lines)-2])
+	footerRows := app.footerRowCount()
+	if lines[2] != want || lines[len(lines)-1-footerRows] != want {
+		t.Fatalf("rules are not fenced around the body: %q / %q", lines[2], lines[len(lines)-1-footerRows])
 	}
 }
 
@@ -107,14 +108,28 @@ func TestSharedShellAllTabsAtRequestedSizes(t *testing.T) {
 	}
 }
 
-func TestSharedShellShowsSmallTerminalMessage(t *testing.T) {
+func TestCompactLayoutKeepsWorkingAndTinyShowsOneLine(t *testing.T) {
 	app := demoApp(t)
 	app.width, app.height = 79, 23
 	view := stripANSI(app.View())
-	if !strings.Contains(view, "terminal too small") {
-		t.Fatalf("small-terminal message missing: %q", view)
+	if strings.Contains(view, "terminal too small") {
+		t.Fatalf("compact terminal should still render: %q", view)
 	}
-	if strings.Count(view, "? more") != 1 {
-		t.Fatalf("small-terminal footer repeats the ? more hint: %q", view)
+	if lines := strings.Split(view, "\n"); len(lines) != 23 {
+		t.Fatalf("compact view has %d rows, want 23", len(lines))
+	}
+	if !strings.Contains(view, "1 Tasks") || !strings.Contains(view, "? all keys") {
+		t.Fatalf("compact footer lost its tabs or safety hint: %q", view)
+	}
+
+	app.width, app.height = 39, 9
+	view = stripANSI(app.View())
+	if strings.Count(view, "terminal too small") != 1 || !strings.Contains(view, "q quit") || !strings.Contains(view, "? help") {
+		t.Fatalf("tiny terminal message = %q", view)
+	}
+	app.helpOn = true
+	view = stripANSI(app.View())
+	if !strings.Contains(view, "NAVIGATION") || !strings.Contains(view, "? close") {
+		t.Fatalf("tiny help is not reachable: %q", view)
 	}
 }

@@ -41,14 +41,19 @@ func (m *App) commitPreviewTextForFormat() string {
 	if err != nil {
 		return ""
 	}
-	items := m.exportItems()
+	return previewText(writer, m.exportItems(), m.cfg.CommitFile)
+}
+
+// previewText builds the export preview. Reading an existing commit file is
+// I/O, so this is only called from commands or from tests, never from Update.
+func previewText(writer export.Writer, items []export.Item, commitFile string) string {
 	if previewer, ok := writer.(export.Previewer); ok {
 		text, _ := previewer.Preview(items)
 		return text
 	}
 	var existing []byte
-	if m.cfg.CommitFile != "" {
-		existing, _ = os.ReadFile(m.cfg.CommitFile)
+	if commitFile != "" {
+		existing, _ = os.ReadFile(commitFile)
 	}
 	text, _ := writer.Render(items, existing)
 	return text
@@ -57,7 +62,8 @@ func (m *App) commitPreviewTextForFormat() string {
 func (m *App) writeCommitPreview() tea.Cmd {
 	writer, err := m.exportWriter()
 	if err != nil {
-		m.toast = err.Error()
+		m.toast = "export unavailable"
+		m.statusErr = err.Error()
 		m.toastTicks = 30
 		return nil
 	}

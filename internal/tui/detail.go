@@ -1,12 +1,43 @@
 package tui
 
-// detailVisible reports whether the selected item's detail pane should be
-// drawn. The pane is opt-in: enter pins it open or closed.
-func (m *App) detailVisible() bool {
+// detailMode is how the detail pane occupies the body.
+type detailMode int
+
+const (
+	detailHidden detailMode = iota
+	detailSplit
+	detailReplace
+)
+
+// detailMode resolves the pane against the current size class. The default
+// (detailPane = -1) auto-opens only at Wide; enter pins it open, and on
+// Standard/Compact the pinned pane takes the whole body instead of a cramped
+// split.
+func (m *App) detailMode() detailMode {
 	if m.tab != TabTasks && m.tab != TabMaterials {
-		return false
+		return detailHidden
 	}
-	return m.detailPane == 1
+	wide := m.sizeClass() == sizeWide
+	switch m.detailPane {
+	case 0:
+		return detailHidden
+	case 1:
+		if wide {
+			return detailSplit
+		}
+		return detailReplace
+	default:
+		if wide {
+			return detailSplit
+		}
+		return detailHidden
+	}
+}
+
+// detailVisible reports whether the selected item's detail pane should be
+// drawn. The pane is opt-in on Standard/Compact and auto-open at Wide.
+func (m *App) detailVisible() bool {
+	return m.detailMode() != detailHidden
 }
 
 // toggleDetailPane pins the detail pane open or closed.
@@ -19,7 +50,7 @@ func (m *App) toggleDetailPane() {
 }
 
 // splitWidths divides the body into a tree column and a detail column with a
-// single rule between them.
+// single rule between them. Only called in Wide mode.
 func splitWidths(width int) (left, right int) {
 	left = width * 62 / 100
 	right = width - left - 1
@@ -51,6 +82,17 @@ func (m *App) splitTreeRows(tree []string, nodes []node, cursor, width, height i
 		rows = append(rows, fitLine(left, leftWidth)+divider+fitLine(right, rightWidth))
 	}
 	return rows
+}
+
+// detailBody applies the resolved pane mode to an already-rendered tree.
+func (m *App) detailBody(tree []string, nodes []node, cursor, width, height int) []string {
+	switch m.detailMode() {
+	case detailSplit:
+		return m.splitTreeRows(tree, nodes, cursor, width, height)
+	case detailReplace:
+		return m.detailRows(nodes, cursor, width, height)
+	}
+	return tree
 }
 
 // detailRows renders the right column, padding it to the pane height and

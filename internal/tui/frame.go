@@ -42,11 +42,7 @@ func bodyLines(rows []string, width, height int) []string {
 
 func fixedTabCell(label string, active bool, width int) string {
 	text := " " + pad(truncate(label, maxInt(0, width-2)), maxInt(0, width-2), false) + " "
-	cell := lipgloss.NewStyle().Foreground(themeTokens.Subtle).Background(themeTokens.Bg)
-	if active {
-		cell = lipgloss.NewStyle().Foreground(themeTokens.Bright).Background(themeTokens.Surface)
-	}
-	return cell.Render(text)
+	return tabCellStyle(active).Render(text)
 }
 
 func rule(w int) string {
@@ -56,27 +52,7 @@ func rule(w int) string {
 	return stRule.Render(strings.Repeat("─", w))
 }
 
-// hints renders "key label · key label …" for the help bar.
-func taskFooterHints(width int) string {
-	items := []string{"↑↓ move", "t/m/i decide", "c commit", "f filter", "enter detail", "? more"}
-	kept := []string{"? more"}
-	used := lipgloss.Width(kept[0])
-	for _, item := range items[:len(items)-1] {
-		candidateWidth := lipgloss.Width(item) + 3 + used
-		if candidateWidth > width {
-			break
-		}
-		kept = append(kept[:len(kept)-1], append([]string{item}, kept[len(kept)-1])...)
-		used = candidateWidth
-	}
-	parts := make([]string, len(kept))
-	for i, item := range kept {
-		key, label, _ := strings.Cut(item, " ")
-		parts[i] = stHelpKey.Render(key) + " " + stDim.Render(label)
-	}
-	return strings.Join(parts, stTreeLine.Render(" · "))
-}
-
+// hints renders "key label · key label …" for the footer.
 func hints(items []string) string {
 	parts := make([]string, len(items))
 	for i, it := range items {

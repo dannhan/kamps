@@ -217,9 +217,6 @@ func (m *App) download() tea.Cmd {
 			continue
 		}
 		if !canDownload {
-			if target := m.materialByID(material.ID); target != nil {
-				target.Downloaded = true
-			}
 			flaggedIDs = append(flaggedIDs, material.ID)
 			flagged++
 			continue
@@ -253,11 +250,19 @@ func (m *App) download() tea.Cmd {
 	}
 	m.toastTicks = 24
 	if len(flaggedIDs) > 0 {
-		m.updateState(func(s *store.State) {
+		m.service.ApplyDownloaded(flaggedIDs)
+		m.service.ApplyState(func(s *store.State) {
 			for _, id := range flaggedIDs {
 				s.SetDownloaded(id, true)
 			}
 		})
+		m.materials = m.service.Snapshot().Materials
+		m.state = m.service.State()
+		m.statusErr = ""
+		for _, id := range flaggedIDs {
+			m.pendingDownloads[id] = true
+		}
+		cmds = append(cmds, m.queueStatePersist())
 	}
 	return tea.Batch(cmds...)
 }

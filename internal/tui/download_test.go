@@ -128,8 +128,8 @@ func TestDownloadFailureLeavesFlagUnset(t *testing.T) {
 	if _, ok := app.state.Downloads["M1"]; ok {
 		t.Fatal("failed download must not be persisted")
 	}
-	if got := app.toast; got == "" || !strings.Contains(got, "no longer available") {
-		t.Fatalf("toast = %q", got)
+	if got := app.statusErr; got == "" || !strings.Contains(got, "no longer available") {
+		t.Fatalf("status error = %q", got)
 	}
 }
 

@@ -96,6 +96,7 @@ func (m *App) materialDetailLines(n node, width int) []string {
 		if task.HasDue {
 			due = task.Due.Format("2006-01-02") + " · " + dueAge(task, now)
 			if task.Overdue(now) {
+				due = "! " + due
 				dueStyle = stOverdue
 			}
 		}

@@ -2,9 +2,9 @@ package tui
 
 import (
 	"fmt"
-	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/ruyam/kamps/internal/core"
 	"github.com/ruyam/kamps/internal/model"
 )
@@ -65,14 +65,15 @@ func (m *App) byID(id string) *model.Assignment {
 	return nil
 }
 
-// applyTriage sets the decision on the target items and queues them for commit.
-func (m *App) applyTriage(t model.Triage) {
+// applyTriage sets the decision on the target items, updates the in-memory
+// model, and returns the single persistence command.
+func (m *App) applyTriage(t model.Triage) tea.Cmd {
 	if m.tab != TabTasks {
-		return
+		return nil
 	}
 	ids := m.targetIDs()
 	if len(ids) == 0 {
-		return
+		return nil
 	}
 	m.undoDecisions = map[string]model.Triage{}
 	for _, id := range ids {
@@ -84,47 +85,18 @@ func (m *App) applyTriage(t model.Triage) {
 	for _, id := range ids {
 		decisions[id] = t
 		m.queue.Set(id, t)
+		m.pendingDecisions[id] = t
 	}
-	if _, err := m.service.SetDecisions(decisions); err != nil {
-		m.toast = "could not save state: " + err.Error()
-		m.toastTicks = 40
-	} else {
-		m.toast = fmt.Sprintf("%d %s %s", len(ids), plural(len(ids), "item", "items"), t.String())
-		m.toastTicks = 24
-	}
+	m.service.ApplyDecisions(decisions)
+	m.assignments = m.service.Snapshot().Assignments
 	m.state = m.service.State()
+	m.statusErr = ""
+	m.toast = fmt.Sprintf("%d %s %s", len(ids), plural(len(ids), "item", "items"), t.String())
+	m.toastTicks = 24
 	m.selected = map[string]bool{}
-}
-
-func (m *App) taskFooter(width int) string {
-	queue := m.taskQueueLabel()
-	if f := m.footer(); f != "" {
-		queue = f
-	}
-	queueWidth := lipgloss.Width(queue)
-	if queueWidth >= width {
-		return fitLine(queue, width)
-	}
-	hintWidth := maxInt(0, width-queueWidth-2)
-	hints := taskFooterHints(hintWidth)
-	gap := maxInt(1, width-lipgloss.Width(hints)-queueWidth)
-	return fitLine(hints+strings.Repeat(" ", gap)+queue, width)
+	return m.queueStatePersist()
 }
 
 func (m *App) taskQueueLabel() string {
-	tracked, missed, ignored := m.pendingCounts()
-	if tracked+missed+ignored == 0 {
-		return ""
-	}
-	var parts []string
-	if tracked > 0 {
-		parts = append(parts, fmt.Sprintf("%d track", tracked))
-	}
-	if missed > 0 {
-		parts = append(parts, fmt.Sprintf("%d missed", missed))
-	}
-	if ignored > 0 {
-		parts = append(parts, fmt.Sprintf("%d ignore", ignored))
-	}
-	return stKey.Render("queue: " + strings.Join(parts, " · "))
+	return m.queueSummary()
 }

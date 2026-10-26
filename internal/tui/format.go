@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/ruyam/kamps/internal/model"
 )
 
@@ -25,18 +24,6 @@ func flagChar(t model.Triage) string {
 		return "◆"
 	}
 	return "○"
-}
-
-func triageStyle(t model.Triage) lipgloss.Style {
-	switch t {
-	case model.Tracked:
-		return stFlagT
-	case model.Missed:
-		return stFlagM
-	case model.Ignored:
-		return stFlagI
-	}
-	return stFlagNew
 }
 
 // shortCode maps a course id to its short label ("ppl", "metnum", …).

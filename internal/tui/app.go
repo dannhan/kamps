@@ -6,10 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/ruyam/kamps/internal/config"
 	"github.com/ruyam/kamps/internal/core"
 	"github.com/ruyam/kamps/internal/model"
@@ -49,7 +47,6 @@ type App struct {
 	service *core.Service
 	ver     string
 	keys    KeyMap
-	help    help.Model
 	program *tea.Program
 
 	courses      []model.Course
@@ -118,20 +115,31 @@ type App struct {
 	syncTicks  int
 	toast      string
 	toastTicks int
+	// statusErr is a durable failure shown in the footer until dismissed.
+	statusErr string
 
-	width  int
-	height int
-	helpOn bool
-	noAnim bool
+	// pendingDecisions/pendingDownloads are the in-memory changes waiting for
+	// the single persistence command. persistInFlight serializes disk writes.
+	pendingDecisions map[string]model.Triage
+	pendingDownloads map[string]bool
+	persistInFlight  bool
+
+	width      int
+	height     int
+	helpOn     bool
+	helpScroll int
+	noAnim     bool
+	// now is time.Now in production; tests inject a fixed clock so relative
+	// due labels and snapshots are deterministic.
+	now func() time.Time
 }
 
 // New builds the root model.
 func New(src source.Source, cfg config.Config, version string) *App {
+	applyTheme(cfg.Theme)
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(themeTokens.Accent)
-
-	h := help.New()
+	sp.Style = stCursor
 
 	service := core.New(src, cfg)
 	state := service.State()
@@ -139,33 +147,42 @@ func New(src source.Source, cfg config.Config, version string) *App {
 	stateErr := service.StateErr()
 
 	return &App{
-		src:             src,
-		cfg:             cfg,
-		service:         service,
-		ver:             version,
-		keys:            DefaultKeys(),
-		help:            h,
-		filter:          "all",
-		returnTab:       TabTasks,
-		detailPane:      -1,
-		tabFilters:      [tabCount]string{"all", "all", "all", "all"},
-		tabExpanded:     [tabCount]map[string]bool{0: {}, 1: {}, 2: {}, 3: {}},
-		expanded:        map[string]bool{},
-		selected:        map[string]bool{},
-		selectedM:       map[string]bool{},
-		queue:           core.NewQueue(),
-		undoDecisions:   map[string]model.Triage{},
-		downloads:       map[string]bool{},
-		downloadCancels: map[string]context.CancelFunc{},
-		state:           state,
-		statePath:       statePath,
-		stateErr:        stateErr,
-		lastSync:        state.LastSync,
-		spinner:         sp,
-		width:           100,
-		height:          30,
-		noAnim:          cfg.NoAnim,
+		src:              src,
+		cfg:              cfg,
+		service:          service,
+		ver:              version,
+		keys:             DefaultKeys(),
+		filter:           "all",
+		returnTab:        TabTasks,
+		detailPane:       -1,
+		tabFilters:       [tabCount]string{"all", "all", "all", "all"},
+		tabExpanded:      [tabCount]map[string]bool{0: {}, 1: {}, 2: {}, 3: {}},
+		expanded:         map[string]bool{},
+		selected:         map[string]bool{},
+		selectedM:        map[string]bool{},
+		queue:            core.NewQueue(),
+		undoDecisions:    map[string]model.Triage{},
+		downloads:        map[string]bool{},
+		downloadCancels:  map[string]context.CancelFunc{},
+		state:            state,
+		statePath:        statePath,
+		stateErr:         stateErr,
+		pendingDecisions: map[string]model.Triage{},
+		pendingDownloads: map[string]bool{},
+		lastSync:         state.LastSync,
+		spinner:          sp,
+		width:            100,
+		height:           30,
+		noAnim:           cfg.NoAnim,
+		now:              time.Now,
 	}
+}
+
+func (m *App) currentTime() time.Time {
+	if m.now != nil {
+		return m.now()
+	}
+	return time.Now()
 }
 
 type loadedMsg struct{ core.Snapshot }
@@ -205,7 +222,7 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		m.help.Width = msg.Width
+		m.helpScroll = clampInt(m.helpScroll, 0, m.helpMaxScroll())
 		return m, nil
 
 	case loadedMsg:
@@ -215,6 +232,7 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loadError = ""
 		m.offline = false
 		m.cacheNotice = ""
+		m.statusErr = ""
 		m.applySnapshot(msg.Snapshot)
 		m.clampCursor()
 		m.restoreCursors()
@@ -223,8 +241,8 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.toastTicks = 40
 		}
 		if m.stateErr != "" {
-			m.toast = "state: " + m.stateErr
-			m.toastTicks = 40
+			m.statusErr = "state: " + m.stateErr
+			m.toast = ""
 			m.stateErr = ""
 		}
 		m.warnSessionExpiry()
@@ -234,20 +252,35 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loaded = true
 		m.loading = false
 		m.syncing = false
-		if m.loadCache() {
-			m.offline = true
-			m.loadError = ""
-			m.toast = "offline · cached from " + m.cacheNotice
-			m.toastTicks = 40
+		m.loadError = msg.err.Error()
+		m.statusErr = ""
+		return m, loadCachedCmd(m.service)
+
+	case cacheLoadedMsg:
+		// Ignore a cache result that lost the race to a fresh load or a new
+		// sync; only the active load error should fall back to the cache.
+		if !msg.ok || m.loadError == "" || m.syncing {
 			return m, nil
 		}
-		m.loadError = msg.err.Error()
+		m.offline = true
+		m.loadError = ""
+		m.statusErr = ""
+		m.applyCachedSnapshot(msg.snapshot)
+		m.toast = "offline · cached from " + m.cacheNotice
+		m.toastTicks = 40
+		m.clampCursor()
+		m.restoreCursors()
 		return m, nil
+
+	case stateSavedMsg:
+		return m, m.handleStateSaved(msg)
 
 	case clipboardMsg:
 		if msg.err != nil {
-			m.toast = "copy failed: " + msg.err.Error()
+			m.toast = "copy failed"
+			m.statusErr = "copy failed: " + msg.err.Error()
 		} else {
+			m.statusErr = ""
 			m.toast = fmt.Sprintf("copied %d %s", msg.lines, plural(msg.lines, "line", "lines"))
 		}
 		m.toastTicks = 24
@@ -255,8 +288,10 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case exportMsg:
 		if msg.err != nil {
-			m.toast = "export failed: " + msg.err.Error()
+			m.toast = "export failed"
+			m.statusErr = "export failed: " + msg.err.Error()
 		} else {
+			m.statusErr = ""
 			m.toast = fmt.Sprintf("wrote %d %s (%d already present)", msg.result.Added, plural(msg.result.Added, "line", "lines"), msg.result.Skipped)
 		}
 		m.toastTicks = 32
@@ -276,18 +311,22 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			delete(m.downloadCancels, msg.id)
 		}
 		if msg.err != nil {
-			m.toast = "download failed: " + downloadErrorText(msg.err)
+			m.toast = "download failed"
+			m.statusErr = "download failed: " + downloadErrorText(msg.err)
 			m.toastTicks = 40
 			return m, nil
 		}
+		m.statusErr = ""
 		m.toast = "saved " + savedFileLabel(msg.path)
 		m.toastTicks = 24
 		return m, nil
 
 	case openURLMsg:
 		if msg.err != nil {
-			m.toast = "could not open browser: " + msg.err.Error()
+			m.toast = "could not open browser"
+			m.statusErr = "could not open browser: " + msg.err.Error()
 		} else {
+			m.statusErr = ""
 			m.toast = "opened in browser"
 		}
 		m.toastTicks = 24
@@ -295,8 +334,10 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case openURLsMsg:
 		if msg.err != nil {
-			m.toast = "could not open all links: " + msg.err.Error()
+			m.toast = "could not open all links"
+			m.statusErr = "could not open all links: " + msg.err.Error()
 		} else {
+			m.statusErr = ""
 			m.toast = fmt.Sprintf("opened %d links", msg.count)
 		}
 		m.toastTicks = 24

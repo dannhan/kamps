@@ -65,7 +65,7 @@ func DefaultKeys() KeyMap {
 		Range:    key.NewBinding(key.WithKeys("v", "V"), key.WithHelp("v", "range select")),
 		Invert:   key.NewBinding(key.WithKeys("*"), key.WithHelp("*", "invert visible")),
 		Undo:     key.NewBinding(key.WithKeys("u", "ctrl+z"), key.WithHelp("u", "undo triage")),
-		Commit:   key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "commit tab")),
+		Commit:   key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "review queue")),
 		Write:    key.NewBinding(key.WithKeys("w"), key.WithHelp("w", "write queue")),
 		Copy:     key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "copy preview")),
 		Drop:     key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "drop from queue")),
@@ -103,10 +103,24 @@ func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "?", "esc", "q":
 			m.helpOn = false
+			m.helpScroll = 0
 			return m, nil
 		case "ctrl+c":
 			return m, tea.Quit
+		case "down", "j":
+			m.helpScroll++
+		case "up", "k":
+			m.helpScroll--
+		case "g", "home":
+			m.helpScroll = 0
+		case "G", "end":
+			m.helpScroll = 1 << 20
+		case "ctrl+d", "pgdown":
+			m.helpScroll += maxInt(1, (m.height-6)/2)
+		case "ctrl+u", "pgup":
+			m.helpScroll -= maxInt(1, (m.height-6)/2)
 		}
+		m.helpScroll = clampInt(m.helpScroll, 0, m.helpMaxScroll())
 		return m, nil
 	}
 
@@ -124,6 +138,7 @@ func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "?":
 		m.helpOn = true
+		m.helpScroll = 0
 	case ":", "ctrl+k":
 		m.openPalette()
 	case "tab":
@@ -161,18 +176,22 @@ func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "*":
 		m.invertVisible()
 	case "t":
-		m.applyTriage(model.Tracked)
+		return m, m.applyTriage(model.Tracked)
 	case "m":
-		m.applyTriage(model.Missed)
+		return m, m.applyTriage(model.Missed)
 	case "i":
-		m.applyTriage(model.Ignored)
+		return m, m.applyTriage(model.Ignored)
 	case "n", "0":
-		m.applyTriage(model.Undecided)
+		return m, m.applyTriage(model.Undecided)
 	case "u":
-		m.undoTriage()
+		return m, m.undoTriage()
 	case "c":
 		m.openCommit()
 	case "esc":
+		if m.statusErr != "" {
+			m.statusErr = ""
+			return m, nil
+		}
 		if m.visual {
 			m.back()
 		} else if m.tab == TabCommit {

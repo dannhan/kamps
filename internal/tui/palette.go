@@ -21,7 +21,7 @@ func (m *App) paletteActions() []paletteAction {
 		{"open link", func(app *App) tea.Cmd { return app.openExternal() }},
 		{"write queue", func(app *App) tea.Cmd { return app.writeCommitPreview() }},
 		{"copy queue", func(app *App) tea.Cmd { return app.copyCommitPreview() }},
-		{"help", func(app *App) tea.Cmd { app.helpOn = true; return nil }},
+		{"help", func(app *App) tea.Cmd { app.helpOn = true; app.helpScroll = 0; return nil }},
 		{"quit", func(app *App) tea.Cmd { app.cancelDownloads(); return tea.Quit }},
 	}
 	switch m.tab {
@@ -80,15 +80,15 @@ func (m *App) filteredPaletteActions() []paletteAction {
 
 func (m *App) paletteLines(width int) []string {
 	actions := m.filteredPaletteActions()
-	m.paletteCursor = clampInt(m.paletteCursor, 0, maxInt(0, len(actions)-1))
+	cursor := clampInt(m.paletteCursor, 0, maxInt(0, len(actions)-1))
 	lines := []string{stFaint.Render("> ") + stRow.Render(m.paletteQuery), ""}
 	if len(actions) == 0 {
 		return append(lines, stEmpty.Render("no matching commands"))
 	}
 	for i, action := range actions {
 		line := "  " + action.label
-		if i == m.paletteCursor {
-			lines = append(lines, sharedFocusRow(stCursor.Render(line), width, true))
+		if i == cursor {
+			lines = append(lines, paneRow(stCursor.Render(line), width, rowHighlight{cursor: true}))
 		} else {
 			lines = append(lines, line)
 		}
