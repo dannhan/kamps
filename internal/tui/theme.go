@@ -24,6 +24,10 @@ const (
 // theme override and monochrome mode behave the same on every terminal. An
 // empty color means "leave the terminal default alone" (mono).
 type themeColors struct {
+	// Canvas is the terminal background the palette was designed against. It is
+	// never painted; it exists so contrast checks use the same tokens.
+	Canvas lipgloss.Color
+
 	Surface  lipgloss.Color
 	Marked   lipgloss.Color
 	Border   lipgloss.Color
@@ -31,9 +35,19 @@ type themeColors struct {
 	Primary  lipgloss.Color
 	Dim      lipgloss.Color
 	Subtle   lipgloss.Color
-	Guide    lipgloss.Color
 	TreeLine lipgloss.Color
 	Accent   lipgloss.Color
+
+	// TreeConnector is deliberately darker/dimmer than Primary so the rails
+	// recede behind titles.
+	TreeConnector lipgloss.Color
+
+	// Due-date urgency slots, from hottest to faintest.
+	DueOverdue lipgloss.Color
+	DueSoon    lipgloss.Color
+	DueNormal  lipgloss.Color
+	DueFar     lipgloss.Color
+	DueNone    lipgloss.Color
 
 	New     lipgloss.Color
 	Tracked lipgloss.Color
@@ -46,41 +60,53 @@ type themeColors struct {
 
 func darkColors() themeColors {
 	return themeColors{
-		Surface:  "#3A3A5C",
-		Marked:   "#4D4478",
-		Border:   "#3B3E5E",
-		Bright:   "#EDEDED",
-		Primary:  "#EDEDED",
-		Dim:      "#C6C6C6",
-		Subtle:   "#9A9AA4",
-		Guide:    "#8A8A8A",
-		TreeLine: lipgloss.Color(quietHex("#EDEDED", "#1B1B26")),
-		Accent:   "#9AA0D0",
-		New:      "#9A9AA4",
-		Tracked:  "#E0AF68",
-		Done:     "#6FCF97",
-		Ignored:  "#B59AE0",
-		Missed:   "#F7768E",
+		Canvas:        "#1B1B26",
+		Surface:       "#3A3A5C",
+		Marked:        "#4D4478",
+		Border:        "#3B3E5E",
+		Bright:        "#EDEDED",
+		Primary:       "#EDEDED",
+		Dim:           "#C6C6C6",
+		Subtle:        "#9A9AA4",
+		TreeLine:      lipgloss.Color(quietHex("#EDEDED", "#1B1B26")),
+		Accent:        "#9AA0D0",
+		TreeConnector: "#6A6A74",
+		DueOverdue:    "#F7768E",
+		DueSoon:       "#F0A868",
+		DueNormal:     "#EDEDED",
+		DueFar:        "#9A9AA4",
+		DueNone:       "#8A8A8A",
+		New:           "#9A9AA4",
+		Tracked:       "#E0AF68",
+		Done:          "#6FCF97",
+		Ignored:       "#B59AE0",
+		Missed:        "#F7768E",
 	}
 }
 
 func lightColors() themeColors {
 	return themeColors{
-		Surface:  "#D4D4DE",
-		Marked:   "#CFCFE8",
-		Border:   "#C8C8D0",
-		Bright:   "#1B1B26",
-		Primary:  "#1B1B26",
-		Dim:      "#55555E",
-		Subtle:   "#6B6B75",
-		Guide:    "#8A8A8A",
-		TreeLine: lipgloss.Color(quietHex("#1B1B26", "#FFFFFF")),
-		Accent:   "#3F4390",
-		New:      "#6B6B75",
-		Tracked:  "#96590B",
-		Done:     "#177A43",
-		Ignored:  "#7651A8",
-		Missed:   "#C0392B",
+		Canvas:        "#FFFFFF",
+		Surface:       "#D4D4DE",
+		Marked:        "#CFCFE8",
+		Border:        "#C8C8D0",
+		Bright:        "#1B1B26",
+		Primary:       "#1B1B26",
+		Dim:           "#55555E",
+		Subtle:        "#6B6B75",
+		TreeLine:      lipgloss.Color(quietHex("#1B1B26", "#FFFFFF")),
+		Accent:        "#3F4390",
+		TreeConnector: "#4B4B54",
+		DueOverdue:    "#C0392B",
+		DueSoon:       "#A65D00",
+		DueNormal:     "#1B1B26",
+		DueFar:        "#6B6B75",
+		DueNone:       "#8A8A8A",
+		New:           "#6B6B75",
+		Tracked:       "#96590B",
+		Done:          "#177A43",
+		Ignored:       "#7651A8",
+		Missed:        "#C0392B",
 	}
 }
 
@@ -180,6 +206,12 @@ var (
 	stOverdue lipgloss.Style
 	stCode    lipgloss.Style
 
+	stDueOverdue lipgloss.Style
+	stDueSoon    lipgloss.Style
+	stDueNormal  lipgloss.Style
+	stDueFar     lipgloss.Style
+	stDueNone    lipgloss.Style
+
 	stPaneTitle lipgloss.Style
 	stRule      lipgloss.Style
 	stKey       lipgloss.Style
@@ -193,7 +225,7 @@ var (
 func buildStyles() {
 	stPrimary = fgStyle(themeTokens.Primary)
 	stDim = fgStyle(themeTokens.Dim)
-	stGuide = fgStyle(themeTokens.Guide)
+	stGuide = fgStyle(themeTokens.TreeConnector)
 	stTreeLine = fgStyle(themeTokens.TreeLine)
 	stFaint = fgStyle(themeTokens.Subtle)
 	stEmpty = fgStyle(themeTokens.Subtle).Italic(true)
@@ -207,9 +239,16 @@ func buildStyles() {
 	stSelMark = fgStyle(themeTokens.Accent)
 
 	stDone = fgStyle(themeTokens.Done)
-	stSoon = fgStyle(themeTokens.Dim)
-	stOverdue = fgStyle(themeTokens.Missed).Bold(true)
 	stCode = fgStyle(themeTokens.Accent)
+
+	stDueOverdue = fgStyle(themeTokens.DueOverdue).Bold(true)
+	stDueSoon = fgStyle(themeTokens.DueSoon)
+	stDueNormal = fgStyle(themeTokens.DueNormal)
+	stDueFar = fgStyle(themeTokens.DueFar)
+	stDueNone = fgStyle(themeTokens.DueNone)
+
+	stSoon = stDueSoon
+	stOverdue = stDueOverdue
 
 	stPaneTitle = fgStyle(themeTokens.Bright)
 	stRule = fgStyle(themeTokens.Border)

@@ -116,9 +116,10 @@ func TestTreeSampleLayout(t *testing.T) {
 			"", "├─ ", "│  ├─ ", "│  ├─ ", "│  ├─ ", "│  └─ ",
 			"├─ ", "│  └─ ",
 			"└─ ", "   ├─ ", "   └─ ",
+			"", // spacer above Course Two
 			"", "└─ ", "   └─ ",
 		}
-		// The sample has 14 visible nodes; trim to whatever the tree produced.
+		// The sample has 15 visible nodes including the spacer above Course Two.
 		if len(prefix) != len(wantPrefix) {
 			t.Fatalf("%dx%d node count %d, want %d: %v", tc.width, tc.height, len(prefix), len(wantPrefix), prefix)
 		}
@@ -195,6 +196,98 @@ func treeNodeTitle(app *App, n node) string {
 		return taskDisplayName(n.task.Name)
 	}
 	return ""
+}
+
+func TestCourseSpacersAreNotSelectable(t *testing.T) {
+	app := treeSampleApp(t, time.Now())
+	nodes := app.taskNodes()
+	spacer, courseTwo := -1, -1
+	for i, n := range nodes {
+		if n.kind == nodeSpacer {
+			spacer = i
+		}
+		if n.kind == nodeCourse && n.courseID == 2 {
+			courseTwo = i
+		}
+	}
+	if spacer < 0 || courseTwo != spacer+1 {
+		t.Fatalf("spacer=%d courseTwo=%d nodes=%d", spacer, courseTwo, len(nodes))
+	}
+	if nodes[0].kind != nodeCourse {
+		t.Fatal("the first course should not have a spacer above it")
+	}
+	if row := stripANSI(app.taskTreeRow(nodes, spacer, 80)); strings.TrimSpace(row) != "" {
+		t.Fatalf("spacer row is not blank: %q", row)
+	}
+
+	app.taskCursor = spacer
+	app.clampCursor()
+	if nodes[app.taskCursor].kind == nodeSpacer {
+		t.Fatal("clampCursor left the cursor on a spacer")
+	}
+
+	app.taskCursor = spacer - 1
+	app.move(1)
+	if app.taskCursor != courseTwo {
+		t.Fatalf("move down from course one ended at %d, want course two %d", app.taskCursor, courseTwo)
+	}
+
+	app.taskCursor = courseTwo
+	app.move(-1)
+	if nodes[app.taskCursor].kind == nodeSpacer {
+		t.Fatal("move up from course two landed on the spacer")
+	}
+
+	app.moveTop()
+	if nodes[app.taskCursor].kind == nodeSpacer {
+		t.Fatal("moveTop landed on a spacer")
+	}
+	app.moveBottom()
+	if nodes[app.taskCursor].kind == nodeSpacer {
+		t.Fatal("moveBottom landed on a spacer")
+	}
+
+	app.taskCursor = courseTwo
+	app.toggleSelect()
+	if !app.selected["B1"] {
+		t.Fatal("course header is no longer selectable")
+	}
+	app.moveX(-1)
+	if app.taskIsOpen(courseKey(2), true) {
+		t.Fatal("course header is no longer collapsible")
+	}
+	app.moveX(1)
+	if !app.taskIsOpen(courseKey(2), true) {
+		t.Fatal("course header is no longer expandable")
+	}
+}
+
+func TestCourseRuleDropsBelow60(t *testing.T) {
+	app := treeSampleApp(t, time.Now())
+	nodes := app.taskNodes()
+	course := -1
+	for i, n := range nodes {
+		if n.kind == nodeCourse && n.courseID == 1 {
+			course = i
+			break
+		}
+	}
+	if course < 0 {
+		t.Fatal("sample tree has no first course")
+	}
+
+	narrow := stripANSI(app.taskTreeRow(nodes, course, 59))
+	if strings.Contains(narrow, "─") {
+		t.Fatalf("59-column course header kept the rule: %q", narrow)
+	}
+	if !strings.Contains(narrow, "Course One") || !strings.Contains(narrow, "3/7") {
+		t.Fatalf("59-column course header lost content: %q", narrow)
+	}
+
+	wide := stripANSI(app.taskTreeRow(nodes, course, 60))
+	if !strings.Contains(wide, "─") || !strings.Contains(wide, "3/7") {
+		t.Fatalf("60-column course header is missing the rule or progress: %q", wide)
+	}
 }
 
 func TestTreeHidesTypeSuffixAndDetailKeepsIt(t *testing.T) {

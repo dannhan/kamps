@@ -30,10 +30,10 @@ func (m *App) switchTab(tab Tab) {
 func (m *App) move(delta int) {
 	switch m.tab {
 	case TabTasks:
-		m.taskCursor = clampInt(m.taskCursor+delta, 0, maxInt(0, len(m.taskNodes())-1))
+		m.taskCursor = movedIndex(m.taskNodes(), m.taskCursor, delta)
 		m.extendRange()
 	case TabMaterials:
-		m.matCursor = clampInt(m.matCursor+delta, 0, maxInt(0, len(m.matNodes())-1))
+		m.matCursor = movedIndex(m.matNodes(), m.matCursor, delta)
 		m.extendRange()
 	case TabSync:
 		m.syncCursor = clampInt(m.syncCursor+delta, 0, 5)
@@ -47,14 +47,71 @@ func (m *App) move(delta int) {
 func (m *App) clampCursor() {
 	switch {
 	case m.tab == TabTasks:
-		m.taskCursor = clampInt(m.taskCursor, 0, maxInt(0, len(m.taskNodes())-1))
+		m.taskCursor = selectableIndex(m.taskNodes(), m.taskCursor)
 	case m.tab == TabMaterials:
-		m.matCursor = clampInt(m.matCursor, 0, maxInt(0, len(m.matNodes())-1))
+		m.matCursor = selectableIndex(m.matNodes(), m.matCursor)
 	case m.tab == TabSync:
 		m.syncCursor = clampInt(m.syncCursor, 0, 5)
 	case m.tab == TabCommit:
 		m.commitCursor = clampInt(m.commitCursor, 0, maxInt(0, len(m.commitItems())-1))
 	}
+}
+
+// selectableIndex clamps index into the list and, when it lands on a spacer,
+// moves to the nearest selectable row.
+func selectableIndex(nodes []node, index int) int {
+	if len(nodes) == 0 {
+		return 0
+	}
+	index = clampInt(index, 0, len(nodes)-1)
+	if nodes[index].kind != nodeSpacer {
+		return index
+	}
+	for i := index + 1; i < len(nodes); i++ {
+		if nodes[i].kind != nodeSpacer {
+			return i
+		}
+	}
+	for i := index - 1; i >= 0; i-- {
+		if nodes[i].kind != nodeSpacer {
+			return i
+		}
+	}
+	return 0
+}
+
+// movedIndex applies delta and skips spacer rows in the direction of travel.
+// Spacers remain rendered but can never hold the cursor.
+func movedIndex(nodes []node, index, delta int) int {
+	if len(nodes) == 0 {
+		return 0
+	}
+	if delta == 0 {
+		return selectableIndex(nodes, index)
+	}
+	index = clampInt(index+delta, 0, len(nodes)-1)
+	if delta > 0 {
+		for index < len(nodes)-1 && nodes[index].kind == nodeSpacer {
+			index++
+		}
+	} else {
+		for index > 0 && nodes[index].kind == nodeSpacer {
+			index--
+		}
+	}
+	if nodes[index].kind == nodeSpacer {
+		// Degenerate list: move the other way to find something selectable.
+		if delta > 0 {
+			for index > 0 && nodes[index].kind == nodeSpacer {
+				index--
+			}
+		} else {
+			for index < len(nodes)-1 && nodes[index].kind == nodeSpacer {
+				index++
+			}
+		}
+	}
+	return index
 }
 
 // moveTop and moveBottom jump to the first or last row in the active list.
@@ -85,6 +142,9 @@ func (m *App) moveX(delta int) {
 		return
 	}
 	n := nodes[*cursor]
+	if n.kind == nodeSpacer {
+		return
+	}
 	if delta > 0 {
 		if n.key != "" && (m.isTaskGroup(n) || m.materialHasChildren(n)) {
 			m.expanded[n.key] = true

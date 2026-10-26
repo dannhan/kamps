@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/ruyam/kamps/internal/model"
@@ -11,6 +10,9 @@ import (
 
 func (m *App) taskTreeRow(nodes []node, index, width int) string {
 	n := nodes[index]
+	if n.kind == nodeSpacer {
+		return m.treeRow(treeRowSpec{nodes: nodes, index: index, width: width, blank: true})
+	}
 	group := m.isTaskGroup(n)
 	ids := m.taskGroupIDs(n)
 	selected := false
@@ -37,23 +39,21 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 			name = course.Name
 		}
 		spec.title = func(h rowHighlight) string {
-			return h.style(courseStyle(n.courseID).Bold(true)).Render(name)
+			return h.style(courseStyle(n.courseID).Bold(true)).Render(name + " ")
 		}
 		spec.meta = func(h rowHighlight) string { return m.taskCourseMeta(n.courseID, h) }
+		spec.rule = width >= courseRuleMinWidth
 	case nodeBucket:
 		spec.title = func(h rowHighlight) string {
 			return h.primaryStyle().Render(fmt.Sprintf("%s (%d)", n.bucket, len(ids)))
 		}
 	case nodeTask:
 		now := m.currentTime()
-		ageStyle := stRowDim
-		if n.task.HasDue && n.task.Due.Before(now) {
-			ageStyle = stOverdue
-		}
 		due := dueCell(n.task, now)
+		dueStyle := dueStyleFor(dueToneForDays(dueDays(n.task, now), n.task.HasDue))
 		name := taskDisplayName(n.task.Name)
 		spec.title = func(h rowHighlight) string { return h.primaryStyle().Render(name) }
-		spec.meta = func(h rowHighlight) string { return h.style(ageStyle).Render(due) }
+		spec.meta = func(h rowHighlight) string { return h.style(dueStyle).Render(due) }
 	case nodeTaskMaterial:
 		glyph := "○"
 		if n.mat.Downloaded {
@@ -118,19 +118,6 @@ func formatTaskCounts(counts [5]int, h rowHighlight) string {
 		}
 	}
 	return strings.Join(parts, h.blanks(2))
-}
-
-func dueAge(assignment model.Assignment, now time.Time) string {
-	if !assignment.HasDue {
-		return "—"
-	}
-	dueDay := time.Date(assignment.Due.Year(), assignment.Due.Month(), assignment.Due.Day(), 0, 0, 0, 0, assignment.Due.Location())
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	days := int(dueDay.Sub(today).Hours() / 24)
-	if days < 0 {
-		return fmt.Sprintf("−%dd", -days)
-	}
-	return fmt.Sprintf("+%dd", days)
 }
 
 func (m *App) taskRows(nodes []node, width, height int) []string {

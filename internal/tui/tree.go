@@ -24,6 +24,7 @@ const (
 	nodeMaterialSection
 	nodeMaterialFolder
 	nodeMaterialAssignment
+	nodeSpacer
 )
 
 type node struct {
@@ -53,6 +54,10 @@ func (n node) depth() int {
 }
 
 func courseKey(id int) string { return fmt.Sprintf("c:%d", id) }
+
+// spacerKey is a stable but never-selectable row key for the blank line above
+// a course header.
+func spacerKey(id int) string { return fmt.Sprintf("s:%d", id) }
 
 func bucketKey(id int, bucket string) string { return fmt.Sprintf("b:%d:%s", id, bucket) }
 

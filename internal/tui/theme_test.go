@@ -27,34 +27,43 @@ func TestPaletteContrast(t *testing.T) {
 	cases := []struct {
 		name  string
 		theme themeColors
-		bg    string
 		min   float64
 	}{
-		{"dark", darkColors(), "#1B1B26", 4.5},
-		{"light", lightColors(), "#FFFFFF", 4.5},
+		{"dark", darkColors(), 4.5},
+		{"light", lightColors(), 4.5},
 	}
 	for _, tc := range cases {
+		bg := string(tc.theme.Canvas)
 		t.Run(tc.name, func(t *testing.T) {
 			text := map[string]lipgloss.Color{
-				"primary": tc.theme.Primary,
-				"dim":     tc.theme.Dim,
-				"subtle":  tc.theme.Subtle,
-				"accent":  tc.theme.Accent,
-				"new":     tc.theme.New,
-				"tracked": tc.theme.Tracked,
-				"done":    tc.theme.Done,
-				"ignored": tc.theme.Ignored,
-				"missed":  tc.theme.Missed,
+				"primary":    tc.theme.Primary,
+				"dim":        tc.theme.Dim,
+				"subtle":     tc.theme.Subtle,
+				"accent":     tc.theme.Accent,
+				"new":        tc.theme.New,
+				"tracked":    tc.theme.Tracked,
+				"done":       tc.theme.Done,
+				"ignored":    tc.theme.Ignored,
+				"missed":     tc.theme.Missed,
+				"due red":    tc.theme.DueOverdue,
+				"due amber":  tc.theme.DueSoon,
+				"due normal": tc.theme.DueNormal,
+				"due far":    tc.theme.DueFar,
 			}
 			for name, color := range text {
-				ratio := contrastRatio(string(color), tc.bg)
+				ratio := contrastRatio(string(color), bg)
 				if ratio < tc.min {
 					t.Errorf("%s/%s contrast = %.2f:1, want >= %.1f:1", tc.name, name, ratio, tc.min)
 				}
 			}
 
-			if ratio := contrastRatio(string(tc.theme.Guide), tc.bg); ratio < 3.0 {
-				t.Errorf("%s/guide contrast = %.2f:1, want >= 3.0:1", tc.name, ratio)
+			for name, color := range map[string]lipgloss.Color{
+				"tree connector": tc.theme.TreeConnector,
+				"due none":       tc.theme.DueNone,
+			} {
+				if ratio := contrastRatio(string(color), bg); ratio < 3.0 {
+					t.Errorf("%s/%s contrast = %.2f:1, want >= 3.0:1", tc.name, name, ratio)
+				}
 			}
 
 			accents := darkCourseAccents()
@@ -62,13 +71,13 @@ func TestPaletteContrast(t *testing.T) {
 				accents = lightCourseAccents()
 			}
 			for i, accent := range accents {
-				if ratio := contrastRatio(string(accent), tc.bg); ratio < tc.min {
+				if ratio := contrastRatio(string(accent), bg); ratio < tc.min {
 					t.Errorf("%s/course accent %d contrast = %.2f:1, want >= %.1f:1", tc.name, i, ratio, tc.min)
 				}
 			}
 
 			for name, band := range map[string]lipgloss.Color{"surface": tc.theme.Surface, "marked": tc.theme.Marked} {
-				if ratio := contrastRatio(string(band), tc.bg); ratio < 1.4 {
+				if ratio := contrastRatio(string(band), bg); ratio < 1.4 {
 					t.Errorf("%s/%s band contrast = %.2f:1, want >= 1.4:1", tc.name, name, ratio)
 				}
 				if ratio := contrastRatio(string(tc.theme.Primary), string(band)); ratio < 4.5 {
@@ -76,6 +85,49 @@ func TestPaletteContrast(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestDueToneBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		days   int
+		hasDue bool
+		want   dueTone
+	}{
+		{-1, true, dueToneOverdue},
+		{0, true, dueToneSoon},
+		{7, true, dueToneSoon},
+		{8, true, dueToneNormal},
+		{29, true, dueToneNormal},
+		{30, true, dueToneFar},
+		{0, false, dueToneNone},
+	} {
+		if got := dueToneForDays(tc.days, tc.hasDue); got != tc.want {
+			t.Errorf("dueToneForDays(%d, %v) = %v, want %v", tc.days, tc.hasDue, got, tc.want)
+		}
+	}
+}
+
+func TestDueTonesUseDistinctColorTokens(t *testing.T) {
+	applyTheme("dark")
+	defer applyTheme("dark")
+
+	tones := []lipgloss.Color{
+		themeTokens.DueOverdue,
+		themeTokens.DueSoon,
+		themeTokens.DueNormal,
+		themeTokens.DueFar,
+		themeTokens.DueNone,
+	}
+	seen := map[lipgloss.Color]bool{}
+	for _, color := range tones {
+		if color == "" {
+			t.Fatal("due tone has an empty color token")
+		}
+		if seen[color] {
+			t.Fatalf("due tones reuse the color token %q", color)
+		}
+		seen[color] = true
 	}
 }
 

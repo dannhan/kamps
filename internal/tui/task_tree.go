@@ -78,7 +78,10 @@ func (m *App) taskNodes() []node {
 	})
 
 	out := make([]node, 0, len(visible)*2)
-	for _, courseID := range courseIDs {
+	for courseIndex, courseID := range courseIDs {
+		if courseIndex > 0 {
+			out = append(out, node{kind: nodeSpacer, courseID: courseID, key: spacerKey(courseID)})
+		}
 		courseKeyValue := courseKey(courseID)
 		out = append(out, node{kind: nodeCourse, courseID: courseID, key: courseKeyValue})
 		if !m.taskIsOpen(courseKeyValue, true) {

@@ -42,7 +42,10 @@ func (m *App) matNodes() []node {
 	}
 	sort.Ints(courseIDs)
 	out := []node{}
-	for _, courseID := range courseIDs {
+	for courseIndex, courseID := range courseIDs {
+		if courseIndex > 0 {
+			out = append(out, node{kind: nodeSpacer, courseID: courseID, key: spacerKey(courseID)})
+		}
 		course := node{kind: nodeCourse, courseID: courseID, key: courseKey(courseID)}
 		out = append(out, course)
 		if !m.isOpen(course.key) {

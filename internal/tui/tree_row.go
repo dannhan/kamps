@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -18,9 +19,10 @@ import (
 // one-cell state/triage flag plus a space; reserveGlyph keeps that column even
 // when a particular row has no glyph.
 const (
-	treeRowRightPad = 2
-	dueDaysWidth    = 5
-	dueColumnWidth  = 1 + dueDaysWidth // "!" slot plus right-aligned days
+	treeRowRightPad    = 2
+	courseRuleMinWidth = 60
+	dueDaysWidth       = 5
+	dueColumnWidth     = 1 + dueDaysWidth // "!" slot plus right-aligned days
 )
 
 type treeRowSpec struct {
@@ -42,12 +44,21 @@ type treeRowSpec struct {
 	prefix func(rowHighlight) string
 	title  func(rowHighlight) string
 	meta   func(rowHighlight) string
+
+	// blank renders a full-width empty row for a non-selectable spacer.
+	blank bool
+	// rule fills the gap between the title and meta with a dim horizontal
+	// rule. Course headers set it when the row is wide enough.
+	rule bool
 }
 
 // treeRow is the single renderer for Tasks and Materials rows. It owns the
 // connector, expander, mark, glyph, truncation, and right alignment so callers
 // never concatenate structural columns themselves.
 func (m *App) treeRow(spec treeRowSpec) string {
+	if spec.blank {
+		return strings.Repeat(" ", spec.width)
+	}
 	h := rowHighlight{cursor: spec.cursor, mark: spec.selected, partial: spec.partial}
 	background := h.style
 
@@ -94,7 +105,12 @@ func (m *App) treeRow(spec treeRowSpec) string {
 		if fill < 1 {
 			fill = 1
 		}
-		row += background(stRow).Render(strings.Repeat(" ", fill)) + meta
+		if spec.rule {
+			row += background(stGuide).Render(strings.Repeat("─", fill))
+		} else {
+			row += background(stRow).Render(strings.Repeat(" ", fill))
+		}
+		row += meta
 	}
 
 	if width := lipgloss.Width(row); width > spec.width {
@@ -108,6 +124,76 @@ func (m *App) treeRow(spec treeRowSpec) string {
 		row += padding
 	}
 	return row
+}
+
+// Due-date buckets. The last day in each bucket is a threshold; 0 and the
+// negative range are both named so the mapping has no inline magic numbers.
+const (
+	dueOverdueMaxDays = -1 // days <= -1 is overdue
+	dueSoonMaxDays    = 7  // 0..7 days
+	dueNormalMaxDays  = 29 // 8..29 days; 30+ is far
+)
+
+type dueTone int
+
+const (
+	dueToneNone dueTone = iota
+	dueToneOverdue
+	dueToneSoon
+	dueToneNormal
+	dueToneFar
+)
+
+// dueToneForDays maps a relative day count to the semantic urgency slot.
+func dueToneForDays(days int, hasDue bool) dueTone {
+	if !hasDue {
+		return dueToneNone
+	}
+	switch {
+	case days <= dueOverdueMaxDays:
+		return dueToneOverdue
+	case days <= dueSoonMaxDays:
+		return dueToneSoon
+	case days <= dueNormalMaxDays:
+		return dueToneNormal
+	default:
+		return dueToneFar
+	}
+}
+
+func dueStyleFor(tone dueTone) lipgloss.Style {
+	switch tone {
+	case dueToneOverdue:
+		return stDueOverdue
+	case dueToneSoon:
+		return stDueSoon
+	case dueToneNormal:
+		return stDueNormal
+	case dueToneFar:
+		return stDueFar
+	default:
+		return stDueNone
+	}
+}
+
+func dueDays(a model.Assignment, now time.Time) int {
+	if !a.HasDue {
+		return 0
+	}
+	dueDay := dateOnly(a.Due)
+	today := dateOnly(now)
+	return int(dueDay.Sub(today).Hours() / 24)
+}
+
+func dueAge(a model.Assignment, now time.Time) string {
+	if !a.HasDue {
+		return "—"
+	}
+	days := dueDays(a, now)
+	if days < 0 {
+		return fmt.Sprintf("−%dd", -days)
+	}
+	return fmt.Sprintf("+%dd", days)
 }
 
 // dueCell is a fixed-width right-aligned due column. The first cell is the

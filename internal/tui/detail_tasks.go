@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/ruyam/kamps/internal/format"
@@ -67,13 +66,14 @@ func (m *App) detailLines(n node, width int) []string {
 			state = "new"
 		}
 		addKV("state", flagChar(task.Triage)+" "+state, triageStyle(task.Triage))
-		now := time.Now()
-		due, dueStyle := "none", stRow
+		now := m.currentTime()
+		due, dueStyle := "none", stDueNone
 		if task.HasDue {
+			days := dueDays(task, now)
 			due = task.Due.Format("2006-01-02") + " · " + dueAge(task, now)
+			dueStyle = dueStyleFor(dueToneForDays(days, true))
 			if task.Overdue(now) {
 				due = "! " + due
-				dueStyle = stOverdue
 			}
 		}
 		addKV("due", due, dueStyle)

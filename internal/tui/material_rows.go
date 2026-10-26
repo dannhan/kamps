@@ -16,6 +16,9 @@ func materialTreeState(material model.Material) (string, lipgloss.Style) {
 
 func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 	n := nodes[index]
+	if n.kind == nodeSpacer {
+		return m.treeRow(treeRowSpec{nodes: nodes, index: index, width: width, blank: true})
+	}
 	ids := m.materialNodeIDs(n)
 	parent := m.materialHasChildren(n)
 	open := n.key != "" && m.isOpen(n.key)
@@ -38,9 +41,10 @@ func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 			name = course.Name
 		}
 		spec.title = func(h rowHighlight) string {
-			return h.style(courseStyle(n.courseID).Bold(true)).Render(name)
+			return h.style(courseStyle(n.courseID).Bold(true)).Render(name + " ")
 		}
 		spec.meta = func(h rowHighlight) string { return m.materialCourseMeta(n.courseID, h) }
+		spec.rule = width >= courseRuleMinWidth
 	case nodeMaterialSection:
 		count := len(m.materialNodeFiles(n))
 		spec.title = func(h rowHighlight) string {
