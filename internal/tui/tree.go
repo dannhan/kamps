@@ -25,6 +25,8 @@ const (
 	nodeMaterialFolder
 	nodeMaterialAssignment
 	nodeSpacer
+	nodeActNow
+	nodeCoursePlaceholder
 )
 
 type node struct {
@@ -55,6 +57,8 @@ func (n node) depth() int {
 
 func courseKey(id int) string { return fmt.Sprintf("c:%d", id) }
 
+const actNowKey = "act:now"
+
 // spacerKey is a stable but never-selectable row key for the blank line above
 // a course header.
 func spacerKey(id int) string { return fmt.Sprintf("s:%d", id) }
@@ -81,10 +85,12 @@ func (m *App) taskIsOpen(key string, defaultOpen bool) bool {
 }
 
 func taskNodeDefaultOpen(n node) bool {
-	if n.kind == nodeTask {
+	switch n.kind {
+	case nodeTask, nodeCoursePlaceholder:
 		return false
-	}
-	if n.kind == nodeBucket {
+	case nodeActNow:
+		return true
+	case nodeBucket:
 		for _, bucket := range taskBuckets {
 			if bucket.name == n.bucket {
 				return bucket.open

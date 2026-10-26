@@ -4,30 +4,115 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ruyam/kamps/internal/model"
 )
 
+// Act-now windows are deliberately separate: the look-behind decides which
+// recently overdue items stay actionable, while the look-ahead decides what is
+// upcoming enough to pin. Stale starts just beyond the look-behind.
+const (
+	actNowLookBehindDays = 7
+	actNowLookAheadDays  = 7
+)
+
+type taskGroup int
+
+const (
+	taskGroupActNow taskGroup = iota
+	taskGroupStale
+	taskGroupNeeds
+	taskGroupTracked
+	taskGroupClosed
+)
+
+// classifyTask is the single bucketing decision for the Tasks view.
+func classifyTask(a model.Assignment, now time.Time) taskGroup {
+	switch a.Triage {
+	case model.Tracked:
+		return taskGroupTracked
+	case model.Missed, model.Ignored:
+		return taskGroupClosed
+	}
+	if !a.HasDue {
+		return taskGroupNeeds
+	}
+	days := dueDays(a, now)
+	switch {
+	case days < -actNowLookBehindDays:
+		return taskGroupStale
+	case days <= actNowLookAheadDays:
+		return taskGroupActNow
+	default:
+		return taskGroupNeeds
+	}
+}
+
 // taskBuckets is the fixed order of state groups under every course row.
 var taskBuckets = []struct {
 	name string
-	keep func(model.Assignment) bool
 	open bool
 }{
-	{"needs decision", func(a model.Assignment) bool { return a.Triage == model.Undecided }, true},
-	{"tracked", func(a model.Assignment) bool { return a.Triage == model.Tracked }, false},
-	{"closed", func(a model.Assignment) bool { return a.Triage == model.Missed || a.Triage == model.Ignored }, false},
+	{"needs decision", true},
+	{"stale overdue", false},
+	{"tracked", false},
+	{"closed", false},
+}
+
+func (m *App) taskBucketMatches(a model.Assignment, bucket string, now time.Time) bool {
+	if m.showAll {
+		switch bucket {
+		case "needs decision":
+			return a.Triage == model.Undecided
+		case "tracked":
+			return a.Triage == model.Tracked
+		case "closed":
+			return a.Triage == model.Missed || a.Triage == model.Ignored
+		}
+		return false
+	}
+	group := classifyTask(a, now)
+	switch bucket {
+	case "needs decision":
+		return group == taskGroupNeeds
+	case "stale overdue":
+		return group == taskGroupStale
+	case "tracked":
+		return group == taskGroupTracked
+	case "closed":
+		return group == taskGroupClosed
+	}
+	return false
+}
+
+func (m *App) courseGroupAssignments(courseID int) []model.Assignment {
+	now := m.currentTime()
+	out := make([]model.Assignment, 0, 8)
+	for _, assignment := range m.visible() {
+		if assignment.CourseID != courseID {
+			continue
+		}
+		if !m.showAll && classifyTask(assignment, now) == taskGroupActNow {
+			continue
+		}
+		out = append(out, assignment)
+	}
+	return out
 }
 
 func (m *App) taskGroupIDs(group node) []string {
+	now := m.currentTime()
 	var ids []string
 	for _, assignment := range m.visible() {
 		include := false
 		switch group.kind {
+		case nodeActNow:
+			include = !m.showAll && classifyTask(assignment, now) == taskGroupActNow
 		case nodeCourse:
-			include = assignment.CourseID == group.courseID
+			include = assignment.CourseID == group.courseID && (!m.showAll && classifyTask(assignment, now) != taskGroupActNow || m.showAll)
 		case nodeBucket:
-			include = assignment.CourseID == group.courseID && (group.bucket == "needs decision" && assignment.Triage == model.Undecided || group.bucket == "tracked" && assignment.Triage == model.Tracked || group.bucket == "closed" && (assignment.Triage == model.Missed || assignment.Triage == model.Ignored))
+			include = assignment.CourseID == group.courseID && m.taskBucketMatches(assignment, group.bucket, now)
 		case nodeTask:
 			include = assignment.ID == group.task.ID
 		}
@@ -38,9 +123,8 @@ func (m *App) taskGroupIDs(group node) []string {
 	return ids
 }
 
-// taskNodes flattens the Tasks tab: course ▸ state bucket ▸ task ▸ attached
-// material. Courses are top-level rows; courses are ordered by term and then by
-// their display name so a multi-semester set stays readable.
+// taskNodes flattens the Tasks tab: Act now, then course ▸ state bucket ▸ task
+// ▸ attached material. Courses are ordered by term and display name.
 func (m *App) taskNodes() []node {
 	visible := m.visible()
 	byCourse := make(map[int][]model.Assignment)
@@ -77,20 +161,52 @@ func (m *App) taskNodes() []node {
 		return courseSortName(left) < courseSortName(right)
 	})
 
+	now := m.currentTime()
 	out := make([]node, 0, len(visible)*2)
+
+	if !m.showAll {
+		var actNow []model.Assignment
+		for _, assignment := range visible {
+			if classifyTask(assignment, now) == taskGroupActNow {
+				actNow = append(actNow, assignment)
+			}
+		}
+		if len(actNow) > 0 {
+			out = append(out, node{kind: nodeActNow, key: actNowKey})
+			for _, assignment := range actNow {
+				taskNodeKey := taskKey(assignment.ID)
+				out = append(out, node{kind: nodeTask, courseID: assignment.CourseID, bucket: "act now", key: taskNodeKey, parents: []string{actNowKey}, task: assignment})
+				if !m.taskIsOpen(taskNodeKey, false) {
+					continue
+				}
+				for _, material := range m.assignmentMaterials(assignment) {
+					out = append(out, node{kind: nodeTaskMaterial, courseID: assignment.CourseID, bucket: "act now", key: taskMaterialKey(material.ID), parents: []string{actNowKey, taskNodeKey}, mat: material, task: assignment})
+				}
+			}
+			if len(courseIDs) > 0 {
+				out = append(out, node{kind: nodeSpacer, key: "act:now:spacer"})
+			}
+		}
+	}
+
 	for courseIndex, courseID := range courseIDs {
 		if courseIndex > 0 {
 			out = append(out, node{kind: nodeSpacer, courseID: courseID, key: spacerKey(courseID)})
 		}
 		courseKeyValue := courseKey(courseID)
+		groupAssignments := m.courseGroupAssignments(courseID)
+		if len(groupAssignments) == 0 {
+			out = append(out, node{kind: nodeCoursePlaceholder, courseID: courseID, key: courseKeyValue})
+			continue
+		}
 		out = append(out, node{kind: nodeCourse, courseID: courseID, key: courseKeyValue})
 		if !m.taskIsOpen(courseKeyValue, true) {
 			continue
 		}
 		for _, bucket := range taskBuckets {
 			var assignments []model.Assignment
-			for _, assignment := range byCourse[courseID] {
-				if bucket.keep(assignment) {
+			for _, assignment := range groupAssignments {
+				if m.taskBucketMatches(assignment, bucket.name, now) {
 					assignments = append(assignments, assignment)
 				}
 			}

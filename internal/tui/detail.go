@@ -122,6 +122,19 @@ func (m *App) detailRows(nodes []node, cursor, width, height int) []string {
 }
 
 func (m *App) enter() {
+	if m.tab == TabTasks {
+		if n, ok := m.cursorTaskNode(); ok {
+			if n.kind == nodeActNow || n.kind == nodeBucket && n.bucket == "stale overdue" {
+				m.cancelTriageArm()
+				if m.expanded == nil {
+					m.expanded = make(map[string]bool)
+				}
+				m.expanded[n.key] = !m.taskIsOpen(n.key, taskNodeDefaultOpen(n))
+				m.tabExpanded[m.tab] = m.expanded
+				return
+			}
+		}
+	}
 	switch m.tab {
 	case TabTasks, TabMaterials:
 		m.toggleDetailPane()

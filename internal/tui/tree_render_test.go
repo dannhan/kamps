@@ -84,7 +84,7 @@ func treeSampleApp(t *testing.T, now time.Time) *App {
 	app.Update(app.Init()())
 	app.tab = TabTasks
 	for _, courseID := range []int{1, 2} {
-		for _, bucket := range []string{"needs decision", "tracked", "closed"} {
+		for _, bucket := range []string{"needs decision", "stale overdue", "tracked", "closed"} {
 			app.expanded[bucketKey(courseID, bucket)] = true
 		}
 	}
@@ -113,13 +113,17 @@ func TestTreeSampleLayout(t *testing.T) {
 			prefix = append(prefix, treePrefix(nodes, i))
 		}
 		wantPrefix := []string{
-			"", "├─ ", "│  ├─ ", "│  ├─ ", "│  ├─ ", "│  └─ ",
-			"├─ ", "│  └─ ",
-			"└─ ", "   ├─ ", "   └─ ",
+			"", "├─ ", "├─ ", "└─ ", // Act now header and its three tasks
+			"",                  // separator between Act now and the course list
+			"", "├─ ", "│  └─ ", // Course One, needs decision, Delta
+			"├─ ", "│  └─ ", // stale overdue, Alpha
+			"├─ ", "│  └─ ", // tracked, Tracked One
+			"└─ ", "   ├─ ", "   └─ ", // closed, Missed One, Ignored One
 			"", // spacer above Course Two
-			"", "└─ ", "   └─ ",
+			"", // Course Two placeholder, all in Act now
 		}
-		// The sample has 15 visible nodes including the spacer above Course Two.
+		// The sample has 17 visible nodes: Act now, Course One's four buckets,
+		// the spacer, and Course Two's dim placeholder.
 		if len(prefix) != len(wantPrefix) {
 			t.Fatalf("%dx%d node count %d, want %d: %v", tc.width, tc.height, len(prefix), len(wantPrefix), prefix)
 		}
@@ -129,8 +133,10 @@ func TestTreeSampleLayout(t *testing.T) {
 			}
 		}
 
-		// (b) every row at the same depth starts its title at the same column.
-		titleColumns := map[int]int{}
+		// (b) rows of the same class start their title at the same column.
+		// Act-now tasks carry the fixed course prefix, so they are their own
+		// class; other rows group by depth and kind.
+		titleColumns := map[string]int{}
 		for i, n := range nodes {
 			title := treeNodeTitle(app, n)
 			if title == "" {
@@ -141,11 +147,11 @@ func TestTreeSampleLayout(t *testing.T) {
 				t.Fatalf("%dx%d row %q is missing title %q", tc.width, tc.height, plain[i], title)
 			}
 			column := lipgloss.Width(plain[i][:byteIndex])
-			depth := n.depth()
-			if want, ok := titleColumns[depth]; ok && column != want {
-				t.Errorf("%dx%d depth %d title %q starts at %d, want %d", tc.width, tc.height, depth, title, column, want)
+			group := treeTitleGroup(n)
+			if want, ok := titleColumns[group]; ok && column != want {
+				t.Errorf("%dx%d %s title %q starts at %d, want %d", tc.width, tc.height, group, title, column, want)
 			} else {
-				titleColumns[depth] = column
+				titleColumns[group] = column
 			}
 		}
 
@@ -183,6 +189,13 @@ func TestTreeSampleLayout(t *testing.T) {
 	}
 }
 
+func treeTitleGroup(n node) string {
+	if n.kind == nodeTask && len(n.parents) == 1 && n.parents[0] == actNowKey {
+		return "act-now-task"
+	}
+	return fmt.Sprintf("depth-%d-kind-%d", n.depth(), n.kind)
+}
+
 func treeNodeTitle(app *App, n node) string {
 	switch n.kind {
 	case nodeCourse:
@@ -200,6 +213,7 @@ func treeNodeTitle(app *App, n node) string {
 
 func TestCourseSpacersAreNotSelectable(t *testing.T) {
 	app := treeSampleApp(t, time.Now())
+	app.showAll = true
 	nodes := app.taskNodes()
 	spacer, courseTwo := -1, -1
 	for i, n := range nodes {

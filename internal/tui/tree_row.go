@@ -111,6 +111,11 @@ func (m *App) treeRow(spec treeRowSpec) string {
 			row += background(stRow).Render(strings.Repeat(" ", fill))
 		}
 		row += meta
+	} else if spec.rule {
+		fill := spec.width - treeRowRightPad - lipgloss.Width(row)
+		if fill > 0 {
+			row += background(stGuide).Render(strings.Repeat("─", fill))
+		}
 	}
 
 	if width := lipgloss.Width(row); width > spec.width {

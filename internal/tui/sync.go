@@ -40,9 +40,11 @@ func (m *App) advance() {
 // captureCursors remembers the stable keys under each cursor so a reload can
 // put the highlight back where it was.
 func (m *App) captureCursors() {
-	m.restoreTaskKey, m.restoreMatKey, m.restoreCommitID = "", "", ""
+	m.restoreTaskKey, m.restoreTaskFallbacks, m.restoreMatKey, m.restoreCommitID = "", nil, "", ""
 	if nodes := m.taskNodes(); m.taskCursor >= 0 && m.taskCursor < len(nodes) {
-		m.restoreTaskKey = nodes[m.taskCursor].key
+		n := nodes[m.taskCursor]
+		m.restoreTaskKey = n.key
+		m.restoreTaskFallbacks = taskFallbackKeys(n)
 	}
 	if nodes := m.matNodes(); m.matCursor >= 0 && m.matCursor < len(nodes) {
 		m.restoreMatKey = nodes[m.matCursor].key
@@ -52,11 +54,35 @@ func (m *App) captureCursors() {
 	}
 }
 
+// taskFallbackKeys are the stable rows to try when the focused task key has
+// disappeared: a hidden stale task first tries its stale bucket, then its
+// course header; other tasks fall back to their course header.
+func taskFallbackKeys(n node) []string {
+	if n.courseID == 0 {
+		return nil
+	}
+	if n.kind == nodeTask && n.bucket == "stale overdue" {
+		return []string{bucketKey(n.courseID, "stale overdue"), courseKey(n.courseID)}
+	}
+	if n.kind == nodeCourse {
+		return nil
+	}
+	return []string{courseKey(n.courseID)}
+}
+
 func (m *App) restoreCursors() {
 	if m.restoreTaskKey != "" {
-		for i, n := range m.taskNodes() {
-			if n.key == m.restoreTaskKey {
-				m.taskCursor = i
+		keys := append([]string{m.restoreTaskKey}, m.restoreTaskFallbacks...)
+		for _, key := range keys {
+			found := false
+			for i, n := range m.taskNodes() {
+				if n.key == key && selectableNode(n) {
+					m.taskCursor = i
+					found = true
+					break
+				}
+			}
+			if found {
 				break
 			}
 		}
@@ -77,7 +103,7 @@ func (m *App) restoreCursors() {
 			}
 		}
 	}
-	m.restoreTaskKey, m.restoreMatKey, m.restoreCommitID = "", "", ""
+	m.restoreTaskKey, m.restoreTaskFallbacks, m.restoreMatKey, m.restoreCommitID = "", nil, "", ""
 	m.clampCursor()
 }
 

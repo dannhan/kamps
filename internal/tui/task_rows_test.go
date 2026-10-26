@@ -12,8 +12,9 @@ import (
 func TestFooterKeepsPriorityAndSafetyHint(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabTasks
+	app.taskCursor = findTaskNode(app.taskNodes(), nodeCourse, "")
 	full := renderHintItems(app.footerHintItems(), 200)
-	want := "↑↓ move · enter detail · t/m/i decide · / search · f filter · ? all keys"
+	want := "↑↓ move · t/m/i decide · / search · f filter · A show all · ? all keys"
 	if got := stripANSI(full); got != want {
 		t.Fatalf("full footer = %q, want %q", got, want)
 	}
@@ -94,6 +95,7 @@ func TestTaskQueueLabels(t *testing.T) {
 func TestCursorAndMarksAreVisuallyDistinct(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabTasks
+	app.showAll = true
 
 	nodes := app.taskNodes()
 	marked := findTaskNode(nodes, nodeTask, "K901000")
@@ -123,6 +125,7 @@ func TestCursorAndMarksAreVisuallyDistinct(t *testing.T) {
 func TestParentRowsShowCaretAndMark(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabTasks
+	app.showAll = true
 
 	nodes := app.taskNodes()
 	app.taskCursor = findTaskNode(nodes, nodeTask, "K901000")

@@ -66,6 +66,9 @@ func TestPersistenceQueueKeepsLatestDecision(t *testing.T) {
 		t.Fatal("first decision returned no persistence command")
 	}
 	app.selected[id] = true
+	if armed := app.applyTriage(model.Missed); armed != nil {
+		t.Fatal("a hidden decision should arm instead of writing")
+	}
 	if second := app.applyTriage(model.Missed); second != nil {
 		t.Fatal("a second decision should wait for the in-flight write")
 	}

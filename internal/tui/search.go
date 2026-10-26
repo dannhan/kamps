@@ -38,6 +38,7 @@ func (m *App) clearSearch() bool {
 	if m.search == "" {
 		return false
 	}
+	m.cancelTriageArm()
 	m.search = ""
 	m.searching = false
 	m.resetTreeCursor()
@@ -73,6 +74,7 @@ func deleteLastSearchWord(query string) string {
 // runes append, arrows still move the result cursor, enter keeps the query and
 // esc throws it away.
 func (m *App) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.cancelTriageArm()
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit

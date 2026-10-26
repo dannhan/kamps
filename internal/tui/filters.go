@@ -6,6 +6,7 @@ var filterNames = []string{"all", "undecided", "overdue", "tracked", "missed", "
 var materialFilterNames = []string{"all", "new", "downloaded", "link", "unknown"}
 
 func (m *App) cycleFilter() {
+	m.cancelTriageArm()
 	var names []string
 	switch m.tab {
 	case TabTasks:
@@ -42,6 +43,7 @@ func (m *App) clearFilter() bool {
 	if m.filter == "" || m.filter == "all" {
 		return false
 	}
+	m.cancelTriageArm()
 	m.filter = "all"
 	m.tabFilters[m.tab] = "all"
 	if m.tab == TabTasks {

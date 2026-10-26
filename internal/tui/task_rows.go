@@ -3,10 +3,57 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/ruyam/kamps/internal/model"
 )
+
+const actNowPrefixWidth = 8
+
+func (m *App) actNowCoursePrefix(courseID int) string {
+	course, ok := m.courseByID(courseID)
+	if !ok {
+		return m.shortCode(courseID)
+	}
+	if alias := strings.TrimSpace(course.Short); alias != "" {
+		return alias
+	}
+	if initials := courseInitials(course.Name); initials != "" {
+		return initials
+	}
+	return course.Name
+}
+
+func (m *App) actNowPrefixCell(h rowHighlight, courseID int) string {
+	label := pad(m.actNowCoursePrefix(courseID), actNowPrefixWidth, false)
+	return h.style(stFaint).Render(label + " · ")
+}
+
+func courseInitials(name string) string {
+	fields := strings.Fields(name)
+	if len(fields) == 0 {
+		return ""
+	}
+	if len(fields) > 1 && isSectionLetter(fields[len(fields)-1]) {
+		fields = fields[:len(fields)-1]
+	}
+	var initials strings.Builder
+	for _, field := range fields {
+		for _, r := range field {
+			if unicode.IsUpper(r) {
+				initials.WriteRune(r)
+			}
+			break
+		}
+	}
+	return initials.String()
+}
+
+func isSectionLetter(value string) bool {
+	runes := []rune(value)
+	return len(runes) == 1 && runes[0] >= 'A' && runes[0] <= 'Z'
+}
 
 func (m *App) taskTreeRow(nodes []node, index, width int) string {
 	n := nodes[index]
@@ -33,6 +80,11 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 		open:       open,
 	}
 	switch n.kind {
+	case nodeActNow:
+		spec.title = func(h rowHighlight) string {
+			return h.style(stKey.Bold(true)).Render(fmt.Sprintf("Act now (%d)", len(ids)))
+		}
+		spec.rule = width >= courseRuleMinWidth
 	case nodeCourse:
 		name := m.shortCode(n.courseID)
 		if course, ok := m.courseByID(n.courseID); ok && course.Name != "" {
@@ -40,6 +92,17 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 		}
 		spec.title = func(h rowHighlight) string {
 			return h.style(courseStyle(n.courseID).Bold(true)).Render(name + " ")
+		}
+		spec.meta = func(h rowHighlight) string { return m.taskCourseMeta(n.courseID, h) }
+		spec.rule = width >= courseRuleMinWidth
+	case nodeCoursePlaceholder:
+		name := m.shortCode(n.courseID)
+		if course, ok := m.courseByID(n.courseID); ok && course.Name != "" {
+			name = course.Name
+		}
+		spec.expandable = false
+		spec.title = func(h rowHighlight) string {
+			return h.style(stFaint).Render(name + " · all in Act now")
 		}
 		spec.meta = func(h rowHighlight) string { return m.taskCourseMeta(n.courseID, h) }
 		spec.rule = width >= courseRuleMinWidth
@@ -52,6 +115,9 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 		due := dueCell(n.task, now)
 		dueStyle := dueStyleFor(dueToneForDays(dueDays(n.task, now), n.task.HasDue))
 		name := taskDisplayName(n.task.Name)
+		if n.bucket == "act now" {
+			spec.prefix = func(h rowHighlight) string { return m.actNowPrefixCell(h, n.courseID) }
+		}
 		spec.title = func(h rowHighlight) string { return h.primaryStyle().Render(name) }
 		spec.meta = func(h rowHighlight) string { return h.style(dueStyle).Render(due) }
 	case nodeTaskMaterial:
@@ -70,7 +136,8 @@ func (m *App) taskTreeRow(nodes []node, index, width int) string {
 }
 
 func (m *App) isTaskGroup(n node) bool {
-	return n.kind == nodeCourse || n.kind == nodeBucket || n.kind == nodeTask && len(m.assignmentMaterials(n.task)) > 0
+	return n.kind == nodeCourse || n.kind == nodeBucket || n.kind == nodeActNow ||
+		n.kind == nodeTask && len(m.assignmentMaterials(n.task)) > 0
 }
 
 func (m *App) taskNodeCounts(group node) [5]int {
@@ -166,12 +233,16 @@ func (m *App) tasksContent(width, height int) (string, string, []string, []strin
 	nodes := m.taskNodes()
 	matches := len(m.visible())
 	hint := scrollHint(len(nodes), m.taskCursor, height)
+	mode := "summary view"
+	if m.showAll {
+		mode = "full view"
+	}
 	var title, right string
 	if m.searchActive() {
-		title = m.searchTitle()
+		title = m.searchTitle() + " · " + mode
 		right = rightAligned(fmt.Sprintf("%d %s", matches, plural(matches, "match", "matches")), hint)
 	} else {
-		title = fmt.Sprintf("tasks › %s", m.filter)
+		title = fmt.Sprintf("tasks › %s · %s", m.filter, mode)
 		right = rightAligned(fmt.Sprintf("%d assignments", matches), hint)
 	}
 	filterHint := "f filter"

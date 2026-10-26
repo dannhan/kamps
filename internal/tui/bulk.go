@@ -46,6 +46,9 @@ func (m *App) selectionLabel() string {
 	if n == 0 {
 		return ""
 	}
+	if hidden := m.hiddenSelectedCount(); hidden > 0 {
+		return stSelMark.Render(fmt.Sprintf("%d selected, %d hidden", n, hidden))
+	}
 	return stSelMark.Render(fmt.Sprintf("%d selected", n))
 }
 
@@ -80,6 +83,7 @@ func (m *App) nodeSelectionIDs(n node) []string {
 }
 
 func (m *App) startRange() {
+	m.cancelTriageArm()
 	nodes, cursor := m.selectionNodes()
 	if cursor < 0 || cursor >= len(nodes) {
 		return
@@ -101,6 +105,7 @@ func (m *App) extendRange() {
 	if !m.visual {
 		return
 	}
+	m.cancelTriageArm()
 	nodes, cursor := m.selectionNodes()
 	if cursor < 0 || cursor >= len(nodes) || m.rangeAnchor < 0 || m.rangeAnchor >= len(nodes) {
 		return
@@ -121,6 +126,7 @@ func (m *App) extendRange() {
 }
 
 func (m *App) invertVisible() {
+	m.cancelTriageArm()
 	if m.tab == TabTasks {
 		for _, a := range m.visible() {
 			if m.selected[a.ID] {
@@ -145,6 +151,7 @@ func (m *App) invertVisible() {
 // undoTriage restores the triage values from the last applyTriage call and
 // returns the persistence command.
 func (m *App) undoTriage() tea.Cmd {
+	m.cancelTriageArm()
 	if m.tab != TabTasks || len(m.undoDecisions) == 0 {
 		m.toast = "nothing to undo"
 		m.toastTicks = 20

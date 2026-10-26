@@ -116,6 +116,7 @@ func TestHelpGroupsCoverEveryKey(t *testing.T) {
 func TestCursorSelectionAndPartialAreDistinct(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabTasks
+	app.showAll = true
 	nodes := app.taskNodes()
 
 	bucket := -1

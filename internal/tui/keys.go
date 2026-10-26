@@ -32,6 +32,7 @@ type KeyMap struct {
 	DropAll          key.Binding
 	Search           key.Binding
 	Filter           key.Binding
+	ShowAll          key.Binding
 	Sync             key.Binding
 	Download         key.Binding
 	Open             key.Binding
@@ -72,6 +73,7 @@ func DefaultKeys() KeyMap {
 		DropAll:  key.NewBinding(key.WithKeys("X"), key.WithHelp("X", "drop all queued")),
 		Search:   key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
 		Filter:   key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter")),
+		ShowAll:  key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "show all")),
 		Sync:     key.NewBinding(key.WithKeys("s", "r"), key.WithHelp("s", "sync")),
 		Download: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "download")),
 		Open:     key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open link")),
@@ -93,7 +95,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Top, k.Bottom, k.PageUp, k.PageDown, k.Left, k.Right, k.NextTab, k.PrevTab, k.Tabs},
 		{k.Select, k.All, k.Range, k.Invert, k.Track, k.Missed, k.Ignore, k.Undecide, k.Undo},
-		{k.Search, k.Filter, k.Commit, k.Write, k.Copy, k.Drop, k.DropAll, k.Sync, k.Download, k.Open},
+		{k.Search, k.Filter, k.ShowAll, k.Commit, k.Write, k.Copy, k.Drop, k.DropAll, k.Sync, k.Download, k.Open},
 		{k.Back, k.Help, k.Palette, k.Quit},
 	}
 }
@@ -188,6 +190,12 @@ func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "c":
 		m.openCommit()
 	case "esc":
+		if m.triageArmed {
+			m.cancelTriageArm()
+			m.toast = "triage cancelled"
+			m.toastTicks = 20
+			return m, nil
+		}
 		if m.statusErr != "" {
 			m.statusErr = ""
 			return m, nil
@@ -213,8 +221,11 @@ func (m *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.enter()
 	case "f":
 		m.cycleFilter()
+	case "A":
+		m.toggleShowAll()
 	case "/":
 		if m.tab == TabTasks || m.tab == TabMaterials {
+			m.cancelTriageArm()
 			m.searching = true
 			m.search = ""
 			m.resetTreeCursor()

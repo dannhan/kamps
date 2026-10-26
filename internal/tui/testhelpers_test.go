@@ -71,6 +71,7 @@ func setPendingForTest(app *App, pending map[string]model.Triage) {
 func taskTreeRowForTest(t *testing.T) string {
 	t.Helper()
 	app := demoApp(t)
+	app.showAll = true
 	app.taskCursor = findTaskNode(app.taskNodes(), nodeTask, "K901013")
 	return app.taskTreeRow(app.taskNodes(), app.taskCursor, 98)
 }

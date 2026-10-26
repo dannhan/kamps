@@ -4,6 +4,7 @@ func (m *App) switchTab(tab Tab) {
 	if tab < 0 || tab >= tabCount {
 		return
 	}
+	m.cancelTriageArm()
 	m.visual = false
 	m.dropAllArmed = false
 	m.openAllArmed = false
@@ -57,31 +58,37 @@ func (m *App) clampCursor() {
 	}
 }
 
-// selectableIndex clamps index into the list and, when it lands on a spacer,
+// selectableNode reports whether a row can hold the cursor. Spacers and the
+// dim "all in Act now" course placeholder are landmarks only.
+func selectableNode(n node) bool {
+	return n.kind != nodeSpacer && n.kind != nodeCoursePlaceholder
+}
+
+// selectableIndex clamps index into the list and, when it lands on a landmark,
 // moves to the nearest selectable row.
 func selectableIndex(nodes []node, index int) int {
 	if len(nodes) == 0 {
 		return 0
 	}
 	index = clampInt(index, 0, len(nodes)-1)
-	if nodes[index].kind != nodeSpacer {
+	if selectableNode(nodes[index]) {
 		return index
 	}
 	for i := index + 1; i < len(nodes); i++ {
-		if nodes[i].kind != nodeSpacer {
+		if selectableNode(nodes[i]) {
 			return i
 		}
 	}
 	for i := index - 1; i >= 0; i-- {
-		if nodes[i].kind != nodeSpacer {
+		if selectableNode(nodes[i]) {
 			return i
 		}
 	}
 	return 0
 }
 
-// movedIndex applies delta and skips spacer rows in the direction of travel.
-// Spacers remain rendered but can never hold the cursor.
+// movedIndex applies delta and skips landmark rows in the direction of travel.
+// Landmarks remain rendered but can never hold the cursor.
 func movedIndex(nodes []node, index, delta int) int {
 	if len(nodes) == 0 {
 		return 0
@@ -91,27 +98,65 @@ func movedIndex(nodes []node, index, delta int) int {
 	}
 	index = clampInt(index+delta, 0, len(nodes)-1)
 	if delta > 0 {
-		for index < len(nodes)-1 && nodes[index].kind == nodeSpacer {
+		for index < len(nodes)-1 && !selectableNode(nodes[index]) {
 			index++
 		}
 	} else {
-		for index > 0 && nodes[index].kind == nodeSpacer {
+		for index > 0 && !selectableNode(nodes[index]) {
 			index--
 		}
 	}
-	if nodes[index].kind == nodeSpacer {
+	if !selectableNode(nodes[index]) {
 		// Degenerate list: move the other way to find something selectable.
 		if delta > 0 {
-			for index > 0 && nodes[index].kind == nodeSpacer {
+			for index > 0 && !selectableNode(nodes[index]) {
 				index--
 			}
 		} else {
-			for index < len(nodes)-1 && nodes[index].kind == nodeSpacer {
+			for index < len(nodes)-1 && !selectableNode(nodes[index]) {
 				index++
 			}
 		}
 	}
 	return index
+}
+
+// toggleShowAll switches between the summary tree (Act now + stale buckets) and
+// the full course tree. The cursor follows the focused stable key when possible.
+func (m *App) toggleShowAll() {
+	if m.tab != TabTasks {
+		return
+	}
+	m.cancelTriageArm()
+	m.visual = false
+	key := ""
+	var fallbacks []string
+	nodes := m.taskNodes()
+	if m.taskCursor >= 0 && m.taskCursor < len(nodes) {
+		n := nodes[m.taskCursor]
+		key = n.key
+		fallbacks = taskFallbackKeys(n)
+	}
+	m.showAll = !m.showAll
+	keys := append([]string{key}, fallbacks...)
+	for _, candidate := range keys {
+		if candidate == "" {
+			continue
+		}
+		for i, n := range m.taskNodes() {
+			if n.key == candidate && selectableNode(n) {
+				m.taskCursor = i
+				return
+			}
+		}
+	}
+	m.clampCursor()
+}
+
+func (m *App) cancelTriageArm() {
+	m.triageArmed = false
+	m.armedTriageIDs = nil
+	m.armedTriageHidden = 0
 }
 
 // moveTop and moveBottom jump to the first or last row in the active list.
@@ -142,7 +187,7 @@ func (m *App) moveX(delta int) {
 		return
 	}
 	n := nodes[*cursor]
-	if n.kind == nodeSpacer {
+	if !selectableNode(n) {
 		return
 	}
 	if delta > 0 {
@@ -187,6 +232,7 @@ func hasVisibleChildren(nodes []node, key string) bool {
 }
 
 func (m *App) toggleSelect() {
+	m.cancelTriageArm()
 	switch m.tab {
 	case TabTasks:
 		nodes := m.taskNodes()
@@ -219,6 +265,7 @@ func (m *App) toggleSelect() {
 }
 
 func (m *App) selectAll() {
+	m.cancelTriageArm()
 	switch m.tab {
 	case TabTasks:
 		for _, n := range m.taskNodes() {
@@ -234,6 +281,7 @@ func (m *App) selectAll() {
 }
 
 func (m *App) back() {
+	m.cancelTriageArm()
 	m.selected = map[string]bool{}
 	m.selectedM = map[string]bool{}
 	m.visual = false

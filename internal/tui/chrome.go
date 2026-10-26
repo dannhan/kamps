@@ -6,6 +6,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/ruyam/kamps/internal/model"
 )
 
 type sizeClass int
@@ -181,7 +183,7 @@ type footerHint struct {
 // line narrows. "? all keys" is last and is never dropped.
 var footerHintOrder = []footerHint{
 	{key: "↑↓", label: "move", tabs: []Tab{TabTasks, TabMaterials, TabCommit}},
-	{key: "enter", label: "detail", tabs: []Tab{TabTasks, TabMaterials}},
+	{key: "enter", label: "detail", tabs: []Tab{TabMaterials}},
 	{key: "t/m/i", label: "decide", tabs: []Tab{TabTasks}},
 	{key: "d", label: "download", tabs: []Tab{TabMaterials}},
 	{key: "w", label: "write", tabs: []Tab{TabCommit}},
@@ -191,6 +193,7 @@ var footerHintOrder = []footerHint{
 	{key: "f", label: "filter", tabs: []Tab{TabTasks, TabMaterials}},
 	{key: "esc", label: "back", tabs: []Tab{TabCommit}},
 	{key: "s", label: "sync", tabs: []Tab{TabSync}},
+	{key: "A", label: "show all", tabs: []Tab{TabTasks}},
 	{key: "?", label: "all keys", tabs: []Tab{TabTasks, TabMaterials, TabSync, TabCommit}},
 }
 
@@ -210,7 +213,50 @@ func (m *App) footerHintLabel(hint footerHint) string {
 	if hint.key == "enter" && m.detailVisible() {
 		return "hide"
 	}
+	if hint.key == "A" && m.showAll {
+		return "summary"
+	}
 	return hint.label
+}
+
+func (m *App) showAllHint() string {
+	label := "show all"
+	if m.showAll {
+		label = "summary"
+	}
+	return keyHintLabel(m.keys.ShowAll, label)
+}
+
+func (m *App) cursorTaskNode() (node, bool) {
+	nodes := m.taskNodes()
+	if m.taskCursor < 0 || m.taskCursor >= len(nodes) {
+		return node{}, false
+	}
+	return nodes[m.taskCursor], true
+}
+
+// sectionHeaderFooter gives the stale/Act-now headers their bulk-action hints.
+// The normal footer keeps filter/search; this context swaps in enter/select.
+func (m *App) sectionHeaderFooter() ([]string, bool) {
+	if m.tab != TabTasks {
+		return nil, false
+	}
+	n, ok := m.cursorTaskNode()
+	if !ok || !(n.kind == nodeActNow || n.kind == nodeBucket && n.bucket == "stale overdue") {
+		return nil, false
+	}
+	enter := "expand"
+	if m.taskIsOpen(n.key, taskNodeDefaultOpen(n)) {
+		enter = "fold"
+	}
+	return []string{
+		"↑↓ move",
+		keyHintLabel(m.keys.Confirm, enter),
+		keyHintLabel(m.keys.Select, "select"),
+		fmt.Sprintf("t/m/i decide %d", len(m.taskGroupIDs(n))),
+		m.showAllHint(),
+		keyHintLabel(m.keys.Help, "all keys"),
+	}, true
 }
 
 // coreFooterHints returns at most six hints in priority order for the active
@@ -243,6 +289,9 @@ func (m *App) footerHintItems() []string {
 	case m.searching:
 		return []string{"type search", "↑↓ move", keyHintLabel(m.keys.Confirm, "done"), keyHintLabel(m.keys.Back, "cancel")}
 	}
+	if items, ok := m.sectionHeaderFooter(); ok {
+		return items
+	}
 	return m.coreFooterHints()
 }
 
@@ -273,6 +322,9 @@ func (m *App) footerLines(w int, class sizeClass) []string {
 	inner := maxInt(1, w-1)
 	summary := m.footerSummary()
 	if class <= sizeCompact {
+		if m.triageArmed {
+			return []string{" " + fitLine(stOverdue.Render(m.triagePrompt()), inner)}
+		}
 		if m.statusErr != "" {
 			return []string{" " + fitLine(stOverdue.Render("err: "+m.statusErr)+stFaint.Render("  esc dismiss"), inner)}
 		}
@@ -284,11 +336,34 @@ func (m *App) footerLines(w int, class sizeClass) []string {
 	}
 }
 
+func (m *App) triagePrompt() string {
+	if !m.triageArmed {
+		return ""
+	}
+	return fmt.Sprintf("press %s again · %d %s (%d hidden) · esc cancel", triageKeyName(m.armedTriage), len(m.armedTriageIDs), plural(len(m.armedTriageIDs), "item", "items"), m.armedTriageHidden)
+}
+
+func triageKeyName(t model.Triage) string {
+	switch t {
+	case model.Tracked:
+		return "t"
+	case model.Missed:
+		return "m"
+	case model.Ignored:
+		return "i"
+	default:
+		return "n"
+	}
+}
+
 func (m *App) footerStatusLine(width int, summary string) string {
 	left := m.modeChip()
-	if m.statusErr != "" {
+	switch {
+	case m.triageArmed:
+		left += " " + stOverdue.Render(m.triagePrompt())
+	case m.statusErr != "":
 		left += " " + stOverdue.Render("err: "+m.statusErr) + stFaint.Render("  esc dismiss")
-	} else if m.toast != "" {
+	case m.toast != "":
 		left += " " + stFaint.Render("✻ "+m.toast+" ")
 	}
 	return barLine(left, summary, width)
@@ -413,7 +488,7 @@ func (m *App) helpSections() []helpSection {
 			m.keys.Commit, m.keys.Write, m.keys.Copy, m.keys.Drop, m.keys.DropAll,
 		}},
 		{title: "View", items: []key.Binding{
-			m.keys.Search, m.keys.Filter, m.keys.Palette, m.keys.Help, m.keys.Quit,
+			m.keys.Search, m.keys.Filter, m.keys.ShowAll, m.keys.Palette, m.keys.Help, m.keys.Quit,
 		}},
 	}
 }

@@ -10,6 +10,7 @@ import (
 
 func TestTaskTreeGroupsSortsAndFolds(t *testing.T) {
 	app := demoApp(t)
+	app.showAll = true
 	nodes := app.taskNodes()
 	if len(nodes) == 0 || nodes[0].kind != nodeCourse {
 		t.Fatalf("courses should be the top-level rows: %#v", nodes)
@@ -61,6 +62,7 @@ func TestTaskTreeGroupsSortsAndFolds(t *testing.T) {
 
 func TestTaskTreeAssignmentsSortOldestFirstAndAssociateAttachments(t *testing.T) {
 	app := demoApp(t)
+	app.showAll = true
 	var ids []string
 	for _, n := range app.taskNodes() {
 		if n.kind == nodeTask && n.courseID == 18515 && n.bucket == "needs decision" {

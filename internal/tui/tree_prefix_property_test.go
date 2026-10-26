@@ -86,7 +86,68 @@ func railScenarios() []railScenario {
 				railCourse(2), railGroup(2, "needs decision"), railTask(2, "needs decision", "C"),
 			},
 		},
+		{
+			name: "act now with courses",
+			nodes: []node{
+				railActNow(), railActNowTask("A"), railActNowTask("B"), railActNowTask("C"),
+				railSpacer("act-now:spacer"),
+				railCourse(1), railGroup(1, "needs decision"), railTask(1, "needs decision", "D"),
+				railGroup(1, "stale overdue"), railTask(1, "stale overdue", "E"),
+				railCoursePlaceholder(2),
+			},
+		},
+		{
+			name: "course with only act-now items",
+			nodes: []node{
+				railActNow(), railActNowTask("A"),
+				railSpacer("act-now:spacer"),
+				railCoursePlaceholder(1),
+			},
+		},
+		{
+			name: "expanded stale bucket",
+			nodes: []node{
+				railActNow(), railActNowTask("A"),
+				railSpacer("act-now:spacer"),
+				railCourse(1), railGroup(1, "needs decision"), railTask(1, "needs decision", "B"),
+				railGroup(1, "stale overdue"), railTask(1, "stale overdue", "C"), railTask(1, "stale overdue", "D"),
+				railGroup(1, "tracked"), railTask(1, "tracked", "E"),
+				railGroup(1, "closed"), railTask(1, "closed", "F"),
+			},
+		},
+		{
+			name: "show all",
+			nodes: []node{
+				railCourse(1), railGroup(1, "needs decision"),
+				railTask(1, "needs decision", "A"), railTask(1, "needs decision", "B"),
+				railGroup(1, "tracked"), railTask(1, "tracked", "C"),
+				railGroup(1, "closed"), railTask(1, "closed", "D"),
+				railCourse(2), railGroup(2, "needs decision"), railTask(2, "needs decision", "E"),
+			},
+		},
 	}
+}
+
+func railActNow() node {
+	return node{kind: nodeActNow, key: actNowKey}
+}
+
+func railActNowTask(id string) node {
+	return node{
+		kind:    nodeTask,
+		bucket:  "act now",
+		task:    model.Assignment{ID: id},
+		key:     taskKey(id),
+		parents: []string{actNowKey},
+	}
+}
+
+func railCoursePlaceholder(id int) node {
+	return node{kind: nodeCoursePlaceholder, courseID: id, key: courseKey(id)}
+}
+
+func railSpacer(key string) node {
+	return node{kind: nodeSpacer, key: key}
 }
 
 func railCourse(id int) node {
@@ -209,6 +270,12 @@ func nodeLabel(n node) string {
 		return "task:" + n.task.ID
 	case nodeTaskMaterial:
 		return "material:" + n.mat.ID
+	case nodeActNow:
+		return "act-now"
+	case nodeCoursePlaceholder:
+		return "placeholder:" + n.key
+	case nodeSpacer:
+		return "spacer:" + n.key
 	}
 	return n.key
 }

@@ -63,9 +63,10 @@ type App struct {
 	offline      bool
 	cacheNotice  string
 
-	restoreTaskKey  string
-	restoreMatKey   string
-	restoreCommitID string
+	restoreTaskKey       string
+	restoreTaskFallbacks []string
+	restoreMatKey        string
+	restoreCommitID      string
 
 	tab    Tab
 	filter string
@@ -129,6 +130,13 @@ type App struct {
 	helpOn     bool
 	helpScroll int
 	noAnim     bool
+	showAll    bool
+
+	triageArmed       bool
+	armedTriage       model.Triage
+	armedTriageIDs    []string
+	armedTriageHidden int
+
 	// now is time.Now in production; tests inject a fixed clock so relative
 	// due labels and snapshots are deterministic.
 	now func() time.Time

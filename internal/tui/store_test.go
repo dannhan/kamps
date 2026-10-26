@@ -46,6 +46,9 @@ func TestUndecidedRemovesTheStoredDecision(t *testing.T) {
 		app.Update(cmd())
 	}
 	app.selected[id] = true
+	if armed := app.applyTriage(model.Undecided); armed != nil {
+		t.Fatal("a hidden decision should arm instead of writing")
+	}
 	if cmd := app.applyTriage(model.Undecided); cmd != nil {
 		app.Update(cmd())
 	}

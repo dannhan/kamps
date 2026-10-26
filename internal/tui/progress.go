@@ -56,13 +56,17 @@ func (m *App) tabSummary() string {
 		dueDay := dateOnly(assignment.Due)
 		today := dateOnly(now)
 		offset := int(dueDay.Sub(today).Hours() / 24)
-		if offset >= 0 && offset < 7 && !assignment.Overdue(now) {
+		if offset >= 0 && offset <= actNowLookAheadDays && !assignment.Overdue(now) {
 			dueSoon++
 		}
 	}
 	var parts []string
 	if overdue > 0 {
-		parts = append(parts, stOverdue.Render(fmt.Sprintf("%d overdue", overdue)))
+		label := fmt.Sprintf("%d overdue", overdue)
+		if stale := m.staleOverdueCount(); stale > 0 {
+			label += fmt.Sprintf(" (%d stale)", stale)
+		}
+		parts = append(parts, stOverdue.Render(label))
 	}
 	if dueSoon > 0 {
 		parts = append(parts, stSoon.Render(fmt.Sprintf("%d due soon", dueSoon)))
@@ -81,6 +85,17 @@ func (m *App) overdueCount() int {
 	n := 0
 	for _, assignment := range m.assignments {
 		if assignment.Overdue(now) {
+			n++
+		}
+	}
+	return n
+}
+
+func (m *App) staleOverdueCount() int {
+	now := m.currentTime()
+	n := 0
+	for _, assignment := range m.assignments {
+		if classifyTask(assignment, now) == taskGroupStale {
 			n++
 		}
 	}

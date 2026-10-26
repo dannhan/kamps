@@ -13,6 +13,7 @@ import (
 func TestDetailPaneFollowsWidthAndEnter(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabTasks
+	app.showAll = true
 
 	app.width = 100
 	if app.detailVisible() {

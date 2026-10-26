@@ -56,6 +56,58 @@ func (m *App) targetIDs() []string {
 	return ids
 }
 
+func sameIDs(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	set := make(map[string]bool, len(left))
+	for _, id := range left {
+		set[id] = true
+	}
+	for _, id := range right {
+		if !set[id] {
+			return false
+		}
+	}
+	return true
+}
+
+// hiddenTaskCount counts target IDs that exist but are not rendered as task
+// rows, either because a section is folded or the active filter hides them.
+func (m *App) hiddenTaskCount(ids []string) int {
+	if len(ids) == 0 {
+		return 0
+	}
+	rendered := make(map[string]bool)
+	for _, n := range m.taskNodes() {
+		if n.kind == nodeTask {
+			rendered[n.task.ID] = true
+		}
+	}
+	existing := make(map[string]bool, len(m.assignments))
+	for _, assignment := range m.assignments {
+		existing[assignment.ID] = true
+	}
+	hidden := 0
+	for _, id := range ids {
+		if existing[id] && !rendered[id] {
+			hidden++
+		}
+	}
+	return hidden
+}
+
+func (m *App) hiddenSelectedCount() int {
+	if m.tab != TabTasks {
+		return 0
+	}
+	ids := make([]string, 0, len(m.selected))
+	for id := range m.selected {
+		ids = append(ids, id)
+	}
+	return m.hiddenTaskCount(ids)
+}
+
 func (m *App) byID(id string) *model.Assignment {
 	for i := range m.assignments {
 		if m.assignments[i].ID == id {
@@ -75,6 +127,15 @@ func (m *App) applyTriage(t model.Triage) tea.Cmd {
 	if len(ids) == 0 {
 		return nil
 	}
+	hidden := m.hiddenTaskCount(ids)
+	if hidden > 0 && !(m.triageArmed && m.armedTriage == t && sameIDs(m.armedTriageIDs, ids)) {
+		m.triageArmed = true
+		m.armedTriage = t
+		m.armedTriageIDs = append([]string(nil), ids...)
+		m.armedTriageHidden = hidden
+		return nil
+	}
+	m.cancelTriageArm()
 	m.undoDecisions = map[string]model.Triage{}
 	for _, id := range ids {
 		if a := m.byID(id); a != nil {

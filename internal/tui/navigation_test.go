@@ -81,6 +81,7 @@ func TestFoldingOpenGroupKeepsCursorOnIt(t *testing.T) {
 func TestFoldOnLeafMovesCursorToParent(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabTasks
+	app.showAll = true
 
 	nodes := app.taskNodes()
 	task := findTaskNode(nodes, nodeTask, "K901000")
@@ -143,6 +144,7 @@ func TestBracketKeysSwitchTabs(t *testing.T) {
 func TestNewAndUndoKeys(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabTasks
+	app.showAll = true
 	id := "K901017"
 	app.taskCursor = findTaskNode(app.taskNodes(), nodeTask, id)
 	app.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
