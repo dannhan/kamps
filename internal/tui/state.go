@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"errors"
+	"os"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -32,6 +34,10 @@ func persistStateCmd(service *core.Service, decisions map[string]model.Triage, d
 			for id, record := range downloads {
 				if record.Path == "" {
 					state.SetDownloaded(id, true)
+				} else if _, err := os.Stat(record.Path); errors.Is(err, os.ErrNotExist) {
+					if current, ok := state.Downloads[id]; ok && current.Path == record.Path {
+						state.ClearDownload(id)
+					}
 				} else {
 					state.SetDownloadRecord(id, record)
 				}
