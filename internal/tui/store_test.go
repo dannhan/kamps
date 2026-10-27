@@ -14,6 +14,7 @@ func TestDecisionsSurviveRestart(t *testing.T) {
 	app := newDemoApp(t, cfg)
 	app.tab = TabTasks
 	id := app.assignments[0].ID
+	focusTaskForTest(t, app, id)
 	app.selected[id] = true
 	if cmd := app.applyTriage(model.Tracked); cmd != nil {
 		app.Update(cmd())
@@ -40,11 +41,13 @@ func TestUndecidedRemovesTheStoredDecision(t *testing.T) {
 	cfg := config.Config{StateDir: t.TempDir()}
 	app := newDemoApp(t, cfg)
 	id := app.assignments[0].ID
+	focusTaskForTest(t, app, id)
 
 	app.selected[id] = true
 	if cmd := app.applyTriage(model.Missed); cmd != nil {
 		app.Update(cmd())
 	}
+	app.filter = "undecided"
 	app.selected[id] = true
 	if armed := app.applyTriage(model.Undecided); armed != nil {
 		t.Fatal("a hidden decision should arm instead of writing")
@@ -101,6 +104,7 @@ func TestTriageDefersPersistenceToCommand(t *testing.T) {
 	app := newDemoApp(t, cfg)
 	app.tab = TabTasks
 	id := app.assignments[0].ID
+	focusTaskForTest(t, app, id)
 	app.selected[id] = true
 
 	cmd := app.applyTriage(model.Ignored)

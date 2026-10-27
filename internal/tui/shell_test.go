@@ -59,7 +59,7 @@ func TestPanesAdvertiseHiddenRows(t *testing.T) {
 	app := demoApp(t)
 
 	app.tab = TabTasks
-	if _, right, _, _ := app.tabContent(96, 1); !strings.Contains(stripANSI(right), "▼") {
+	if _, right, _, _ := app.tabContent(96, 1); !strings.ContainsAny(stripANSI(right), "▼↓") {
 		t.Fatalf("a clipped task tree should show a down hint, got %q", stripANSI(right))
 	}
 	if _, right, _, _ := app.tabContent(96, 500); strings.ContainsAny(stripANSI(right), "▲▼") {
@@ -67,7 +67,7 @@ func TestPanesAdvertiseHiddenRows(t *testing.T) {
 	}
 
 	app.tab = TabMaterials
-	if _, right, _, _ := app.tabContent(96, 1); !strings.Contains(stripANSI(right), "▼") {
+	if _, right, _, _ := app.tabContent(96, 1); !strings.ContainsAny(stripANSI(right), "▼↓") {
 		t.Fatalf("a clipped material tree should show a down hint, got %q", stripANSI(right))
 	}
 }
@@ -95,8 +95,8 @@ func TestSharedShellAllTabsAtRequestedSizes(t *testing.T) {
 			if strings.TrimSpace(lines[1]) == "" {
 				t.Fatalf("%dx%d tab %s title row is empty", size[0], size[1], active)
 			}
-			positions := make([]int, tabCount)
-			for tab, label := range []string{"Tasks", "Materials", "Sync", "Commit"} {
+			positions := make([]int, 2)
+			for tab, label := range []string{"Tasks", "Materials"} {
 				positions[tab] = strings.Index(lines[0], label)
 			}
 			if active == TabTasks {

@@ -20,98 +20,163 @@ func (m *App) visibleMaterials() []model.Material {
 	if m.filter == "unknown" {
 		out := make([]model.Material, 0, len(m.unknownFiles))
 		for _, material := range m.unknownMaterials() {
-			if m.matchesMaterialSearch(material) {
+			if m.matchesMaterialSearch(material) && (!m.courseScoped || material.CourseID == m.courseID) {
 				out = append(out, material)
 			}
 		}
 		return out
 	}
-	return m.service.Materials(core.Query{Filter: m.filter, Search: m.search})
-}
-
-// matNodes is the Materials pane: course ▸ week ▸ folder ▸ file. Weeks keep
-// the source's own label; an empty section shows as week-0.
-func (m *App) matNodes() []node {
-	byCourse := map[int][]model.Material{}
-	for _, material := range m.visibleMaterials() {
-		byCourse[material.CourseID] = append(byCourse[material.CourseID], material)
-	}
-	courseIDs := make([]int, 0, len(byCourse))
-	for id := range byCourse {
-		courseIDs = append(courseIDs, id)
-	}
-	sort.Ints(courseIDs)
-	out := []node{}
-	for courseIndex, courseID := range courseIDs {
-		if courseIndex > 0 {
-			out = append(out, node{kind: nodeSpacer, courseID: courseID, key: spacerKey(courseID)})
-		}
-		course := node{kind: nodeCourse, courseID: courseID, key: courseKey(courseID)}
-		out = append(out, course)
-		if !m.isOpen(course.key) {
-			continue
-		}
-
-		emitFile := func(file model.Material, fileParents []string) {
-			fileNode := node{kind: nodeFile, courseID: courseID, mat: file, key: materialKey(file.ID), parents: fileParents}
-			out = append(out, fileNode)
-			if assignment := m.assignmentForMaterial(file); assignment != nil && m.isOpen(fileNode.key) {
-				appendParents := append(append([]string(nil), fileParents...), fileNode.key)
-				out = append(out, node{kind: nodeMaterialAssignment, courseID: courseID, task: *assignment, key: "ma:" + assignment.ID + ":" + file.ID, parents: appendParents})
-			}
-		}
-
-		bySection := map[string][]model.Material{}
-		var sections []string
-		for _, file := range byCourse[courseID] {
-			label := sectionLabel(file.Section)
-			if _, ok := bySection[label]; !ok {
-				sections = append(sections, label)
-			}
-			bySection[label] = append(bySection[label], file)
-		}
-		sort.Slice(sections, func(i, j int) bool { return sectionLess(sections[i], sections[j]) })
-		for _, section := range sections {
-			sectionFiles := bySection[section]
-			sectionKey := materialSectionKey(courseID, section)
-			out = append(out, node{kind: nodeMaterialSection, courseID: courseID, section: section, key: sectionKey, parents: []string{course.key}})
-			if !m.isOpen(sectionKey) {
-				continue
-			}
-
-			byFolder := map[string][]model.Material{}
-			var folders []string
-			var direct []model.Material
-			for _, file := range sectionFiles {
-				if file.Folder == "" {
-					direct = append(direct, file)
-					continue
-				}
-				if _, ok := byFolder[file.Folder]; !ok {
-					folders = append(folders, file.Folder)
-				}
-				byFolder[file.Folder] = append(byFolder[file.Folder], file)
-			}
-			sort.Strings(folders)
-			for _, folder := range folders {
-				folderFiles := byFolder[folder]
-				sort.Slice(folderFiles, func(i, j int) bool { return folderFiles[i].Name < folderFiles[j].Name })
-				folderKey := materialFolderKey(courseID, section, folder)
-				out = append(out, node{kind: nodeMaterialFolder, courseID: courseID, section: section, key: folderKey, parents: []string{course.key, sectionKey}, mat: model.Material{Folder: folder}})
-				if !m.isOpen(folderKey) {
-					continue
-				}
-				for _, file := range folderFiles {
-					emitFile(file, []string{course.key, sectionKey, folderKey})
-				}
-			}
-			sort.Slice(direct, func(i, j int) bool { return direct[i].Name < direct[j].Name })
-			for _, file := range direct {
-				emitFile(file, []string{course.key, sectionKey})
-			}
+	items := m.service.Materials(core.Query{Filter: m.filter, Search: m.search, CourseID: m.courseID})
+	out := make([]model.Material, 0, len(items))
+	for _, item := range items {
+		if !m.courseScoped || item.CourseID == m.courseID {
+			out = append(out, item)
 		}
 	}
 	return out
+}
+
+// matNodes presents a collapsed week overview for All courses, or the selected
+// course's expanded library. Both use the same files and action targets.
+func (m *App) matNodes() []node {
+	bySection := map[string][]model.Material{}
+	for _, material := range m.visibleMaterials() {
+		section := sectionLabel(material.Section)
+		bySection[section] = append(bySection[section], material)
+	}
+	sections := make([]string, 0, len(bySection))
+	for section := range bySection {
+		sections = append(sections, section)
+	}
+	sort.Slice(sections, func(i, j int) bool {
+		_, leftIsWeek := core.SectionNumber(sections[i])
+		_, rightIsWeek := core.SectionNumber(sections[j])
+		if leftIsWeek != rightIsWeek {
+			return leftIsWeek
+		}
+		if !leftIsWeek || m.materialsOldestFirst {
+			return sectionLess(sections[i], sections[j])
+		}
+		return sectionLess(sections[j], sections[i])
+	})
+	var out []node
+	for sectionIndex, section := range sections {
+		files := bySection[section]
+		if m.courseScoped {
+			sectionKey := materialSectionKey(m.courseID, section)
+			if sectionIndex > 0 {
+				out = append(out, node{kind: nodeSpacer, key: "gap:" + sectionKey})
+			}
+			out = append(out, node{kind: nodeMaterialSection, courseID: m.courseID, section: section, key: sectionKey})
+			if m.isOpen(sectionKey) {
+				out = append(out, m.materialFileNodes(files, section, []string{sectionKey})...)
+			}
+			continue
+		}
+		weekKey := materialWeekKey(section)
+		out = append(out, node{kind: nodeMaterialWeek, section: section, key: weekKey})
+		if !m.isOpen(weekKey) {
+			continue
+		}
+		byCourse := map[int][]model.Material{}
+		for _, file := range files {
+			byCourse[file.CourseID] = append(byCourse[file.CourseID], file)
+		}
+		courseIDs := make([]int, 0, len(byCourse))
+		for courseID := range byCourse {
+			courseIDs = append(courseIDs, courseID)
+		}
+		sort.Slice(courseIDs, func(i, j int) bool {
+			left, right := m.fullCourseName(courseIDs[i]), m.fullCourseName(courseIDs[j])
+			if left == right {
+				return courseIDs[i] < courseIDs[j]
+			}
+			return left < right
+		})
+		for _, courseID := range courseIDs {
+			key := "mwc:" + materialSectionKey(courseID, section)
+			out = append(out, node{kind: nodeCourse, courseID: courseID, section: section, key: key, parents: []string{weekKey}})
+			if m.isOpen(key) {
+				out = append(out, m.materialFileNodes(byCourse[courseID], section, []string{weekKey, key})...)
+			}
+		}
+		if sectionIndex < len(sections)-1 {
+			out = append(out, node{kind: nodeSpacer, key: "gap:" + weekKey})
+		}
+	}
+	return out
+}
+
+// materialFileNodes retains folder ownership and stable file keys in both views.
+func (m *App) materialFileNodes(files []model.Material, section string, parents []string) []node {
+	byFolder := map[string][]model.Material{}
+	var folders []string
+	var direct []model.Material
+	for _, file := range files {
+		if file.Folder == "" {
+			direct = append(direct, file)
+			continue
+		}
+		if _, exists := byFolder[file.Folder]; !exists {
+			folders = append(folders, file.Folder)
+		}
+		byFolder[file.Folder] = append(byFolder[file.Folder], file)
+	}
+	var out []node
+	appendFiles := func(items []model.Material, fileParents []string) {
+		sort.Slice(items, func(i, j int) bool {
+			if items[i].Name == items[j].Name {
+				return items[i].ID < items[j].ID
+			}
+			return items[i].Name < items[j].Name
+		})
+		for _, file := range items {
+			out = append(out, node{kind: nodeFile, courseID: file.CourseID, mat: file, key: materialKey(file.ID), parents: fileParents})
+		}
+	}
+	sort.Strings(folders)
+	for _, folder := range folders {
+		courseID := byFolder[folder][0].CourseID
+		key := materialFolderKey(courseID, section, folder)
+		if !m.courseScoped {
+			key = "overview:" + key
+		}
+		out = append(out, node{kind: nodeMaterialFolder, courseID: courseID, section: section, key: key, parents: parents, mat: model.Material{Folder: folder}})
+		if m.isOpen(key) {
+			fileParents := append(append([]string(nil), parents...), key)
+			appendFiles(byFolder[folder], fileParents)
+		}
+	}
+	appendFiles(direct, parents)
+	return out
+}
+
+func (m *App) materialSortLabel() string {
+	if m.materialsOldestFirst {
+		return "Oldest week first"
+	}
+	return "Newest week first"
+}
+
+func (m *App) toggleMaterialSort() {
+	if m.tab != TabMaterials {
+		return
+	}
+	nodes := m.matNodes()
+	key := ""
+	if m.matCursor >= 0 && m.matCursor < len(nodes) {
+		key = nodes[m.matCursor].key
+	}
+	m.materialsOldestFirst = !m.materialsOldestFirst
+	for index, n := range m.matNodes() {
+		if n.key == key {
+			m.matCursor = index
+			break
+		}
+	}
+	m.visual = false
+	m.detailScroll = 0
+	m.clampCursor()
 }
 
 // materialNodeFiles lists the materials a row stands for: the file itself,
@@ -120,24 +185,21 @@ func (m *App) materialNodeFiles(n node) []model.Material {
 	switch n.kind {
 	case nodeFile:
 		return []model.Material{n.mat}
-	case nodeMaterialSection:
-		files := []model.Material{}
+	case nodeMaterialWeek, nodeMaterialSection, nodeMaterialFolder, nodeCourse:
+		var files []model.Material
 		for _, material := range m.visibleMaterials() {
-			if material.CourseID == n.courseID && sectionLabel(material.Section) == n.section {
-				files = append(files, material)
+			if n.kind != nodeMaterialWeek && material.CourseID != n.courseID {
+				continue
 			}
+			if n.section != "" && sectionLabel(material.Section) != n.section {
+				continue
+			}
+			if n.kind == nodeMaterialFolder && material.Folder != n.mat.Folder {
+				continue
+			}
+			files = append(files, material)
 		}
 		return files
-	case nodeMaterialFolder:
-		files := []model.Material{}
-		for _, material := range m.visibleMaterials() {
-			if material.CourseID == n.courseID && sectionLabel(material.Section) == n.section && material.Folder == n.mat.Folder {
-				files = append(files, material)
-			}
-		}
-		return files
-	case nodeCourse:
-		return m.courseFiles(n.courseID)
 	}
 	return nil
 }
@@ -231,6 +293,7 @@ func (m *App) download() tea.Cmd {
 		if m.downloads[material.ID] {
 			continue
 		}
+		delete(m.downloadErrors, material.ID)
 		m.downloads[material.ID] = true
 		cmds = append(cmds, m.startDownload(material))
 		started++

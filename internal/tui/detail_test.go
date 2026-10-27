@@ -55,14 +55,14 @@ func TestDetailPaneRendersTheSelectedTask(t *testing.T) {
 	}
 	task := nodes[cursor].task
 	lines := stripANSI(strings.Join(app.detailLines(nodes[cursor], 40), "\n"))
-	for _, want := range []string{task.ID, task.Name, "due", "state", "course"} {
+	for _, want := range []string{task.Name, "due", "state", app.fullCourseName(task.CourseID)} {
 		if !strings.Contains(lines, want) {
 			t.Fatalf("detail pane %q is missing %q", lines, want)
 		}
 	}
 }
 
-func TestEnterTogglesDetailOnMaterials(t *testing.T) {
+func TestInspectorOnMaterials(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabMaterials
 	app.width = 80
@@ -70,14 +70,20 @@ func TestEnterTogglesDetailOnMaterials(t *testing.T) {
 	if app.detailVisible() {
 		t.Fatal("materials detail should be opt-in")
 	}
-	app.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	for i, n := range app.matNodes() {
+		if n.kind == nodeFile && !app.materialHasChildren(n) {
+			app.matCursor = i
+			break
+		}
+	}
+	press(app, "enter")
 	if !app.detailVisible() {
 		t.Fatal("enter should open the materials detail pane")
 	}
 	if app.toast != "" {
 		t.Fatalf("enter should not download on Materials, toast = %q", app.toast)
 	}
-	if view := stripANSI(app.View()); !strings.Contains(view, "local") {
+	if view := stripANSI(app.View()); !strings.Contains(view, "course") {
 		t.Fatal("materials view has no detail column after enter")
 	}
 
@@ -122,7 +128,7 @@ func TestMaterialDetailLines(t *testing.T) {
 	}
 
 	fileLines := stripANSI(strings.Join(app.materialDetailLines(*file, 40), "\n"))
-	for _, want := range []string{file.mat.ID, "course", "section", "size", "state"} {
+	for _, want := range []string{file.mat.Name, "course", "section", "size", "state"} {
 		if !strings.Contains(fileLines, want) {
 			t.Fatalf("material detail %q is missing %q", fileLines, want)
 		}

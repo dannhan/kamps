@@ -195,3 +195,30 @@ func savedFileLabel(path string) string {
 	}
 	return filepath.Base(path)
 }
+
+// openLocalFile opens only the focused material, leaving batch browser actions on o.
+func (m *App) openLocalFile() tea.Cmd {
+	if m.tab != TabMaterials {
+		return nil
+	}
+	nodes := m.matNodes()
+	if m.matCursor < 0 || m.matCursor >= len(nodes) || nodes[m.matCursor].kind != nodeFile {
+		return nil
+	}
+	material := nodes[m.matCursor].mat
+	path := m.materialDestination(material)
+	if material.Kind == "local" {
+		path = material.URL
+	}
+	if !material.Downloaded {
+		m.toast = "Download first with d"
+		m.toastTicks = 30
+		return nil
+	}
+	return func() tea.Msg {
+		if _, err := os.Stat(path); err != nil {
+			return openURLMsg{url: path, err: fmt.Errorf("local file unavailable: %w", err)}
+		}
+		return openURLMsg{url: path, err: openExternalURL(path)}
+	}
+}

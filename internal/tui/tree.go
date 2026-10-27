@@ -27,6 +27,9 @@ const (
 	nodeSpacer
 	nodeActNow
 	nodeCoursePlaceholder
+	nodeTaskHeading
+	nodeTaskMore
+	nodeMaterialWeek
 )
 
 type node struct {
@@ -65,6 +68,8 @@ func spacerKey(id int) string { return fmt.Sprintf("s:%d", id) }
 
 func bucketKey(id int, bucket string) string { return fmt.Sprintf("b:%d:%s", id, bucket) }
 
+func materialWeekKey(section string) string { return "mw:" + section }
+
 func materialSectionKey(courseID int, section string) string {
 	return fmt.Sprintf("ms:%d:%s", courseID, section)
 }
@@ -100,24 +105,20 @@ func taskNodeDefaultOpen(n node) bool {
 	return true
 }
 
-// isOpen defaults courses and week sections to open so the Materials tab shows
-// files immediately; folders stay folded until asked for.
+// The All courses week overview starts collapsed; course libraries and folders
+// start open. Search reveals matching weeks unless explicitly collapsed.
 func (m *App) isOpen(key string) bool {
 	if v, ok := m.expanded[key]; ok {
 		return v
 	}
-	if strings.HasPrefix(key, "mf:") {
-		return false
+	if strings.HasPrefix(key, "mw:") {
+		return m.search != ""
 	}
 	return true
 }
 
 func (m *App) setOpen(key string, open bool) {
-	if open {
-		delete(m.expanded, key)
-		return
-	}
-	m.expanded[key] = false
+	m.expanded[key] = open
 }
 
 // sectionLess orders week-1 before week-2 before week-10.

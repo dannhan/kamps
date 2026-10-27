@@ -13,11 +13,14 @@ type paletteAction struct {
 
 func (m *App) paletteActions() []paletteAction {
 	actions := []paletteAction{
+		{"inspect details (Enter)", func(app *App) tea.Cmd { app.toggleDetailPane(); return nil }},
+		{"sync status (3)", func(app *App) tea.Cmd { app.switchTab(TabSync); return nil }},
 		{"sync now", func(app *App) tea.Cmd { return app.startSync() }},
 		{"go to tasks", func(app *App) tea.Cmd { app.switchTab(TabTasks); return nil }},
 		{"go to materials", func(app *App) tea.Cmd { app.switchTab(TabMaterials); return nil }},
 		{"go to commit", func(app *App) tea.Cmd { app.openCommit(); return nil }},
 		{"download focused", func(app *App) tea.Cmd { return app.download() }},
+		{"open local file (O)", func(app *App) tea.Cmd { return app.openLocalFile() }},
 		{"open link", func(app *App) tea.Cmd { return app.openExternal() }},
 		{"write queue", func(app *App) tea.Cmd { return app.writeCommitPreview() }},
 		{"copy queue", func(app *App) tea.Cmd { return app.copyCommitPreview() }},
@@ -36,6 +39,7 @@ func (m *App) paletteActions() []paletteAction {
 		)
 	case TabMaterials:
 		actions = append(actions,
+			paletteAction{"reverse week order (S)", func(app *App) tea.Cmd { app.toggleMaterialSort(); return nil }},
 			paletteAction{"filter all", func(app *App) tea.Cmd { app.setPaletteFilter("all"); return nil }},
 			paletteAction{"filter new", func(app *App) tea.Cmd { app.setPaletteFilter("new"); return nil }},
 			paletteAction{"filter downloaded", func(app *App) tea.Cmd { app.setPaletteFilter("downloaded"); return nil }},
@@ -85,7 +89,9 @@ func (m *App) paletteLines(width int) []string {
 	if len(actions) == 0 {
 		return append(lines, stEmpty.Render("no matching commands"))
 	}
-	for i, action := range actions {
+	start, end := windowRange(len(actions), cursor, maxInt(1, bodyHeightFor(m.width, m.height)-2))
+	for i := start; i < end; i++ {
+		action := actions[i]
 		line := "  " + action.label
 		if i == cursor {
 			lines = append(lines, paneRow(stCursor.Render(line), width, rowHighlight{cursor: true}))

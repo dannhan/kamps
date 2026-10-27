@@ -12,7 +12,30 @@ import (
 // visible returns the Tasks-tab assignments after the active filter and
 // search, sorted.
 func (m *App) visible() []model.Assignment {
-	return m.service.Tasks(core.Query{Filter: m.filter, Search: m.search})
+	viewFilter, search := m.taskQueryState()
+	filter := viewFilter
+	if filter == "attention" || filter == "upcoming" || filter == "closed" {
+		filter = "all"
+	}
+	items := m.service.Tasks(core.Query{Filter: filter, Search: search, CourseID: m.courseID})
+	out := make([]model.Assignment, 0, len(items))
+	for _, a := range items {
+		if m.courseScoped && a.CourseID != m.courseID {
+			continue
+		}
+		undecided := a.Triage == model.Undecided
+		if viewFilter == "attention" && !undecided {
+			continue
+		}
+		if viewFilter == "upcoming" && !m.currentTask(a) {
+			continue
+		}
+		if viewFilter == "closed" && !(a.Triage == model.Missed || a.Triage == model.Ignored) {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
 }
 
 // cursorAssignmentID is the item the keyboard is pointing at, or "". On the
@@ -44,10 +67,7 @@ func (m *App) targetIDs() []string {
 		if id := m.cursorAssignmentID(); id != "" {
 			return []string{id}
 		}
-		nodes := m.taskNodes()
-		if m.taskCursor >= 0 && m.taskCursor < len(nodes) && m.isTaskGroup(nodes[m.taskCursor]) {
-			return m.taskGroupIDs(nodes[m.taskCursor])
-		}
+
 		return nil
 	}
 	if id := m.cursorAssignmentID(); id != "" {
@@ -98,6 +118,21 @@ func (m *App) hiddenTaskCount(ids []string) int {
 }
 
 func (m *App) hiddenSelectedCount() int {
+	if m.tab == TabMaterials {
+		visible := map[string]bool{}
+		for _, n := range m.matNodes() {
+			if n.kind == nodeFile {
+				visible[n.mat.ID] = true
+			}
+		}
+		hidden := 0
+		for id := range m.selectedM {
+			if !visible[id] {
+				hidden++
+			}
+		}
+		return hidden
+	}
 	if m.tab != TabTasks {
 		return 0
 	}
@@ -135,6 +170,8 @@ func (m *App) applyTriage(t model.Triage) tea.Cmd {
 		m.armedTriageHidden = hidden
 		return nil
 	}
+	beforeNodes := m.taskNodes()
+	beforeCursor := m.taskCursor
 	m.cancelTriageArm()
 	m.undoDecisions = map[string]model.Triage{}
 	for _, id := range ids {
@@ -155,9 +192,20 @@ func (m *App) applyTriage(t model.Triage) tea.Cmd {
 	m.toast = fmt.Sprintf("%d %s %s", len(ids), plural(len(ids), "item", "items"), t.String())
 	m.toastTicks = 24
 	m.selected = map[string]bool{}
+	m.restoreAfterDecision(beforeNodes, beforeCursor)
+	m.detailScroll = 0
 	return m.queueStatePersist()
 }
 
 func (m *App) taskQueueLabel() string {
 	return m.queueSummary()
+}
+
+// Other views can refresh the source too. Task focus restoration must use the
+// saved Tasks query rather than the active Materials filter/search.
+func (m *App) taskQueryState() (string, string) {
+	if m.tab == TabTasks {
+		return m.filter, m.search
+	}
+	return m.tabFilters[TabTasks], m.tabSearch[TabTasks]
 }

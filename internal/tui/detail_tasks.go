@@ -33,18 +33,8 @@ func (m *App) detailLines(n node, width int) []string {
 
 	switch n.kind {
 	case nodeCourse:
-		short := m.shortCode(n.courseID)
-		if course, ok := m.courseByID(n.courseID); ok {
-			add(stPaneTitle.Render(truncate(course.Name, width)))
-			add(stFaint.Render(truncate(course.Code+" · "+course.Term, width)))
-			if course.Short != "" {
-				short = course.Short
-			}
-		} else {
-			add(stPaneTitle.Render(short))
-		}
+		addWrapped(m.fullCourseName(n.courseID), stPaneTitle)
 		add("")
-		addKV("short", short, stCode)
 		addKV("tasks", fmt.Sprint(len(m.taskGroupIDs(n))), stRow)
 		addStates(n)
 	case nodeBucket:
@@ -53,30 +43,30 @@ func (m *App) detailLines(n node, width int) []string {
 		addStates(n)
 	case nodeTask:
 		task := n.task
-		add(stCode.Render(task.ID))
-		addWrapped(task.Name, stRow)
+		addWrapped(task.Name, stPaneTitle.Bold(true))
 		add("")
 		if course, ok := m.courseByID(task.CourseID); ok {
-			addKV("course", course.Name, stRow)
+			addWrapped(course.Name, stDim)
 		} else {
-			addKV("course", m.shortCode(task.CourseID), stRow)
+			addWrapped(m.fullCourseName(task.CourseID), stDim)
 		}
-		state := task.Triage.String()
-		if task.Triage == model.Undecided {
-			state = "new"
-		}
-		addKV("state", flagChar(task.Triage)+" "+state, triageStyle(task.Triage))
 		now := m.currentTime()
 		due, dueStyle := "none", stDueNone
 		if task.HasDue {
 			days := dueDays(task, now)
-			due = task.Due.Format("2006-01-02") + " · " + dueAge(task, now)
+			due = task.Due.Format("2 Jan 2006 15:04") + " · " + readableDeadline(task, m)
 			dueStyle = dueStyleFor(dueToneForDays(days, true))
 			if task.Overdue(now) {
 				due = "! " + due
 			}
 		}
 		addKV("due", due, dueStyle)
+		state := task.Triage.String()
+		if task.Triage == model.Undecided {
+			state = "new"
+		}
+		addKV("state", flagChar(task.Triage)+" "+state, triageStyle(task.Triage))
+
 		if task.Section != "" {
 			addKV("section", sectionLabel(task.Section), stRow)
 		}
@@ -87,7 +77,7 @@ func (m *App) detailLines(n node, width int) []string {
 			addKV("estimate", fmt.Sprintf("%d min", task.EstMinutes), stRow)
 		}
 		if task.Goal != "" {
-			addKV("goal", task.Goal, stRow)
+			addWrapped(task.Goal, stRow)
 		}
 		materials := m.assignmentMaterials(task)
 		if len(materials) > 0 {

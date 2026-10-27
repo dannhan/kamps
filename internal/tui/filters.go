@@ -1,7 +1,7 @@
 package tui
 
 // filters, cycled with f. `/` is reserved for search.
-var filterNames = []string{"all", "undecided", "overdue", "tracked", "missed", "ignored"}
+var filterNames = []string{"attention", "upcoming", "all", "closed", "tracked", "undecided", "overdue", "missed", "ignored"}
 
 var materialFilterNames = []string{"all", "new", "downloaded", "link", "unknown"}
 

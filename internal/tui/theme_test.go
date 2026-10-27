@@ -1,12 +1,14 @@
 package tui
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/ruyam/kamps/internal/model"
 )
 
 func TestQuietTreeLineColorTracksForegroundAndBackground(t *testing.T) {
@@ -40,6 +42,7 @@ func TestPaletteContrast(t *testing.T) {
 				"dim":        tc.theme.Dim,
 				"subtle":     tc.theme.Subtle,
 				"accent":     tc.theme.Accent,
+				"heading":    tc.theme.Heading,
 				"new":        tc.theme.New,
 				"tracked":    tc.theme.Tracked,
 				"done":       tc.theme.Done,
@@ -109,6 +112,7 @@ func TestDueToneBoundaries(t *testing.T) {
 }
 
 func TestDueTonesUseDistinctColorTokens(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
 	applyTheme("dark")
 	defer applyTheme("dark")
 
@@ -196,4 +200,39 @@ func relativeLuminance(hex string) float64 {
 		}
 	}
 	return 0.2126*linear[0] + 0.7152*linear[1] + 0.0722*linear[2]
+}
+
+func TestCourseColorsAreDistinctAndIndependentOfScope(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	defer applyTheme("dark")
+	for _, mode := range []string{"dark", "light"} {
+		app := demoApp(t)
+		applyTheme(mode)
+		app.courses, app.assignments, app.materials, app.unknownFiles = nil, nil, nil, nil
+		// These IDs all collided in the previous four-color modulo mapping.
+		for index := 0; index < 20; index++ {
+			app.courses = append(app.courses, model.Course{ID: 1 + index*4, Name: fmt.Sprintf("Course %02d", index)})
+		}
+		seen := map[string]bool{}
+		for _, course := range app.courses {
+			color := string(app.courseStyle(course.ID).GetForeground().(lipgloss.Color))
+			if seen[color] {
+				t.Fatalf("%s: courses share %s", mode, color)
+			}
+			seen[color] = true
+			if color == string(themeTokens.Heading) {
+				t.Fatalf("%s: course shares section heading color", mode)
+			}
+			if ratio := contrastRatio(color, string(themeTokens.Canvas)); ratio < 4.5 {
+				t.Fatalf("%s: course color %s contrast %.2f", mode, color, ratio)
+			}
+			app.courseScoped, app.courseID, app.filter = true, course.ID, "downloaded"
+			if got := string(app.courseStyle(course.ID).GetForeground().(lipgloss.Color)); got != color {
+				t.Fatalf("scope changed course color: %s -> %s", color, got)
+			}
+		}
+		if stSectionTitle.GetForeground() == stPrimary.GetForeground() {
+			t.Fatal("section heading shares task title color")
+		}
+	}
 }

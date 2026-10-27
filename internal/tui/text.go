@@ -56,22 +56,7 @@ func truncate(s string, w int) string {
 
 // wrapCell soft-wraps plain text to width, on spaces where possible.
 func wrapCell(s string, w int) []string {
-	if w < 8 {
-		w = 8
-	}
-	var out []string
-	for len(s) > w {
-		cut := w
-		for cut > 0 && s[cut] != ' ' {
-			cut--
-		}
-		if cut <= 0 {
-			cut = w
-		}
-		out = append(out, s[:cut])
-		s = strings.TrimLeft(s[cut:], " ")
-	}
-	return append(out, s)
+	return strings.Split(ansi.Wrap(s, maxInt(1, w), ""), "\n")
 }
 
 func stripANSI(s string) string {

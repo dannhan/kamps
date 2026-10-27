@@ -56,88 +56,11 @@ func isSectionLetter(value string) bool {
 }
 
 func (m *App) taskTreeRow(nodes []node, index, width int) string {
-	n := nodes[index]
-	if n.kind == nodeSpacer {
-		return m.treeRow(treeRowSpec{nodes: nodes, index: index, width: width, blank: true})
-	}
-	group := m.isTaskGroup(n)
-	ids := m.taskGroupIDs(n)
-	selected := false
-	if n.kind == nodeTask {
-		selected = m.selected[n.task.ID]
-	} else if group {
-		selected = allSelected(m.selected, ids)
-	}
-	open := group && m.taskIsOpen(n.key, taskNodeDefaultOpen(n))
-	spec := treeRowSpec{
-		nodes:      nodes,
-		index:      index,
-		width:      width,
-		cursor:     index == m.taskCursor,
-		selected:   selected,
-		partial:    !selected && partialSelected(m.selected, ids),
-		expandable: group,
-		open:       open,
-	}
-	switch n.kind {
-	case nodeActNow:
-		spec.title = func(h rowHighlight) string {
-			return h.style(stKey.Bold(true)).Render(fmt.Sprintf("Act now (%d)", len(ids)))
-		}
-		spec.rule = width >= courseRuleMinWidth
-	case nodeCourse:
-		name := m.shortCode(n.courseID)
-		if course, ok := m.courseByID(n.courseID); ok && course.Name != "" {
-			name = course.Name
-		}
-		spec.title = func(h rowHighlight) string {
-			return h.style(courseStyle(n.courseID).Bold(true)).Render(name + " ")
-		}
-		spec.meta = func(h rowHighlight) string { return m.taskCourseMeta(n.courseID, h) }
-		spec.rule = width >= courseRuleMinWidth
-	case nodeCoursePlaceholder:
-		name := m.shortCode(n.courseID)
-		if course, ok := m.courseByID(n.courseID); ok && course.Name != "" {
-			name = course.Name
-		}
-		spec.expandable = false
-		spec.title = func(h rowHighlight) string {
-			return h.style(stFaint).Render(name + " · all in Act now")
-		}
-		spec.meta = func(h rowHighlight) string { return m.taskCourseMeta(n.courseID, h) }
-		spec.rule = width >= courseRuleMinWidth
-	case nodeBucket:
-		spec.title = func(h rowHighlight) string {
-			return h.primaryStyle().Render(fmt.Sprintf("%s (%d)", n.bucket, len(ids)))
-		}
-	case nodeTask:
-		now := m.currentTime()
-		due := dueCell(n.task, now)
-		dueStyle := dueStyleFor(dueToneForDays(dueDays(n.task, now), n.task.HasDue))
-		name := taskDisplayName(n.task.Name)
-		if n.bucket == "act now" {
-			spec.prefix = func(h rowHighlight) string { return m.actNowPrefixCell(h, n.courseID) }
-		}
-		spec.title = func(h rowHighlight) string { return h.primaryStyle().Render(name) }
-		spec.meta = func(h rowHighlight) string { return h.style(dueStyle).Render(due) }
-	case nodeTaskMaterial:
-		glyph := "○"
-		if n.mat.Downloaded {
-			glyph = "●"
-		}
-		_, style := materialTreeState(n.mat)
-		spec.expandable = false
-		spec.glyph = glyph
-		spec.glyphStyle = style
-		spec.prefix = func(h rowHighlight) string { return h.style(stFaint).Render("⁝ ") }
-		spec.title = func(h rowHighlight) string { return h.primaryStyle().Render(n.mat.Name) }
-	}
-	return m.treeRow(spec)
+	return strings.Join(m.taskBlock(nodes[index], index, width), "\n")
 }
 
 func (m *App) isTaskGroup(n node) bool {
-	return n.kind == nodeCourse || n.kind == nodeBucket || n.kind == nodeActNow ||
-		n.kind == nodeTask && len(m.assignmentMaterials(n.task)) > 0
+	return n.kind == nodeCourse || n.kind == nodeBucket
 }
 
 func (m *App) taskNodeCounts(group node) [5]int {
@@ -188,14 +111,7 @@ func formatTaskCounts(counts [5]int, h rowHighlight) string {
 }
 
 func (m *App) taskRows(nodes []node, width, height int) []string {
-	start, end := windowRange(len(nodes), m.taskCursor, height)
-	rows := make([]string, 0, end-start)
-	for i := start; i < end; i++ {
-		rows = append(rows, m.taskTreeRow(nodes, i, width))
-	}
-	if len(rows) == 0 {
-		rows = append(rows, stEmpty.Render("nothing matches this filter"))
-	}
+	rows, _, _ := m.taskListWindow(nodes, width, height)
 	return rows
 }
 
@@ -230,38 +146,5 @@ func (m *App) taskTotals(width int) string {
 }
 
 func (m *App) tasksContent(width, height int) (string, string, []string, []string) {
-	nodes := m.taskNodes()
-	matches := len(m.visible())
-	hint := scrollHint(len(nodes), m.taskCursor, height)
-	mode := "summary view"
-	if m.showAll {
-		mode = "full view"
-	}
-	var title, right string
-	if m.searchActive() {
-		title = m.searchTitle() + " · " + mode
-		right = rightAligned(fmt.Sprintf("%d %s", matches, plural(matches, "match", "matches")), hint)
-	} else {
-		title = fmt.Sprintf("tasks › %s · %s", m.filter, mode)
-		right = rightAligned(fmt.Sprintf("%d assignments", matches), hint)
-	}
-	filterHint := "f filter"
-	if m.filter != "all" || m.search != "" {
-		filterHint = "esc clear"
-	}
-	detailHint := "enter detail"
-	switch m.detailMode() {
-	case detailSplit:
-		detailHint = "enter hide"
-	case detailReplace:
-		detailHint = "esc back"
-	}
-	hints := []string{"↑↓ move", "t/m/i decide", "c commit", filterHint, detailHint, "? more"}
-	leftWidth := width
-	if m.detailMode() == detailSplit {
-		leftWidth, _ = splitWidths(width)
-	}
-	rows := m.taskRows(nodes, leftWidth, height)
-	rows = m.detailBody(rows, nodes, m.taskCursor, width, height)
-	return title, right, hints, rows
+	return m.workspaceContent(width, height)
 }

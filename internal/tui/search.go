@@ -15,7 +15,7 @@ func (m *App) searchActive() bool { return m.searching || m.search != "" }
 // searchTitle is the left side of the title row while a search is on. The bar
 // cursor only blinks in while the query is still being typed.
 func (m *App) searchTitle() string {
-	title := "search · " + m.search
+	title := "Search " + m.tab.String() + " / " + m.courseLabel() + ": " + m.search
 	if m.searching {
 		title += "▌"
 	}
@@ -101,9 +101,11 @@ func (m *App) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "down", "ctrl+n":
 		m.move(1)
 	case "tab":
-		m.switchTab((m.tab + 1) % tabCount)
+		m.searching = false
+		m.cyclePane(1)
 	case "shift+tab":
-		m.switchTab((m.tab + tabCount - 1) % tabCount)
+		m.searching = false
+		m.cyclePane(-1)
 	default:
 		if msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace {
 			m.search += string(msg.Runes)

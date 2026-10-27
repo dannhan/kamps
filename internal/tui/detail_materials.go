@@ -36,6 +36,26 @@ func (m *App) materialDetailLines(n node, width int) []string {
 	}
 
 	switch n.kind {
+	case nodeMaterialWeek, nodeMaterialSection, nodeMaterialFolder:
+		add(stSectionTitle.Render(strings.Replace(n.section, "week-", "Week ", 1)))
+		if n.kind == nodeMaterialFolder {
+			addWrapped(n.mat.Folder, stRow)
+		}
+		add("")
+		addFiles(m.materialNodeFiles(n))
+		if n.kind == nodeMaterialWeek {
+			for _, course := range m.sidebarCourses() {
+				count := 0
+				for _, file := range m.materialNodeFiles(n) {
+					if file.CourseID == course.ID {
+						count++
+					}
+				}
+				if count > 0 {
+					addWrapped(fmt.Sprintf("%s · %d %s", course.Name, count, plural(count, "file", "files")), m.courseStyle(course.ID))
+				}
+			}
+		}
 	case nodeCourse:
 		if course, ok := m.courseByID(n.courseID); ok {
 			add(stPaneTitle.Render(truncate(course.Name, width)))
@@ -44,11 +64,17 @@ func (m *App) materialDetailLines(n node, width int) []string {
 			add(stPaneTitle.Render(m.shortCode(n.courseID)))
 		}
 		add("")
-		addFiles(m.courseFiles(n.courseID))
+		if n.section != "" {
+			add(stDim.Render(strings.Replace(n.section, "week-", "Week ", 1)))
+		}
+		addFiles(m.materialNodeFiles(n))
 	case nodeFile:
 		material := n.mat
-		add(stCode.Render(material.ID))
+		add(stFaint.Render("d download · o LMS source · O local"))
 		addWrapped(material.Name, stRow)
+		if failure := m.downloadErrors[material.ID]; failure != "" {
+			addWrapped("Download failed: "+failure+" · d retry", stOverdue)
+		}
 		add("")
 		if course, ok := m.courseByID(material.CourseID); ok {
 			addKV("course", course.Name, stRow)
@@ -68,12 +94,19 @@ func (m *App) materialDetailLines(n node, width int) []string {
 		state, style := materialTreeState(material)
 		addKV("state", state, style)
 		if assignment := m.assignmentForMaterial(material); assignment != nil {
-			addKV("linked", assignment.ID+" · "+assignment.Name, stRow)
+			add("")
+			add(stKey.Render("Related task"))
+			addWrapped(taskDisplayName(assignment.Name), stRow)
+			addWrapped(readableDeadline(*assignment, m)+" · "+assignment.Triage.String(), stDim)
 		}
 		if material.URL != "" {
 			add("")
 			add(stFaint.Render("url"))
-			add(stRow.Render(truncate(material.URL, width)))
+			addWrapped(material.URL, stRow)
+			if material.Downloaded {
+				add(stFaint.Render("local path"))
+				addWrapped(m.materialDestination(material), stRow)
+			}
 		}
 	case nodeMaterialAssignment:
 		task := n.task

@@ -69,36 +69,69 @@ library_dir = "~/projects/university"
 
 Live mode parses in-progress courses, course pages, assignments, resources, assignment attachments, and folder files. Materials are grouped as `week-0`, `week-1`, … from the course section order (an explicit “Week N” name wins), and downloads go to `library_dir` and resume after interruption. Course rows use the cleaned course name and code instead of Moodle’s category prefixes. An optional `course.json` in a workspace maps a course to that repo so downloads land there; see [`docs/workspace.md`](docs/workspace.md). Use `./kamps --demo` to explore the bundled UI without a session.
 
-Handy keys:
+The workspace has two primary views, Tasks (`1`) and Materials (`2`). Use the
+course sidebar to choose All courses or one course. Below 100 columns, `Tab`
+opens the course picker in the content area; Enter applies the choice. Wider
+terminals keep the sidebar visible. `Tab` / `Shift+Tab` move between courses,
+content, and the optional inspector.
+
+Tasks open with **Needs attention**: up to five undecided tasks due today or
+within seven calendar days, earliest first. Enter on “Show all N” expands the
+shortlist. Each task shows its name, full course name, and readable deadline.
+Elapsed deadlines appear in a separate, collapsed **Overdue** section, most
+recent first. Below it, full course-name groups open to undecided work, with
+tracked and closed work in separate collapsed subgroups. A task's marks and
+decisions stay synchronized wherever it appears.
+
+`f` opens filters; `/` searches the current view and course. Matching course
+groups open automatically unless you explicitly fold them. Each view remembers
+its query, filter, cursor, and marks. Attention includes all undecided work;
+Upcoming includes only unelapsed deadlines within seven days; Closed means
+missed or ignored. Tracked remains separate because it means handled elsewhere.
+Decision keys stay visible in the Tasks footer; status messages appear above the
+content instead of replacing those keys.
+
+Materials opens All courses as a compact list of collapsed weeks, newest week
+first, with file and course counts. Enter expands a week into course groups and
+files. Select a course in the sidebar to browse its expanded week library.
+Press `S` to reverse the week order; the header shows the active order, which is
+remembered while switching views. Course accents match the sidebar and Tasks.
+Enter opens file details, including any related task, or folds a group. Display labels are cleaned without changing source names or filenames.
+The cursor bar and square batch marks are independent. Download states stay
+beside filenames, moving below long titles on narrow terminals. Offline messages
+and errors leave the action footer visible.
 
 | key | action |
 |---|---|
-| `↑↓` / `jk` | move |
-| `g` / `G`, `ctrl+d/u` | top / bottom, half-page |
-| `hl` | fold / open (courses, sections, folders, task buckets) |
-| `tab` / `[` `]`, `1`–`4` | switch tabs |
-| `enter` | open / close the detail pane (Tasks, Materials); write the queue (Commit) |
-| `space`, `a` | select item / select all |
-| `v`, `*` | range-select / invert visible |
-| `u` | undo the last bulk triage |
-| `t` / `m` / `i` / `n` | decide: track / missed / ignore / new |
-| `f` | cycle the filter (Materials: all / new / downloaded / link / unknown) |
-| `/` | search the tree (composes with the filter) |
-| `esc` | close detail / clear search or filter / back |
-| `c` | review & commit |
-| `w` | write the queue to `commit_file` (Commit) |
-| `y` | copy the queue lines (Commit) |
-| `x` / `X` | drop one item / drop all queued (Commit) |
-| `s` / `r` | reload the source |
-| `d` | download (Materials) |
-| `o` | open an external link in the browser (Materials) |
-| `:` / `ctrl+k` | command palette |
-| `?` | help |
+| `↑↓` / `jk` | move in the focused pane; scroll the inspector |
+| `g` / `G`, `ctrl+d/u` | first / last, half-page |
+| `hl` / `←→` | fold / open task course groups and Materials groups |
+| `1` / `2` | Tasks / Materials |
+| `tab` / `shift+tab` | next / previous pane |
+| `[` / `]`, `3` / `4` | utility views, including Sync status and Commit |
+| `enter` | choose course, fold/open a group, or toggle task/file details; Commit copies/writes the preview |
+| `space`, `a` | mark item/group, mark all matching items |
+| `v`, `*` | range-mark / invert visible marks |
+| `u` / `ctrl+z` | undo the last bulk decision |
+| `t` / `i` / `m` / `n` | track / ignore / missed / undecided |
+| `f`, `A` | open filters / show All tasks |
+| `/` | search within the current view and course |
+| `S` | reverse Materials week order (newest / oldest first) |
+| `esc` | dismiss the current menu, confirmation, inspector, search, filter, or marks |
+| `c` | review & commit the export queue |
+| `w`, `y` | write / copy the exact queue preview (Commit) |
+| `x` / `X` | drop one / all queued items (Commit) |
+| `s` / `r` | sync the source |
+| `d` | download or retry marked/focused materials |
+| `o` / `O` | open LMS source / open the focused local file |
+| `:` / `ctrl+k`, `?` | command palette / full help |
 | `q` | quit |
 
-The detail pane is opt-in: `enter` opens or closes it. It still follows the cursor. Search narrows both
-trees as you type, and `enter` leaves the query on while you move through the
-matches.
+The inspector replaces the content on narrow terminals and splits beside it at
+140 columns or wider. It shows the task name, full course name, deadline, decision, available text,
+and related materials. Raw task/course IDs stay out of ordinary task details. Sync and Commit retain their
+existing semantics: decisions save immediately; Commit is the separate export
+step, and Sync status remains available with `3` or the command palette.
 
 ## Project structure
 

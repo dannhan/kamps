@@ -30,18 +30,14 @@ func TestPaletteLinesArePure(t *testing.T) {
 	}
 }
 
-func TestErrorStateReadsCacheInACommand(t *testing.T) {
+func TestErrorWithoutCacheIsDurable(t *testing.T) {
 	app := demoApp(t)
 	_, cmd := app.Update(errMsg{err: errors.New("network down")})
-	if cmd == nil {
-		t.Fatal("error state should return a cache command instead of reading synchronously")
+	if cmd != nil {
+		t.Fatal("fallback must finish in loadCmd before publishing an error")
 	}
-	if app.loadError != "network down" {
-		t.Fatalf("loadError = %q", app.loadError)
-	}
-	app.Update(cmd())
-	if app.loadError != "network down" {
-		t.Fatalf("missing cache cleared the error: %q", app.loadError)
+	if app.loadError != "network down" || app.loading || app.syncing {
+		t.Fatalf("failure not settled: error=%q loading=%v syncing=%v", app.loadError, app.loading, app.syncing)
 	}
 }
 
@@ -59,6 +55,7 @@ func TestPersistenceQueueKeepsLatestDecision(t *testing.T) {
 	app := newDemoApp(t, cfg)
 	app.tab = TabTasks
 	id := app.assignments[0].ID
+	focusTaskForTest(t, app, id)
 
 	app.selected[id] = true
 	first := app.applyTriage(model.Tracked)

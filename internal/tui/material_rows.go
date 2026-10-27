@@ -41,11 +41,11 @@ func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 			name = course.Name
 		}
 		spec.title = func(h rowHighlight) string {
-			return h.style(courseStyle(n.courseID).Bold(true)).Render(name + " ")
+			return h.style(m.courseStyle(n.courseID).Bold(true)).Render(name + " ")
 		}
 		spec.meta = func(h rowHighlight) string { return m.materialCourseMeta(n.courseID, h) }
 		spec.rule = width >= courseRuleMinWidth
-	case nodeMaterialSection:
+	case nodeMaterialWeek, nodeMaterialSection:
 		count := len(m.materialNodeFiles(n))
 		spec.title = func(h rowHighlight) string {
 			return h.primaryStyle().Render(fmt.Sprintf("%s (%d)", n.section, count))
@@ -82,48 +82,15 @@ func (m *App) matTreeRow(nodes []node, index, width int, selected bool) string {
 func (m *App) materialHasChildren(n node) bool {
 	switch n.kind {
 	case nodeCourse:
-		return len(m.courseFiles(n.courseID)) > 0
-	case nodeMaterialSection, nodeMaterialFolder:
 		return len(m.materialNodeFiles(n)) > 0
-	case nodeFile:
-		return m.assignmentForMaterial(n.mat) != nil
+	case nodeMaterialWeek, nodeMaterialSection, nodeMaterialFolder:
+		return len(m.materialNodeFiles(n)) > 0
 	}
 	return false
 }
 
 func (m *App) materialsContent(width, height int) (string, string, []string, []string) {
-	nodes := m.matNodes()
-	matches := len(m.visibleMaterials())
-	hint := scrollHint(len(nodes), m.matCursor, height)
-	var title, right string
-	if m.searchActive() {
-		title = m.searchTitle()
-		right = rightAligned(fmt.Sprintf("%d %s", matches, plural(matches, "match", "matches")), hint)
-	} else if m.filter == "unknown" {
-		title = "materials › unknown"
-		right = rightAligned(fmt.Sprintf("%d files not in source", len(m.unknownFiles)), hint)
-	} else {
-		title = fmt.Sprintf("materials › %s", m.filter)
-		right = rightAligned(fmt.Sprintf("%d files · %d local", len(m.materials), m.downloadedMaterials()), hint)
-	}
-	detailHint := "enter detail"
-	switch m.detailMode() {
-	case detailSplit:
-		detailHint = "enter hide"
-	case detailReplace:
-		detailHint = "esc back"
-	}
-	hints := []string{"↑↓ move", "d download", "o open", detailHint, "? more"}
-	if m.filter != "all" {
-		hints = append(hints, "esc clear")
-	}
-	leftWidth := width
-	if m.detailMode() == detailSplit {
-		leftWidth, _ = splitWidths(width)
-	}
-	rows := m.materialRows(nodes, leftWidth, height)
-	rows = m.detailBody(rows, nodes, m.matCursor, width, height)
-	return title, right, hints, rows
+	return m.workspaceContent(width, height)
 }
 
 func (m *App) materialRows(nodes []node, width, height int) []string {

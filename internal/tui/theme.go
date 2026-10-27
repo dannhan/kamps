@@ -37,6 +37,7 @@ type themeColors struct {
 	Subtle   lipgloss.Color
 	TreeLine lipgloss.Color
 	Accent   lipgloss.Color
+	Heading  lipgloss.Color
 
 	// TreeConnector is deliberately darker/dimmer than Primary so the rails
 	// recede behind titles.
@@ -61,15 +62,16 @@ type themeColors struct {
 func darkColors() themeColors {
 	return themeColors{
 		Canvas:        "#1B1B26",
-		Surface:       "#3A3A5C",
-		Marked:        "#4D4478",
+		Surface:       "#334252",
+		Marked:        "#30394A",
 		Border:        "#3B3E5E",
 		Bright:        "#EDEDED",
 		Primary:       "#EDEDED",
 		Dim:           "#C6C6C6",
 		Subtle:        "#9A9AA4",
 		TreeLine:      lipgloss.Color(quietHex("#EDEDED", "#1B1B26")),
-		Accent:        "#9AA0D0",
+		Accent:        "#89B4FA",
+		Heading:       "#E2CCA4",
 		TreeConnector: "#6A6A74",
 		DueOverdue:    "#F7768E",
 		DueSoon:       "#F0A868",
@@ -77,9 +79,9 @@ func darkColors() themeColors {
 		DueFar:        "#9A9AA4",
 		DueNone:       "#8A8A8A",
 		New:           "#9A9AA4",
-		Tracked:       "#E0AF68",
+		Tracked:       "#B6C1CB",
 		Done:          "#6FCF97",
-		Ignored:       "#B59AE0",
+		Ignored:       "#9A9AA4",
 		Missed:        "#F7768E",
 	}
 }
@@ -96,6 +98,7 @@ func lightColors() themeColors {
 		Subtle:        "#6B6B75",
 		TreeLine:      lipgloss.Color(quietHex("#1B1B26", "#FFFFFF")),
 		Accent:        "#3F4390",
+		Heading:       "#71521F",
 		TreeConnector: "#4B4B54",
 		DueOverdue:    "#C0392B",
 		DueSoon:       "#A65D00",
@@ -121,11 +124,11 @@ var themeTokens = darkColors()
 var courseAccents = darkCourseAccents()
 
 func darkCourseAccents() []lipgloss.Color {
-	return []lipgloss.Color{"#8DB4E2", "#6FD0BE", "#E0AF68", "#B59AE0", "#F08AA8", "#8FD08F"}
+	return []lipgloss.Color{"#91B9EB", "#83C9C0", "#B9A5E8", "#A5C7A0", "#E1A4CA", "#91CFDF", "#C0B7F0", "#9CC3B8"}
 }
 
 func lightCourseAccents() []lipgloss.Color {
-	return []lipgloss.Color{"#3F64A8", "#1F7A6A", "#A63D5C", "#7651A8", "#A5680F", "#3E7D3E"}
+	return []lipgloss.Color{"#3F64A8", "#1F7A6A", "#7651A8", "#3E7D3E", "#97466E", "#24758A", "#64549C", "#416E64"}
 }
 
 func normalizeTheme(value string) themeMode {
@@ -212,9 +215,10 @@ var (
 	stDueFar     lipgloss.Style
 	stDueNone    lipgloss.Style
 
-	stPaneTitle lipgloss.Style
-	stRule      lipgloss.Style
-	stKey       lipgloss.Style
+	stSectionTitle lipgloss.Style
+	stPaneTitle    lipgloss.Style
+	stRule         lipgloss.Style
+	stKey          lipgloss.Style
 
 	stFlagNew lipgloss.Style
 	stFlagT   lipgloss.Style
@@ -250,6 +254,7 @@ func buildStyles() {
 	stSoon = stDueSoon
 	stOverdue = stDueOverdue
 
+	stSectionTitle = fgStyle(themeTokens.Heading).Bold(true)
 	stPaneTitle = fgStyle(themeTokens.Bright)
 	stRule = fgStyle(themeTokens.Border)
 	stKey = fgStyle(themeTokens.Accent)
@@ -286,15 +291,52 @@ func tabCellStyle(active bool) lipgloss.Style {
 	return fgStyle(themeTokens.Subtle)
 }
 
-func courseStyle(courseID int) lipgloss.Style {
+// Allocate accents by the complete course list, rather than ID modulo palette
+// size: unrelated LMS IDs can otherwise collide even with only two courses.
+func (m *App) courseStyle(courseID int) lipgloss.Style {
 	if len(courseAccents) == 0 {
-		return lipgloss.NewStyle()
+		return stDim
 	}
-	index := courseID % len(courseAccents)
-	if index < 0 {
-		index = -index
+	index := 0
+	for i, course := range m.sidebarCourses() {
+		if course.ID == courseID {
+			index = i
+			break
+		}
 	}
-	return fgStyle(courseAccents[index])
+	return fgStyle(courseAccent(index))
+}
+
+func courseAccent(index int) lipgloss.Color {
+	if index < len(courseAccents) {
+		return courseAccents[index]
+	}
+	// Additional courses get new hues instead of wrapping the fixed palette.
+	// HSV keeps their brightness and saturation consistent with the theme.
+	hue := math.Mod(float64(index-len(courseAccents))*137.508+17, 360) / 60
+	value, saturation := 0.88, 0.30
+	if themeTokens.Canvas == lightColors().Canvas {
+		value, saturation = 0.48, 0.58
+	}
+	chroma := value * saturation
+	x := chroma * (1 - math.Abs(math.Mod(hue, 2)-1))
+	var red, green, blue float64
+	switch int(hue) {
+	case 0:
+		red, green = chroma, x
+	case 1:
+		red, green = x, chroma
+	case 2:
+		green, blue = chroma, x
+	case 3:
+		green, blue = x, chroma
+	case 4:
+		red, blue = x, chroma
+	default:
+		red, blue = chroma, x
+	}
+	base := value - chroma
+	return lipgloss.Color(fmt.Sprintf("#%02X%02X%02X", int((red+base)*255), int((green+base)*255), int((blue+base)*255)))
 }
 
 func triageStyle(t model.Triage) lipgloss.Style {

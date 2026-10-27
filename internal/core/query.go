@@ -1,6 +1,7 @@
 package core
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -73,7 +74,7 @@ func (s *Service) Course(raw string) (model.Course, bool) {
 		return model.Course{}, false
 	}
 	for _, course := range s.snapshot.Courses {
-		if raw == course.Short || raw == course.Code || strings.EqualFold(raw, course.Short) ||
+		if raw == strconv.Itoa(course.ID) || raw == course.Short || raw == course.Code || strings.EqualFold(raw, course.Short) ||
 			strings.EqualFold(raw, course.Code) || strings.EqualFold(raw, course.Name) {
 			return course, true
 		}

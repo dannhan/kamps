@@ -1,8 +1,8 @@
 package tui
 
 import (
+	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -101,134 +101,143 @@ func (m *App) courseGroupAssignments(courseID int) []model.Assignment {
 	return out
 }
 
+// currentTask uses the same seven-day window as the upcoming filter. An
+// elapsed deadline, including earlier today, belongs in Overdue instead.
+func (m *App) currentTask(a model.Assignment) bool {
+	return a.Triage == model.Undecided && a.HasDue && !a.Due.Before(m.currentTime()) && dueDays(a, m.currentTime()) <= actNowLookAheadDays
+}
+
 func (m *App) taskGroupIDs(group node) []string {
-	now := m.currentTime()
 	var ids []string
-	for _, assignment := range m.visible() {
+	for _, a := range m.visible() {
 		include := false
 		switch group.kind {
-		case nodeActNow:
-			include = !m.showAll && classifyTask(assignment, now) == taskGroupActNow
 		case nodeCourse:
-			include = assignment.CourseID == group.courseID && (!m.showAll && classifyTask(assignment, now) != taskGroupActNow || m.showAll)
+			include = a.CourseID == group.courseID
 		case nodeBucket:
-			include = assignment.CourseID == group.courseID && m.taskBucketMatches(assignment, group.bucket, now)
+			if group.bucket == "Overdue" {
+				include = a.Overdue(m.currentTime())
+			} else if a.CourseID == group.courseID {
+				include = group.bucket == "Tracked" && a.Triage == model.Tracked || group.bucket == "Closed" && (a.Triage == model.Missed || a.Triage == model.Ignored)
+			}
 		case nodeTask:
-			include = assignment.ID == group.task.ID
+			include = a.ID == group.task.ID
 		}
 		if include {
-			ids = append(ids, assignment.ID)
+			ids = append(ids, a.ID)
 		}
 	}
 	return ids
 }
 
-// taskNodes flattens the Tasks tab: Act now, then course ▸ state bucket ▸ task
-// ▸ attached material. Courses are ordered by term and display name.
+const taskShortlistKey = "tasks:shortlist"
+const taskOverdueKey = "tasks:overdue"
+
+func (m *App) taskGroupOpen(n node) bool {
+	filter, search := m.taskQueryState()
+	revealMatches := search != "" || filter != "" && filter != "all"
+	if open, exists := m.taskExpansion()[n.key]; exists {
+		return open
+	}
+	return revealMatches
+}
+
+// taskNodes owns both appearances of an assignment. Appearance keys are
+// unique for focus restoration; decisions and marks always use assignment IDs.
 func (m *App) taskNodes() []node {
 	visible := m.visible()
-	byCourse := make(map[int][]model.Assignment)
-	for _, assignment := range visible {
-		byCourse[assignment.CourseID] = append(byCourse[assignment.CourseID], assignment)
+	filter, search := m.taskQueryState()
+	out := []node{{kind: nodeTaskHeading, key: "tasks:attention", bucket: "Needs attention"}}
+	var current, overdue []model.Assignment
+	byCourse := map[int][]model.Assignment{}
+	for _, a := range visible {
+		byCourse[a.CourseID] = append(byCourse[a.CourseID], a)
+		if m.currentTask(a) {
+			current = append(current, a)
+		}
+		if a.Overdue(m.currentTime()) {
+			overdue = append(overdue, a)
+		}
 	}
-	if len(byCourse) == 0 {
-		return nil
+	appendTask := func(a model.Assignment, parent string, parents []string) {
+		key := taskKey(a.ID)
+		if parent != "" {
+			key = parent + ":" + key
+		}
+		out = append(out, node{kind: nodeTask, courseID: a.CourseID, key: key, parents: parents, task: a})
 	}
-
-	courses := make(map[int]model.Course, len(m.courses))
-	for _, course := range m.courses {
-		if len(byCourse[course.ID]) == 0 {
+	limit := len(current)
+	if !m.taskExpansion()[taskShortlistKey] && limit > 5 {
+		limit = 5
+	}
+	for _, a := range current[:limit] {
+		appendTask(a, taskShortlistKey, []string{"tasks:attention"})
+	}
+	if len(current) == 0 {
+		out = append(out, node{kind: nodeTaskHeading, key: "tasks:no-current", bucket: "No deadlines in the next 7 days", parents: []string{"tasks:attention"}})
+	}
+	if len(current) > 5 {
+		out = append(out, node{kind: nodeTaskMore, key: taskShortlistKey, bucket: fmt.Sprintf("Show all %d", len(current))})
+	}
+	out = append(out, node{kind: nodeSpacer, key: "tasks:gap-overdue"})
+	overdueNode := node{kind: nodeBucket, key: taskOverdueKey, bucket: "Overdue"}
+	out = append(out, overdueNode)
+	if m.taskGroupOpen(overdueNode) {
+		sort.SliceStable(overdue, func(i, j int) bool { return overdue[i].Due.After(overdue[j].Due) })
+		for _, a := range overdue {
+			appendTask(a, taskOverdueKey, []string{taskOverdueKey})
+		}
+		if len(overdue) == 0 {
+			out = append(out, node{kind: nodeTaskHeading, key: "tasks:no-overdue", bucket: "No overdue tasks", parents: []string{taskOverdueKey}})
+		}
+	}
+	out = append(out, node{kind: nodeSpacer, key: "tasks:gap-courses"}, node{kind: nodeTaskHeading, key: "tasks:courses", bucket: "Courses"})
+	courseShown := false
+	for _, course := range m.sidebarCourses() {
+		if course.ID == localCourseID || m.courseScoped && course.ID != m.courseID {
 			continue
 		}
-		courses[course.ID] = course
-	}
-	for courseID := range byCourse {
-		if _, ok := courses[courseID]; ok {
+		assignments := byCourse[course.ID]
+		if len(assignments) == 0 && (search != "" || filter != "all" && filter != "") {
 			continue
 		}
-		courses[courseID] = model.Course{ID: courseID, Short: "course-" + strconv.Itoa(courseID)}
-	}
-
-	courseIDs := make([]int, 0, len(courses))
-	for courseID := range courses {
-		courseIDs = append(courseIDs, courseID)
-	}
-	sort.Slice(courseIDs, func(i, j int) bool {
-		left, right := courses[courseIDs[i]], courses[courseIDs[j]]
-		if left.Term != right.Term {
-			return left.Term < right.Term
+		if courseShown {
+			out = append(out, node{kind: nodeSpacer, key: "tasks:gap-" + courseKey(course.ID)})
 		}
-		return courseSortName(left) < courseSortName(right)
-	})
-
-	now := m.currentTime()
-	out := make([]node, 0, len(visible)*2)
-
-	if !m.showAll {
-		var actNow []model.Assignment
-		for _, assignment := range visible {
-			if classifyTask(assignment, now) == taskGroupActNow {
-				actNow = append(actNow, assignment)
-			}
-		}
-		if len(actNow) > 0 {
-			out = append(out, node{kind: nodeActNow, key: actNowKey})
-			for _, assignment := range actNow {
-				taskNodeKey := taskKey(assignment.ID)
-				out = append(out, node{kind: nodeTask, courseID: assignment.CourseID, bucket: "act now", key: taskNodeKey, parents: []string{actNowKey}, task: assignment})
-				if !m.taskIsOpen(taskNodeKey, false) {
-					continue
-				}
-				for _, material := range m.assignmentMaterials(assignment) {
-					out = append(out, node{kind: nodeTaskMaterial, courseID: assignment.CourseID, bucket: "act now", key: taskMaterialKey(material.ID), parents: []string{actNowKey, taskNodeKey}, mat: material, task: assignment})
-				}
-			}
-			if len(courseIDs) > 0 {
-				out = append(out, node{kind: nodeSpacer, key: "act:now:spacer"})
-			}
-		}
-	}
-
-	for courseIndex, courseID := range courseIDs {
-		if courseIndex > 0 {
-			out = append(out, node{kind: nodeSpacer, courseID: courseID, key: spacerKey(courseID)})
-		}
-		courseKeyValue := courseKey(courseID)
-		groupAssignments := m.courseGroupAssignments(courseID)
-		if len(groupAssignments) == 0 {
-			out = append(out, node{kind: nodeCoursePlaceholder, courseID: courseID, key: courseKeyValue})
+		courseShown = true
+		group := node{kind: nodeCourse, courseID: course.ID, key: courseKey(course.ID)}
+		out = append(out, group)
+		if !m.taskGroupOpen(group) {
 			continue
 		}
-		out = append(out, node{kind: nodeCourse, courseID: courseID, key: courseKeyValue})
-		if !m.taskIsOpen(courseKeyValue, true) {
+		if len(assignments) == 0 {
+			out = append(out, node{kind: nodeTaskHeading, key: group.key + ":empty", bucket: "No tasks in this course", parents: []string{group.key}})
 			continue
 		}
-		for _, bucket := range taskBuckets {
-			var assignments []model.Assignment
-			for _, assignment := range groupAssignments {
-				if m.taskBucketMatches(assignment, bucket.name, now) {
-					assignments = append(assignments, assignment)
-				}
+		for _, a := range assignments {
+			if a.Triage == model.Undecided {
+				appendTask(a, "", []string{group.key})
 			}
-			if len(assignments) == 0 {
+		}
+		for _, label := range []string{"Tracked", "Closed"} {
+			bucket := node{kind: nodeBucket, courseID: course.ID, key: bucketKey(course.ID, label), bucket: label, parents: []string{group.key}}
+			ids := m.taskGroupIDs(bucket)
+			if len(ids) == 0 {
 				continue
 			}
-			key := bucketKey(courseID, bucket.name)
-			out = append(out, node{kind: nodeBucket, courseID: courseID, bucket: bucket.name, key: key, parents: []string{courseKeyValue}})
-			if !m.taskIsOpen(key, bucket.open) {
+			out = append(out, bucket)
+			if !m.taskGroupOpen(bucket) {
 				continue
 			}
-			for _, assignment := range assignments {
-				taskNodeKey := taskKey(assignment.ID)
-				out = append(out, node{kind: nodeTask, courseID: courseID, bucket: bucket.name, key: taskNodeKey, parents: []string{courseKeyValue, key}, task: assignment})
-				if !m.taskIsOpen(taskNodeKey, false) {
-					continue
-				}
-				for _, material := range m.assignmentMaterials(assignment) {
-					out = append(out, node{kind: nodeTaskMaterial, courseID: courseID, bucket: bucket.name, key: taskMaterialKey(material.ID), parents: []string{courseKeyValue, key, taskNodeKey}, mat: material, task: assignment})
+			for _, a := range assignments {
+				if label == "Tracked" && a.Triage == model.Tracked || label == "Closed" && (a.Triage == model.Missed || a.Triage == model.Ignored) {
+					appendTask(a, "", []string{group.key, bucket.key})
 				}
 			}
 		}
+	}
+	if len(visible) == 0 && search != "" {
+		out = []node{{kind: nodeTaskHeading, key: "tasks:empty", bucket: "No tasks match · / search · f filters"}}
 	}
 	return out
 }
@@ -244,7 +253,7 @@ func (m *App) assignmentMaterials(assignment model.Assignment) []model.Material 
 	prefix := "M" + strings.TrimPrefix(assignment.ID, "K") + ":"
 	var materials []model.Material
 	for _, material := range m.materials {
-		if strings.HasPrefix(material.ID, prefix) {
+		if material.AssignmentID == assignment.ID || strings.HasPrefix(material.ID, prefix) {
 			materials = append(materials, material)
 		}
 	}
@@ -269,4 +278,11 @@ func (m *App) courseChildren(courseID int) []model.Assignment {
 		}
 	}
 	return out
+}
+
+func (m *App) taskExpansion() map[string]bool {
+	if m.tab == TabTasks {
+		return m.expanded
+	}
+	return m.tabExpanded[TabTasks]
 }

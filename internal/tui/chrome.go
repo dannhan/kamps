@@ -37,15 +37,7 @@ func (m *App) sizeClass() sizeClass { return sizeClassFor(m.width, m.height) }
 // bodyHeightFor is the single source of truth for the body height. Tiny omits
 // the bottom rule; the other classes use one or two footer rows.
 func bodyHeightFor(w, h int) int {
-	class := sizeClassFor(w, h)
-	if class == sizeTiny {
-		return maxInt(0, h-4)
-	}
-	footerRows := 1
-	if class >= sizeStandard {
-		footerRows = 2
-	}
-	return maxInt(0, h-4-footerRows)
+	return maxInt(0, h-5)
 }
 
 func (m *App) View() string {
@@ -62,7 +54,7 @@ func (m *App) View() string {
 		if m.helpOn {
 			return m.tinyHelp(w, h)
 		}
-		return "terminal too small · q quit · ? help"
+		return fitLine("terminal too small · q quit · ? help", w)
 	}
 
 	class := sizeClassFor(w, h)
@@ -74,7 +66,10 @@ func (m *App) View() string {
 	} else if !m.loaded {
 		rows = []string{stDim.Render("loading… fetching courses, assignments, and materials")}
 	}
-	if m.paletteOn {
+	if m.filterOn {
+		title, right = "Filters · enter apply · esc cancel", ""
+		rows = m.filterRows(w)
+	} else if m.paletteOn {
 		title, right = "commands", ""
 		rows = m.paletteLines(w)
 	} else if m.helpOn {
@@ -96,9 +91,7 @@ func (m *App) View() string {
 		rule(w),
 	}
 	lines = append(lines, bodyLines(rows, w, bodyHeight)...)
-	if class != sizeTiny {
-		lines = append(lines, rule(w))
-	}
+	lines = append(lines, rule(w))
 	lines = append(lines, m.footerLines(w, class)...)
 	return strings.Join(lines, "\n")
 }
@@ -106,14 +99,11 @@ func (m *App) View() string {
 // tabBar is the top line: the tabs and a right-aligned status. No box — the top
 // and bottom bars sit flush against the screen.
 func (m *App) tabBar(w int) string {
-	labels := []string{"1 Tasks", "2 Materials", "3 Sync", "4 Commit"}
-	const cellWidth = 13
-	var cells []string
-	for i, label := range labels {
-		cells = append(cells, fixedTabCell(label, m.tab == Tab(i), cellWidth))
+	left := fixedTabCell("1 Tasks", m.tab == TabTasks, 12) + fixedTabCell("2 Materials", m.tab == TabMaterials, 16)
+	if m.tab == TabSync || m.tab == TabCommit {
+		left += stKey.Render(" / " + m.tab.String())
 	}
-	left := strings.Join(cells, "")
-	return barLine(left, m.tabBarStatus(w-lipgloss.Width(left)-3), w)
+	return barLine(left, stFaint.Render("s sync · c commit · : commands"), w)
 }
 
 // tabBarStatus degrades the right-hand status instead of dropping it whole:
@@ -153,20 +143,12 @@ func (m *App) tabBarStatus(available int) string {
 
 // tabBarTiny keeps only the numeric tab cells plus the active tab name.
 func (m *App) tabBarTiny(w int) string {
-	labels := []string{"1", "2", "3", "4"}
-	var cells []string
-	for i, label := range labels {
-		cells = append(cells, fixedTabCell(label, m.tab == Tab(i), 3))
-	}
-	return barLine(strings.Join(cells, ""), m.tab.String(), w)
+	return m.tabBar(w)
 }
 
 // footerRowCount keeps the two-row footer on Standard/Wide terminals and
 // collapses it to one row on Compact/Tiny.
 func (m *App) footerRowCount() int {
-	if m.sizeClass() >= sizeStandard {
-		return 2
-	}
 	return 1
 }
 
@@ -279,6 +261,8 @@ func (m *App) coreFooterHints() []string {
 // footerHintItems owns mode-specific hints and otherwise returns the core list.
 func (m *App) footerHintItems() []string {
 	switch {
+	case m.filterOn:
+		return []string{"↑↓ choose", "enter apply", "esc cancel"}
 	case m.helpOn:
 		if m.helpMaxScroll() > 0 {
 			return []string{"j/k scroll", keyHintLabel(m.keys.Help, "close")}
@@ -289,8 +273,45 @@ func (m *App) footerHintItems() []string {
 	case m.searching:
 		return []string{"type search", "↑↓ move", keyHintLabel(m.keys.Confirm, "done"), keyHintLabel(m.keys.Back, "cancel")}
 	}
+	if m.tab == TabTasks && m.paneFocus != 1 {
+		enter := "details"
+		if n, ok := m.cursorTaskNode(); ok && (m.isTaskGroup(n) || n.kind == nodeTaskMore) {
+			enter = "expand/fold"
+		}
+		if m.paneFocus == 2 {
+			enter = "close"
+		}
+		return []string{"t Track", "i Ignore", "m Missed", "enter " + enter, "space Mark", "n Undecided", "? all keys"}
+	}
+	if m.tab == TabTasks || m.tab == TabMaterials {
+		if m.paneFocus == 1 {
+			return []string{"↑↓ course", "enter choose", "tab content", "? all keys"}
+		}
+		if m.paneFocus == 2 {
+			return []string{"↑↓ scroll details", "esc close", "tab focus", "? all keys"}
+		}
+		enter := "details"
+		if m.tab == TabMaterials {
+			nodes := m.matNodes()
+			if m.matCursor < len(nodes) && m.materialHasChildren(nodes[m.matCursor]) {
+				enter = "fold/open"
+			}
+		}
+		focus := "tab focus"
+		if m.width < 100 {
+			focus = "tab courses"
+		}
+		return []string{"enter " + enter, "S sort", "d download", "space mark", "o LMS", "O local", focus, "f filters", "/ search", "? all keys"}
+	}
 	if items, ok := m.sectionHeaderFooter(); ok {
 		return items
+	}
+	if m.tab == TabCommit {
+		action := "copy"
+		if m.cfg.CommitFile != "" || m.cfg.ExportFormat == "taskwarrior" {
+			action = "write"
+		}
+		return []string{"↑↓ move", "enter " + action, "x drop", "w write", "y copy", "esc back", "? all keys"}
 	}
 	return m.coreFooterHints()
 }
@@ -320,20 +341,37 @@ func renderHintItems(items []string, width int) string {
 
 func (m *App) footerLines(w int, class sizeClass) []string {
 	inner := maxInt(1, w-1)
-	summary := m.footerSummary()
-	if class <= sizeCompact {
-		if m.triageArmed {
-			return []string{" " + fitLine(stOverdue.Render(m.triagePrompt()), inner)}
-		}
-		if m.statusErr != "" {
-			return []string{" " + fitLine(stOverdue.Render("err: "+m.statusErr)+stFaint.Render("  esc dismiss"), inner)}
-		}
-		return []string{" " + barLine(renderHintItems(m.footerHintItems(), inner), summary, inner)}
+	if (m.tab == TabTasks || m.tab == TabMaterials) && !m.helpOn && !m.paletteOn && !m.filterOn && !m.searching {
+		return []string{" " + fitLine(renderHintItems(m.footerHintItems(), inner), inner)}
 	}
-	return []string{
-		" " + fitLine(renderHintItems(m.footerHintItems(), inner), inner),
-		" " + m.footerStatusLine(inner, summary),
+	if m.triageArmed {
+		return []string{" " + fitLine(stOverdue.Render(m.triagePrompt()), inner)}
 	}
+	if m.statusErr != "" {
+		return []string{" " + fitLine(stOverdue.Render(m.statusErr)+" · esc dismiss", inner)}
+	}
+	status := m.footerSummary()
+	if m.toast != "" {
+		status = rightAligned(m.selectionLabel(), m.toast)
+	}
+	if status != "" {
+		context := "enter details"
+		if m.paneFocus == 1 {
+			context = "enter choose"
+		} else if m.paneFocus == 2 {
+			context = "esc close"
+		} else if m.tab == TabMaterials {
+			context = "d download"
+		} else if m.tab == TabCommit {
+			context = "enter copy"
+			if m.cfg.CommitFile != "" || m.cfg.ExportFormat == "taskwarrior" {
+				context = "enter write"
+			}
+		}
+		suffix := " · " + context + " · ? all keys"
+		return []string{" " + pad(status, maxInt(1, inner-lipgloss.Width(suffix)), false) + suffix}
+	}
+	return []string{" " + fitLine(renderHintItems(m.footerHintItems(), inner), inner)}
 }
 
 func (m *App) triagePrompt() string {
@@ -372,6 +410,8 @@ func (m *App) footerStatusLine(width int, summary string) string {
 func (m *App) modeChip() string {
 	label := strings.ToUpper(m.tab.String())
 	switch {
+	case m.filterOn:
+		label = "FILTERS"
 	case m.helpOn:
 		label = "HELP"
 	case m.paletteOn:
@@ -392,10 +432,10 @@ func (m *App) footerSummary() string {
 	if queue := m.queueSummary(); queue != "" {
 		parts = append(parts, queue)
 	}
-	if (m.tab == TabTasks || m.tab == TabMaterials) && m.filter != "" && m.filter != "all" {
-		parts = append(parts, stFaint.Render("filter: "+m.filter))
-	}
+
 	switch {
+	case m.offline && m.syncError != "":
+		parts = append(parts, stDim.Render("offline · "+m.syncError))
 	case m.cacheNotice != "":
 		label := "cached · "
 		if m.offline {
@@ -442,10 +482,8 @@ func (m *App) tabContent(width, height int) (string, string, []string, []string)
 	var hints []string
 	var rows []string
 	switch m.tab {
-	case TabTasks:
-		title, right, hints, rows = m.tasksContent(width, height)
-	case TabMaterials:
-		title, right, hints, rows = m.materialsContent(width, height)
+	case TabTasks, TabMaterials:
+		title, right, hints, rows = m.workspaceContent(width, height)
 	case TabSync:
 		title, right, hints, rows = m.syncContent(width, height)
 	case TabCommit:
@@ -484,11 +522,11 @@ func (m *App) helpSections() []helpSection {
 		{title: "Actions", items: []key.Binding{
 			m.keys.Select, m.keys.All, m.keys.Range, m.keys.Invert,
 			m.keys.Track, m.keys.Missed, m.keys.Ignore, m.keys.Undecide, m.keys.Undo,
-			m.keys.Download, m.keys.Open, m.keys.Sync,
+			m.keys.Download, m.keys.Open, key.NewBinding(key.WithKeys("O"), key.WithHelp("O", "open local file")), m.keys.Sync,
 			m.keys.Commit, m.keys.Write, m.keys.Copy, m.keys.Drop, m.keys.DropAll,
 		}},
 		{title: "View", items: []key.Binding{
-			m.keys.Search, m.keys.Filter, m.keys.ShowAll, m.keys.Palette, m.keys.Help, m.keys.Quit,
+			m.keys.Search, m.keys.Filter, m.keys.Sort, m.keys.ShowAll, m.keys.Palette, m.keys.Help, m.keys.Quit,
 		}},
 	}
 }

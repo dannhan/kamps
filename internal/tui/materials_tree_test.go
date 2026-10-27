@@ -7,14 +7,22 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func TestMaterialsTreeHasWeeksAndAttachedAssignments(t *testing.T) {
+func TestMaterialsTreeKeepsRelatedAssignmentsInInspector(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabMaterials
 	nodes := app.matNodes()
 	foundSection, foundAssignment := false, false
 	for _, n := range nodes {
-		foundSection = foundSection || n.kind == nodeMaterialSection
-		foundAssignment = foundAssignment || n.kind == nodeMaterialAssignment && n.task.ID == "K165483"
+		foundSection = foundSection || (n.kind == nodeMaterialSection || n.kind == nodeMaterialWeek)
+		if n.kind == nodeMaterialAssignment {
+			t.Fatal("linked task leaked into file list")
+		}
+		if n.kind == nodeFile {
+			if task := app.assignmentForMaterial(n.mat); task != nil && task.ID == "K165483" {
+				details := stripANSI(strings.Join(app.materialDetailLines(n, 80), "\n"))
+				foundAssignment = strings.Contains(details, task.Name)
+			}
+		}
 	}
 	if !foundSection || !foundAssignment {
 		t.Fatalf("Materials tree lacks a week or attached assignment: section=%v assignment=%v", foundSection, foundAssignment)
@@ -81,12 +89,12 @@ func TestMaterialParentRowsShowCaretAndMark(t *testing.T) {
 		if courseIndex < 0 && n.kind == nodeCourse {
 			courseIndex = i
 		}
-		if fileIndex < 0 && n.kind == nodeFile && app.materialHasChildren(n) {
+		if fileIndex < 0 && n.kind == nodeFile {
 			fileIndex = i
 		}
 	}
 	if courseIndex < 0 || fileIndex < 0 {
-		t.Fatal("demo materials tree lacks a course or expandable file")
+		t.Fatal("demo materials tree lacks a course or file")
 	}
 
 	row := stripANSI(app.matTreeRow(nodes, courseIndex, 98, app.materialNodeSelected(nodes[courseIndex])))
@@ -101,17 +109,11 @@ func TestMaterialParentRowsShowCaretAndMark(t *testing.T) {
 		t.Fatalf("fully marked course should show %q: %q", markFull, row)
 	}
 
-	fileKey := nodes[fileIndex].key
-	app.expanded[fileKey] = true
 	row = stripANSI(app.matTreeRow(nodes, fileIndex, 98, false))
-	if !strings.Contains(row, "▾") || strings.Contains(row, "▫") {
-		t.Fatalf("expandable file should show a down caret: %q", row)
+	if strings.ContainsAny(row, "▾▸") {
+		t.Fatalf("file should open details, not advertise children: %q", row)
 	}
-	app.expanded[fileKey] = false
-	row = stripANSI(app.matTreeRow(nodes, fileIndex, 98, false))
-	if !strings.Contains(row, "▸") || strings.Contains(row, "▫") {
-		t.Fatalf("folded file should show a right caret: %q", row)
-	}
+
 }
 
 func TestMaterialRowsShowDownloadedMarkerOnly(t *testing.T) {
@@ -141,15 +143,16 @@ func TestMaterialRowsShowDownloadedMarkerOnly(t *testing.T) {
 	}
 }
 
-func TestMaterialsStartWithSectionsOpen(t *testing.T) {
+func TestCourseMaterialsStartWithSectionsOpen(t *testing.T) {
 	app := demoApp(t)
 	app.expanded = map[string]bool{}
 	app.tab = TabMaterials
+	app.courseScoped, app.courseID = true, 18515
 	nodes := app.matNodes()
 	foundSection, foundFile, foundFolder := false, false, false
 	folderFile := false
 	for _, n := range nodes {
-		foundSection = foundSection || n.kind == nodeMaterialSection
+		foundSection = foundSection || (n.kind == nodeMaterialSection || n.kind == nodeMaterialWeek)
 		foundFile = foundFile || n.kind == nodeFile
 		foundFolder = foundFolder || n.kind == nodeMaterialFolder
 		if n.kind == nodeFile && n.mat.Folder != "" {
@@ -159,7 +162,7 @@ func TestMaterialsStartWithSectionsOpen(t *testing.T) {
 	if !foundSection || !foundFile {
 		t.Fatalf("materials should start with weeks open: section=%v file=%v", foundSection, foundFile)
 	}
-	if foundFolder && folderFile {
-		t.Fatal("folders should stay closed until the user opens them")
+	if foundFolder && !folderFile {
+		t.Fatal("folders should initially reveal their files")
 	}
 }

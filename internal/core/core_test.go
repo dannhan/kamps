@@ -14,6 +14,16 @@ import (
 
 type stubSource struct{ snapshot source.Snapshot }
 
+func TestCourseResolvesNumericID(t *testing.T) {
+	s := New(stubSource{snapshot: source.Snapshot{Courses: []model.Course{{ID: 42, Code: "CS"}}}}, config.Config{StateDir: t.TempDir(), LibraryDir: t.TempDir()})
+	if _, err := s.Load(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if course, ok := s.Course("42"); !ok || course.ID != 42 {
+		t.Fatalf("numeric course lookup = %+v, %v", course, ok)
+	}
+}
+
 func (s stubSource) Label() string { return "stub" }
 
 func (s stubSource) Load(context.Context) (source.Snapshot, error) {

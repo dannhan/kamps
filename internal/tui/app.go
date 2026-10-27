@@ -49,24 +49,36 @@ type App struct {
 	keys    KeyMap
 	program *tea.Program
 
-	courses      []model.Course
-	assignments  []model.Assignment
-	materials    []model.Material
-	loaded       bool
-	loading      bool
-	loadError    string
-	loadNotice   string
-	downloads    map[string]bool
-	scanSummary  string
-	unknownFiles []string
-	lastSync     time.Time
-	offline      bool
-	cacheNotice  string
+	courses          []model.Course
+	assignments      []model.Assignment
+	materials        []model.Material
+	loaded           bool
+	loading          bool
+	loadError        string
+	syncError        string
+	loadNotice       string
+	downloadProgress map[string]string
+	downloadErrors   map[string]string
+	downloads        map[string]bool
+	scanSummary      string
+	unknownFiles     []string
+	lastSync         time.Time
+	offline          bool
+	cacheNotice      string
 
 	restoreTaskKey       string
 	restoreTaskFallbacks []string
 	restoreMatKey        string
 	restoreCommitID      string
+
+	courseScoped bool
+	courseID     int
+	courseCursor int
+	paneFocus    int // 0 list, 1 courses, 2 inspector
+	detailScroll int
+	filterOn     bool
+	filterCursor int
+	tabSearch    [tabCount]string
 
 	tab    Tab
 	filter string
@@ -77,13 +89,13 @@ type App struct {
 	paletteQuery  string
 	paletteCursor int
 
-	taskCursor   int
-	matCursor    int
-	syncCursor   int
-	commitCursor int
+	taskCursor           int
+	materialsOldestFirst bool
+	matCursor            int
+	syncCursor           int
+	commitCursor         int
 
-	// detailPane is the tree detail pane override: -1 follows the terminal
-	// width, 0 keeps it closed, 1 keeps it open.
+	// detailPane is opt-in: 0 closed, 1 open. Narrow layouts show it on focus.
 	detailPane int
 
 	tabFilters  [tabCount]string
@@ -162,7 +174,7 @@ func New(src source.Source, cfg config.Config, version string) *App {
 		keys:             DefaultKeys(),
 		filter:           "all",
 		returnTab:        TabTasks,
-		detailPane:       -1,
+		detailPane:       0,
 		tabFilters:       [tabCount]string{"all", "all", "all", "all"},
 		tabExpanded:      [tabCount]map[string]bool{0: {}, 1: {}, 2: {}, 3: {}},
 		expanded:         map[string]bool{},
@@ -171,6 +183,8 @@ func New(src source.Source, cfg config.Config, version string) *App {
 		queue:            core.NewQueue(),
 		undoDecisions:    map[string]model.Triage{},
 		downloads:        map[string]bool{},
+		downloadProgress: map[string]string{},
+		downloadErrors:   map[string]string{},
 		downloadCancels:  map[string]context.CancelFunc{},
 		state:            state,
 		statePath:        statePath,
@@ -195,13 +209,22 @@ func (m *App) currentTime() time.Time {
 
 type loadedMsg struct{ core.Snapshot }
 
-type errMsg struct{ err error }
+type errMsg struct {
+	err    error
+	cached *core.Snapshot
+}
 
 func loadCmd(service *core.Service) tea.Cmd {
 	return func() tea.Msg {
 		snapshot, err := service.Load(context.Background())
 		if err != nil {
-			return errMsg{err}
+			// Resolve fallback in this command before publishing a failure. An
+			// intermediate error frame would briefly hide cached coursework.
+			cached, ok := service.LoadCached()
+			if ok {
+				return errMsg{err: err, cached: &cached}
+			}
+			return errMsg{err: err}
 		}
 		return loadedMsg{snapshot}
 	}
@@ -238,6 +261,7 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		m.syncing = false
 		m.loadError = ""
+		m.syncError = ""
 		m.offline = false
 		m.cacheNotice = ""
 		m.statusErr = ""
@@ -260,22 +284,17 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loaded = true
 		m.loading = false
 		m.syncing = false
-		m.loadError = msg.err.Error()
+		m.syncError = msg.err.Error()
 		m.statusErr = ""
-		return m, loadCachedCmd(m.service)
-
-	case cacheLoadedMsg:
-		// Ignore a cache result that lost the race to a fresh load or a new
-		// sync; only the active load error should fall back to the cache.
-		if !msg.ok || m.loadError == "" || m.syncing {
+		m.toast = ""
+		m.toastTicks = 0
+		if msg.cached == nil {
+			m.loadError = m.syncError
 			return m, nil
 		}
 		m.offline = true
 		m.loadError = ""
-		m.statusErr = ""
-		m.applyCachedSnapshot(msg.snapshot)
-		m.toast = "offline · cached from " + m.cacheNotice
-		m.toastTicks = 40
+		m.applyCachedSnapshot(*msg.cached)
 		m.clampCursor()
 		m.restoreCursors()
 		return m, nil
@@ -306,6 +325,11 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case downloadProgressMsg:
+		if msg.total > 0 {
+			m.downloadProgress[msg.id] = fmt.Sprintf("%d%%", msg.done*100/msg.total)
+		} else {
+			m.downloadProgress[msg.id] = fmt.Sprintf("%d KB", msg.done/1024)
+		}
 		if material := m.materialByID(msg.id); material != nil {
 			m.toast = downloadProgressText(*material, msg.done, msg.total)
 			m.toastTicks = 24
@@ -314,17 +338,20 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case downloadDoneMsg:
 		delete(m.downloads, msg.id)
+		delete(m.downloadProgress, msg.id)
 		if cancel := m.downloadCancels[msg.id]; cancel != nil {
 			cancel()
 			delete(m.downloadCancels, msg.id)
 		}
 		if msg.err != nil {
 			m.toast = "download failed"
-			m.statusErr = "download failed: " + downloadErrorText(msg.err)
+			m.downloadErrors[msg.id] = downloadErrorText(msg.err)
+			m.statusErr = "d retry · download failed: " + downloadErrorText(msg.err)
 			m.toastTicks = 40
 			return m, nil
 		}
 		m.statusErr = ""
+		delete(m.downloadErrors, msg.id)
 		m.toast = "saved " + savedFileLabel(msg.path)
 		m.toastTicks = 24
 		return m, nil

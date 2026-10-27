@@ -82,6 +82,8 @@ func (s *LiveSource) Load(ctx context.Context) (source.Snapshot, error) {
 		courses, err = s.listCourses(ctx, sesskey)
 		if errors.Is(err, ErrInvalidSesskey) {
 			sesskey = ""
+		} else if errors.Is(err, ErrSessionExpired) {
+			return source.Snapshot{}, fmt.Errorf("Kulon2 %w; run `kamps login` again", err)
 		} else if err != nil {
 			return source.Snapshot{}, err
 		}

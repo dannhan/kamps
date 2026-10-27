@@ -185,9 +185,10 @@ func dueDays(a model.Assignment, now time.Time) int {
 	if !a.HasDue {
 		return 0
 	}
-	dueDay := dateOnly(a.Due)
-	today := dateOnly(now)
-	return int(dueDay.Sub(today).Hours() / 24)
+	due := a.Due.In(now.Location())
+	dueDay := time.Date(due.Year(), due.Month(), due.Day(), 0, 0, 0, 0, time.UTC)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	return int(dueDay.Sub(today) / (24 * time.Hour))
 }
 
 func dueAge(a model.Assignment, now time.Time) string {

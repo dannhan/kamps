@@ -34,7 +34,7 @@ func TestSlashOpensSearchAndNarrowsTasks(t *testing.T) {
 	}
 
 	view := stripANSI(app.View())
-	if !strings.Contains(view, "search · quiz") || !strings.Contains(view, "matches") {
+	if !strings.Contains(view, "Search Tasks / All courses: quiz") || !strings.Contains(view, "matches") {
 		t.Fatalf("search title missing from view: %q", view)
 	}
 	if !strings.Contains(view, "enter done") {
@@ -149,18 +149,16 @@ func TestSwitchTabClearsSearch(t *testing.T) {
 	}
 }
 
-func TestFilterCyclesOnFAndNotSlash(t *testing.T) {
+func TestFilterMenuOnFAndSearchOnSlash(t *testing.T) {
 	app := demoApp(t)
-	app.tab = TabTasks
-
-	app.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
-	if app.filter != "undecided" {
-		t.Fatalf("f should advance the filter, got %q", app.filter)
+	press(app, "f")
+	if !app.filterOn {
+		t.Fatal("f should open filters")
 	}
-
-	app.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
-	if app.filter != "undecided" {
-		t.Fatalf("slash should be reserved for search, got filter %q", app.filter)
+	press(app, "esc")
+	press(app, "/")
+	if !app.searching || app.filterOn {
+		t.Fatal("slash should search")
 	}
 }
 

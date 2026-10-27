@@ -1,4 +1,4 @@
-// Package tui is the Bubble Tea application: a cheerful terminal UI over a
+// Package tui is the Bubble Tea application: a keyboard-first college workspace over a
 // source.Source.
 //
 // The package follows The Elm Architecture:
@@ -24,8 +24,9 @@
 // Tasks tab:
 //
 //	tasks.go        task filtering, target resolution, triage, footer
-//	task_tree.go    flattened task tree and grouping
-//	task_rows.go    task rows, counts, totals, tab content
+//	task_tree.go    priority/course task nodes and attachment lookup
+//	task_rows.go    task row entrypoints and counts
+//	task_list.go    wrapped task blocks and whole-block scrolling
 //	detail_tasks.go task detail content
 //
 // Materials tab:
@@ -37,7 +38,8 @@
 // Other tabs and shell:
 //
 //	commit.go       session queue, preview, clipboard, commit tab
-//	sync.go         simulated sync state and tab
+//	sync.go         sync status and source diagnostics
+//	workspace.go    shared course navigation, materials list and filters
 //	chrome.go       shell, tab bar, footer, help overlay
 //	detail.go       split-pane layout and visibility
 //	tree.go         shared tree node contract and connectors

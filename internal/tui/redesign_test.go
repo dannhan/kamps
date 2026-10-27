@@ -38,35 +38,29 @@ func TestLayoutBreakpoints(t *testing.T) {
 	}
 }
 
-func TestFooterStatusShowsSelectionQueueFilterAndError(t *testing.T) {
+func TestTaskStatusDoesNotReplaceDecisions(t *testing.T) {
 	app := demoApp(t)
-	app.tab = TabTasks
-	app.width, app.height = 100, 30
 	app.selected["K901000"] = true
 	app.queue.Set("K901001", model.Tracked)
-	app.filter = "overdue"
-
-	lines := app.footerLines(100, sizeStandard)
-	if len(lines) != 2 {
-		t.Fatalf("standard footer lines = %d, want 2", len(lines))
-	}
-	status := stripANSI(lines[1])
-	for _, want := range []string{"TASKS", "1 selected", "queue: 1 track", "filter: overdue"} {
-		if !strings.Contains(status, want) {
-			t.Fatalf("footer status %q is missing %q", status, want)
+	title, _, _, _ := app.workspaceContent(100, 24)
+	for _, want := range []string{"1 selected", "queue: 1 track"} {
+		if !strings.Contains(stripANSI(title), want) {
+			t.Fatalf("missing %s: %s", want, title)
 		}
 	}
-
-	app.statusErr = "disk full"
-	lines = app.footerLines(100, sizeStandard)
-	if !strings.Contains(stripANSI(lines[1]), "err: disk full") || !strings.Contains(stripANSI(lines[1]), "esc dismiss") {
-		t.Fatalf("durable error missing from footer: %q", stripANSI(lines[1]))
-	}
-
-	app.width, app.height = 60, 20
-	compact := app.footerLines(60, sizeCompact)
-	if len(compact) != 1 || !strings.Contains(stripANSI(compact[0]), "err: disk full") {
-		t.Fatalf("compact footer hid the error: %#v", compact)
+	for _, width := range []int{60, 80, 100} {
+		app.width = width
+		app.statusErr = "disk full"
+		title, _, _, _ = app.workspaceContent(width, 24)
+		if !strings.Contains(title, "disk full") || !strings.Contains(title, "esc dismiss") {
+			t.Fatal("error missing")
+		}
+		footer := stripANSI(strings.Join(app.footerLines(width, sizeStandard), ""))
+		for _, want := range []string{"t Track", "i Ignore", "m Missed"} {
+			if !strings.Contains(footer, want) {
+				t.Fatalf("footer lost %s", want)
+			}
+		}
 	}
 }
 
@@ -113,59 +107,6 @@ func TestHelpGroupsCoverEveryKey(t *testing.T) {
 	}
 }
 
-func TestCursorSelectionAndPartialAreDistinct(t *testing.T) {
-	app := demoApp(t)
-	app.tab = TabTasks
-	app.showAll = true
-	nodes := app.taskNodes()
-
-	bucket := -1
-	for i, n := range nodes {
-		if n.kind == nodeBucket && len(app.taskGroupIDs(n)) > 1 {
-			bucket = i
-			break
-		}
-	}
-	if bucket < 0 {
-		t.Fatal("demo data has no multi-task bucket")
-	}
-	ids := app.taskGroupIDs(nodes[bucket])
-	taskIndex := -1
-	for i, n := range nodes {
-		if n.kind == nodeTask && n.task.ID == ids[0] {
-			taskIndex = i
-			break
-		}
-	}
-	if taskIndex < 0 {
-		t.Fatal("could not find the first task in the bucket")
-	}
-
-	app.taskCursor = taskIndex
-	cursor := stripANSI(app.taskTreeRow(nodes, taskIndex, 98))
-	if !strings.Contains(cursor, "▌") || strings.Contains(cursor, "▪") {
-		t.Fatalf("cursor row = %q", cursor)
-	}
-
-	app.taskCursor = -1
-	app.selected[ids[0]] = true
-	selected := stripANSI(app.taskTreeRow(nodes, taskIndex, 98))
-	if !strings.Contains(selected, "▪") || strings.Contains(selected, "▌") {
-		t.Fatalf("selected row = %q", selected)
-	}
-
-	app.taskCursor = taskIndex
-	both := stripANSI(app.taskTreeRow(nodes, taskIndex, 98))
-	if !strings.Contains(both, "▌") || !strings.Contains(both, "▪") {
-		t.Fatalf("cursor+selected row = %q", both)
-	}
-
-	partial := stripANSI(app.taskTreeRow(nodes, bucket, 98))
-	if !strings.Contains(partial, "▫") {
-		t.Fatalf("partially selected bucket = %q", partial)
-	}
-}
-
 func TestResizePreservesCursorAndRecomputesPane(t *testing.T) {
 	app := demoApp(t)
 	app.tab = TabTasks
@@ -191,7 +132,7 @@ func TestResizePreservesCursorAndRecomputesPane(t *testing.T) {
 		if app.taskCursor < 0 || app.taskCursor >= len(nodes) || nodes[app.taskCursor].key != key {
 			t.Fatalf("%dx%d lost the cursor: %d/%d", size[0], size[1], app.taskCursor, len(nodes))
 		}
-		if wantSplit := sizeClassFor(size[0], size[1]) == sizeWide; (app.detailMode() == detailSplit) != wantSplit {
+		if wantSplit := false; (app.detailMode() == detailSplit) != wantSplit {
 			t.Fatalf("%dx%d detail mode = %v, want split=%v", size[0], size[1], app.detailMode(), wantSplit)
 		}
 		for i, line := range strings.Split(stripANSI(app.View()), "\n") {

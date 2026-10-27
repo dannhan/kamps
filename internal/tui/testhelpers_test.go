@@ -25,9 +25,10 @@ func newDemoApp(t *testing.T, cfg config.Config) *App {
 // expandAllMaterials opens the week and folder rows so rendering tests do not
 // have to repeat the default-collapsed navigation.
 func expandAllMaterials(app *App) {
+	app.tabExpanded[TabMaterials] = app.expanded
 	for pass := 0; pass < 3; pass++ {
 		for _, n := range app.matNodes() {
-			if n.kind == nodeMaterialSection || n.kind == nodeMaterialFolder {
+			if n.kind == nodeMaterialWeek || n.kind == nodeMaterialSection || n.kind == nodeMaterialFolder {
 				app.expanded[n.key] = true
 			}
 		}
@@ -74,4 +75,28 @@ func taskTreeRowForTest(t *testing.T) string {
 	app.showAll = true
 	app.taskCursor = findTaskNode(app.taskNodes(), nodeTask, "K901013")
 	return app.taskTreeRow(app.taskNodes(), app.taskCursor, 98)
+}
+
+// focusTaskForTest explicitly opens the course and decision subgroup needed by
+// action tests; opening-screen tests continue to use the actual collapsed defaults.
+func focusTaskForTest(t *testing.T, app *App, id string) {
+	t.Helper()
+	assignment := app.byID(id)
+	if assignment == nil {
+		t.Fatalf("unknown task %s", id)
+	}
+	app.expanded[courseKey(assignment.CourseID)] = true
+	if assignment.Triage == model.Tracked {
+		app.expanded[bucketKey(assignment.CourseID, "Tracked")] = true
+	}
+	if assignment.Triage == model.Missed || assignment.Triage == model.Ignored {
+		app.expanded[bucketKey(assignment.CourseID, "Closed")] = true
+	}
+	for i, n := range app.taskNodes() {
+		if n.kind == nodeTask && n.task.ID == id {
+			app.taskCursor = i
+			return
+		}
+	}
+	t.Fatalf("task %s absent after opening course", id)
 }

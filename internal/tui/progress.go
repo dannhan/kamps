@@ -138,7 +138,7 @@ func (m *App) courseMeta(courseID, filled, total int, h rowHighlight) string {
 	if total == 0 {
 		return ""
 	}
-	style := courseStyle(courseID)
+	style := m.courseStyle(courseID)
 	if m.sizeClass() <= sizeCompact {
 		return h.style(style).Render(fmt.Sprintf("%d/%d", filled, total))
 	}

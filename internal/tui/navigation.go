@@ -9,13 +9,16 @@ func (m *App) switchTab(tab Tab) {
 	m.dropAllArmed = false
 	m.openAllArmed = false
 	m.searching = false
-	m.search = ""
+	m.tabSearch[m.tab] = m.search
+	m.search = m.tabSearch[tab]
 	m.tabFilters[m.tab] = m.filter
 	m.tabExpanded[m.tab] = m.expanded
 	if tab == TabCommit && m.tab != TabCommit {
 		m.returnTab = m.tab
 	}
 	m.tab = tab
+	m.paneFocus = 0
+	m.detailScroll = 0
 	m.filter = m.tabFilters[tab]
 	if m.filter == "" {
 		m.filter = "all"
@@ -29,6 +32,18 @@ func (m *App) switchTab(tab Tab) {
 }
 
 func (m *App) move(delta int) {
+	if m.tab == TabTasks || m.tab == TabMaterials {
+		if m.paneFocus == 1 {
+			m.courseCursor = clampInt(m.courseCursor+delta, 0, len(m.sidebarCourses()))
+			return
+		}
+		if m.paneFocus == 2 {
+			limit := m.detailMaxScroll()
+			m.detailScroll = clampInt(minInt(m.detailScroll, limit)+delta, 0, limit)
+			return
+		}
+		m.detailScroll = 0
+	}
 	switch m.tab {
 	case TabTasks:
 		m.taskCursor = movedIndex(m.taskNodes(), m.taskCursor, delta)
@@ -61,7 +76,7 @@ func (m *App) clampCursor() {
 // selectableNode reports whether a row can hold the cursor. Spacers and the
 // dim "all in Act now" course placeholder are landmarks only.
 func selectableNode(n node) bool {
-	return n.kind != nodeSpacer && n.kind != nodeCoursePlaceholder
+	return n.kind != nodeSpacer && n.kind != nodeCoursePlaceholder && n.kind != nodeTaskHeading
 }
 
 // selectableIndex clamps index into the list and, when it lands on a landmark,
@@ -124,33 +139,10 @@ func movedIndex(nodes []node, index, delta int) int {
 // toggleShowAll switches between the summary tree (Act now + stale buckets) and
 // the full course tree. The cursor follows the focused stable key when possible.
 func (m *App) toggleShowAll() {
-	if m.tab != TabTasks {
-		return
+	if m.tab == TabTasks {
+		m.setPaletteFilter("all")
+		m.cancelTriageArm()
 	}
-	m.cancelTriageArm()
-	m.visual = false
-	key := ""
-	var fallbacks []string
-	nodes := m.taskNodes()
-	if m.taskCursor >= 0 && m.taskCursor < len(nodes) {
-		n := nodes[m.taskCursor]
-		key = n.key
-		fallbacks = taskFallbackKeys(n)
-	}
-	m.showAll = !m.showAll
-	keys := append([]string{key}, fallbacks...)
-	for _, candidate := range keys {
-		if candidate == "" {
-			continue
-		}
-		for i, n := range m.taskNodes() {
-			if n.key == candidate && selectableNode(n) {
-				m.taskCursor = i
-				return
-			}
-		}
-	}
-	m.clampCursor()
 }
 
 func (m *App) cancelTriageArm() {
@@ -173,6 +165,9 @@ func (m *App) movePage(direction int) {
 // moveX is horizontal: folding everywhere the trees are. `l` opens the cursor's
 // container, `h` closes it.
 func (m *App) moveX(delta int) {
+	if m.paneFocus != 0 {
+		return
+	}
 	var nodes []node
 	var cursor *int
 	switch m.tab {
@@ -191,7 +186,7 @@ func (m *App) moveX(delta int) {
 		return
 	}
 	if delta > 0 {
-		if n.key != "" && (m.isTaskGroup(n) || m.materialHasChildren(n)) {
+		if n.key != "" && (m.tab == TabTasks && m.isTaskGroup(n) || m.tab == TabMaterials && m.materialHasChildren(n)) {
 			m.expanded[n.key] = true
 			m.tabExpanded[m.tab] = m.expanded
 		}
@@ -200,7 +195,7 @@ func (m *App) moveX(delta int) {
 	// h/left: fold the cursor's container while it actually shows children,
 	// keeping the highlight on it; on leaves and already-folded containers,
 	// walk up to the parent row instead.
-	if n.key != "" && (m.isTaskGroup(n) || m.materialHasChildren(n)) && hasVisibleChildren(nodes, n.key) {
+	if n.key != "" && (m.tab == TabTasks && m.isTaskGroup(n) || m.tab == TabMaterials && m.materialHasChildren(n)) && hasVisibleChildren(nodes, n.key) {
 		m.expanded[n.key] = false
 		m.tabExpanded[m.tab] = m.expanded
 		return
@@ -210,7 +205,7 @@ func (m *App) moveX(delta int) {
 	}
 	parentKey := n.parents[len(n.parents)-1]
 	for i, candidate := range nodes {
-		if candidate.key == parentKey {
+		if candidate.key == parentKey && selectableNode(candidate) {
 			*cursor = i
 			return
 		}
@@ -268,13 +263,11 @@ func (m *App) selectAll() {
 	m.cancelTriageArm()
 	switch m.tab {
 	case TabTasks:
-		for _, n := range m.taskNodes() {
-			if n.kind == nodeTask {
-				m.selected[n.task.ID] = true
-			}
+		for _, a := range m.visible() {
+			m.selected[a.ID] = true
 		}
 	case TabMaterials:
-		for _, mt := range m.materials {
+		for _, mt := range m.visibleMaterials() {
 			m.selectedM[mt.ID] = true
 		}
 	}

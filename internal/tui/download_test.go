@@ -280,3 +280,29 @@ func TestCancelDownloadsClearsInFlight(t *testing.T) {
 		t.Fatal("cancel map was not cleared")
 	}
 }
+
+func TestOpenLocalFileUsesDownloadedPath(t *testing.T) {
+	app := newDemoApp(t, config.Config{StateDir: t.TempDir(), LibraryDir: t.TempDir()})
+	app.switchTab(TabMaterials)
+	var material model.Material
+	for i, n := range app.matNodes() {
+		if n.kind == nodeFile && n.mat.Downloaded {
+			app.matCursor = i
+			material = n.mat
+			break
+		}
+	}
+	// The core service owns the destination; use its configured path without
+	// creating a file there. A missing file must return an actionable error.
+	cmd := app.openLocalFile()
+	if cmd == nil {
+		t.Fatal("local file action unavailable")
+	}
+	msg := cmd().(openURLMsg)
+	if msg.err == nil || !strings.Contains(msg.err.Error(), "local file unavailable") {
+		t.Fatal("missing local file should report error")
+	}
+	if msg.url != app.materialDestination(material) {
+		t.Fatal("local action did not use library destination")
+	}
+}

@@ -58,16 +58,14 @@ func (m *App) captureCursors() {
 // disappeared: a hidden stale task first tries its stale bucket, then its
 // course header; other tasks fall back to their course header.
 func taskFallbackKeys(n node) []string {
-	if n.courseID == 0 {
-		return nil
+	var keys []string
+	for i := len(n.parents) - 1; i >= 0; i-- {
+		keys = append(keys, n.parents[i])
 	}
-	if n.kind == nodeTask && n.bucket == "stale overdue" {
-		return []string{bucketKey(n.courseID, "stale overdue"), courseKey(n.courseID)}
+	if n.kind == nodeTask {
+		keys = append(keys, courseKey(n.courseID))
 	}
-	if n.kind == nodeCourse {
-		return nil
-	}
-	return []string{courseKey(n.courseID)}
+	return keys
 }
 
 func (m *App) restoreCursors() {
@@ -172,6 +170,9 @@ func (m *App) syncBody(width, height int) []string {
 		{"last sync", last},
 		{"library", m.scanSummary},
 		{"cookie", m.sessionLine()},
+	}
+	if m.syncError != "" {
+		values = append(values, [2]string{"last error", m.syncError})
 	}
 	if m.loadNotice != "" {
 		values = append(values, [2]string{"notice", m.loadNotice})
