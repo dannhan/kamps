@@ -110,7 +110,7 @@ Legend: `[x]` means the behavior is implemented and covered by the named test. `
 
 - [x] **4.3. Terminal Resizing During Active Download**
   - **Issue**: Window resized below 80x24 while background goroutine emits progress ticks.
-  - **Requirement**: Clamp all viewports; if terminal $< 80\times 24$, render minimal warning banner without panic. State updates from downloads must not alter search focus or jump tree cursors.
+  - **Requirement**: Clamp all viewports. Below 40 columns or 10 rows, render a minimal warning without panic. State updates from downloads must not alter search focus or jump tree cursors.
   - **Test**: `TestResizeDuringDownloadDoesNotPanic`.
 
 - [x] **4.4. Simultaneous Search & Download State Updates**

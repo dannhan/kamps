@@ -81,7 +81,7 @@ Every assignment starts as `undecided`. Users press hotkeys in the Tasks tab:
 1. **`t` → Tracked (`◐`)**: The assignment is handled. Either submitted, assigned to a teammate, or tracked in an external todo list.
 2. **`m` → Missed (`×`)**: The deadline has lapsed without submission. It is closed and dropped from urgent views.
 3. **`i` → Ignored (`◆`)**: Irrelevant items, syllabus templates, or optional bonus assignments.
-4. **`u` → Undecided (`○`)**: Resets the item back to the default inbox state.
+4. **`n` → Undecided (`○`)**: Resets the item back to the default inbox state. `u` undoes the last bulk decision.
 
 #### Local Persistence Mechanics
 * Stored in `$XDG_STATE_HOME/kamps/state.json` (`~/.local/state/kamps/state.json`).
@@ -109,9 +109,8 @@ Every assignment starts as `undecided`. Users press hotkeys in the Tasks tab:
   - [ ] [ppl] Sprint 2 Retrospective (K165483) due:2026-09-12
   ```
 * **Clipboard (OSC 52)**: Pressing `y` or `enter` on the Commit tab wraps the lines in ANSI OSC 52 clipboard sequences (`\x1b]52;c;...\x07`), transmitting them straight to the host OS clipboard even over SSH and tmux.
-* **Future Commit Writers**:
-  * Append-only writer to a local `tasks.md` or `todo.txt`.
-  * Integration hooks for Todoist API / Obsidian vault.
+* **File writers**: Markdown, todo.txt, and Taskwarrior exports are available. See `docs/export.md`.
+* **Future integration**: A direct Todoist integration remains a roadmap item.
 
 ---
 
@@ -143,12 +142,13 @@ Since Kulon2 uses enterprise Microsoft Azure AD SSO and disables local passwords
 
 ## 4. Implementation Milestones
 
-### Phase 1: Live Scraping & Coursework Parsing *(Current Focus)*
+### Phase 1: Live scraping and coursework parsing
 - [x] In-progress course listing via Moodle AJAX endpoint.
 - [x] Course-page HTML parsing into sections, resources, and assignments.
 - [x] Assignment deadline parsing and submission detection.
 - [x] Graceful partial error handling and session auto-recovery.
-- [ ] Parse embedded attachment URLs from assignment detail descriptions.
+- [x] Parse assignment attachments and quiz introduction attachments.
+- [ ] Parse quiz questions and additional module-specific attachments. Verify representative LMS pages and add fixtures before implementing each shape.
 
 ### Phase 2: Downloader Engine & Local File Library
 - [x] Implement `internal/kulon2/download.go` for streaming `pluginfile.php` downloads.
@@ -163,5 +163,7 @@ Since Kulon2 uses enterprise Microsoft Azure AD SSO and disables local passwords
 - [x] Add session lifetime tracking in `session.json` to warn users when their 8-hour session is nearing expiration.
 
 ### Phase 4: Integrations & Commit Exporters
-- [ ] Support `--commit-file <path>` to directly append completed triage items to a local Markdown file (e.g., `~/notes/tasks.md`).
+- [x] Support `--commit-file <path>` as the Commit view's export target.
 - [x] Introduce optional workspace `course.json` discovery to map LMS course IDs to local git repository folders.
+- [ ] Add optional Todoist and out-of-process source integrations. Verify each integration against its real API and preserve the existing export preview behavior.
+- [ ] Improve offline cache retention and the library view for files not downloaded by Kamps. Verify offline startup and local-file discovery with representative data.

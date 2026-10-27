@@ -199,7 +199,7 @@ A corrupt state file is still skipped, matching the TUI's best-effort behavior.
 
 The interactive screen is borderless. The top tab bar, title line, body, and footer are separated by full-width rules rather than boxes. This leaves every column for content and keeps the split pane from sitting between two borders.
 
-- Minimum comfortable size: 80 columns × 24 rows. Below that, Kamps renders a short “terminal too small” notice.
+- Below 40 columns or 10 rows, Kamps displays a short terminal-size notice.
 - Header: tab names with live counts and a status label.
 - Title row: current filter or search query, match/total counts, scroll hint.
 - Body: the active tab's rows, clamped to the available height.
@@ -209,9 +209,9 @@ The interactive screen is borderless. The top tab bar, title line, body, and foo
 
 Both tree tabs render a flat `[]node` list. [`node`](../internal/tui/tree.go) stores its kind, depth via `parents`, a stable fold key, and the underlying assignment or material. The cursor is an index into the same list, so a highlight always corresponds to the row the keys will act on.
 
-- **Tasks:** course → state bucket (`needs decision`, `tracked`, `closed`) → task → attached materials.
-- **Materials:** course → week → folder → file → linked assignment (for attachments). Downloaded files carry a ● marker.
-- **Folding:** tasks keep `needs decision` open; tracked/closed and material weeks/folders start collapsed. Each tab keeps its own fold state.
+- **Tasks:** an attention shortlist and overdue section precede course groups. Tracked and closed tasks have separate subgroups.
+- **Materials:** the all-courses view groups files by week and then course. Selecting a course shows its week library.
+- **Folding:** each view keeps its own fold state. In the all-courses view, material weeks start collapsed.
 - **Right padding:** both trees keep a two-column inset so metadata does not touch the divider or terminal edge.
 
 ### Search and filters
@@ -220,15 +220,15 @@ Both tree tabs render a flat `[]node` list. [`node`](../internal/tui/tree.go) st
 - Search is live, case-insensitive, and trims the query before matching.
 - Tasks match name, ID, goal, and course name/code/short label.
 - Materials match name, ID, section, kind, course code, and course name/code/short label.
-- `f` cycles the tab's state filter; search and filter compose.
-- Switching tabs clears the search and restores that tab's filter.
+- `f` opens the filter menu; search and filter compose.
+- Each view remembers its search and filter when switching views.
 - `esc` clears the search first, then the filter, then selections/back.
 
 ### Detail pane
 
 - Visible on Tasks and Materials only.
 - Opt-in: `enter` opens or closes it; it follows the cursor while open.
-- Split: 62% tree / remaining detail, with a 24-column minimum for detail.
+- At 140 columns and 24 rows or more, detail splits beside the content. Otherwise it replaces the content.
 - Long descriptions wrap; clipped detail content ends with `…`.
 
 ### Commit queue
@@ -236,7 +236,7 @@ Both tree tabs render a flat `[]node` list. [`node`](../internal/tui/tree.go) st
 - `t`, `m`, `i`, `n` update in-memory assignments, store the decision, and add/remove the item in `App.pending`; `u` restores the previous triage batch.
 - `c` opens the Commit tab; `esc` returns to the previous tab.
 - The preview groups items by action and shows the exact task lines.
-- `y` (or `enter`) copies the preview with OSC 52; `x` removes the focused item from the queue only.
+- `w` writes the preview, `y` copies it, and `enter` writes when a target is configured or copies otherwise. `x` removes the focused item from the queue only.
 - The queue is session-only. Restarting Kamps keeps decisions but starts an empty queue.
 
 ---

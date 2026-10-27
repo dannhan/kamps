@@ -298,7 +298,7 @@ TERM=dumb ./kamps       # ASCII tree connectors
 
 Useful checks:
 
-- Resize below 80×24 to see the “terminal too small” path.
+- Resize below 40 columns or 10 rows to see the terminal-size notice.
 - Press `enter` to open or close the detail pane.
 - Press `?` to inspect the full key map.
 - Remove or move `$XDG_STATE_HOME/kamps/state.json` to test a clean first run. Do this only when you do not need the saved decisions.
@@ -324,7 +324,7 @@ Useful checks:
 | Commit queue persistence | Not implemented; session-only by design |
 | Attachment → assignment linking | Implemented for the `K…` / `M…:` ID convention |
 | Week-grouped materials | Implemented; week labels drive the tree and paths |
-| Headless core / JSON CLI | Core pipeline implemented; JSON subcommands are the next phase |
+| Headless core / JSON CLI | Implemented; see [headless commands](headless.md) |
 
 When documenting a change, keep this table honest. The fastest way for docs to rot is to describe planned behavior as shipped behavior.
 
@@ -335,9 +335,9 @@ When documenting a change, keep this table honest. The fastest way for docs to r
 - **Borderless shell:** separators are rules, not boxes. Do not reintroduce pane borders without revisiting the layout tests.
 - **Right inset:** both trees reserve two columns on the right; the cursor band still reaches the edge.
 - **Ellipsis:** long text ends with `…` by display width, not rune count.
-- **Detail threshold:** 100 columns; split is 62/38 with a 24-column detail minimum.
+- **Detail threshold:** at 140 columns and 24 rows, the inspector splits beside the content. At smaller sizes it replaces the content.
 - **Keys:** `/` is search, `f` is filter. Do not bind `v` for views.
-- **Search clearing:** switching tabs clears search; `esc` clears search before filter before selections.
+- **Search state:** each view remembers its search and filter when switching views.
 - **Queue semantics:** decisions persist immediately; the queue is an export buffer and is not restored.
 - **State path:** `$XDG_STATE_HOME/kamps/state.json` or `~/.local/state/kamps/state.json`; `statePath == ""` disables persistence.
 - **Atomic writes:** temp file, `Sync`, `chmod 0600`, rename. Keep that order.

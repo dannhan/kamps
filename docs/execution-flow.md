@@ -148,7 +148,7 @@ Every keystroke arrives as a `tea.KeyMsg` and goes through [`App.handleKey`](../
 3. [`State.SetDecision(id, t)`](../internal/store/store.go) updates the persisted map. `Undecided` deletes the entry.
 4. The item is added to or removed from the session-only `pending` queue.
 5. Selections are cleared and a toast is shown.
-6. [`App.saveState()`](../internal/tui/state.go) writes synchronously. A failure becomes a toast; the action is not rolled back.
+6. The state bridge in [`state.go`](../internal/tui/state.go) persists the change and reports failures to the UI.
 
 #### Downloads
 
@@ -158,7 +158,7 @@ Every keystroke arrives as a `tea.KeyMsg` and goes through [`App.handleKey`](../
 
 - `commitItems()` joins `pending` with the current assignments and sorts by action, then ID.
 - `commitPreviewText()` renders the exact Markdown task lines.
-- `y` or `enter` calls `clipboardCmd`, which writes an OSC 52 sequence to stdout and reports success through `clipboardMsg`.
+- `w` writes the preview; `y` copies it through OSC 52. `enter` writes when a target is configured or copies otherwise.
 - `x` deletes the item from `pending` only; the assignment's stored decision is unchanged.
 - Restarting Kamps restores decisions and downloads, but not the queue.
 
@@ -184,7 +184,7 @@ A crash mid-write leaves either the old file or the new file, never a half-writt
 2. Calls `tabContent(width, height-5)` to get the title, right-hand status, footer hints, and body rows.
 3. Replaces the body with an error or `loading…` message when appropriate.
 4. Replaces the whole content area with the help overlay when `?` is open.
-5. Shows a “terminal too small” notice below 80×24.
+5. Shows a terminal-size notice below 40 columns or 10 rows.
 6. Emits:
    - tab bar (1 row)
    - title line (1 row)
@@ -195,17 +195,17 @@ A crash mid-write leaves either the old file or the new file, never a half-writt
 
 #### Tab bodies
 
-- **Tasks:** `taskNodes()` flattens term → course → bucket → task → attached materials. The visible list applies filter + search first, so counts and rows agree. The cursor window is chosen by `windowRange`.
-- **Materials:** `matNodes()` flattens course → week → folder → file → linked assignment.
-- **Sync:** fixed status rows. The data is illustrative; `s` animates but does not reload the source.
+- **Tasks:** the list presents an attention shortlist, overdue work, and course groups. Filters and search restrict the visible tasks.
+- **Materials:** the all-courses view groups files by week and course. A selected course shows its own weeks.
+- **Sync:** `s` reloads the source and reports the result.
 - **Commit:** groups pending items by action, shows task lines, overdue warnings, and the demo `similarManualTask` hint.
 
 #### Detail pane
 
 - `detailVisible()` returns false outside Tasks/Materials.
-- With no override, it opens at `width >= 100`.
+- The inspector is closed until opened.
 - `enter` toggles `detailPane` between pinned closed (`0`) and pinned open (`1`).
-- `splitWidths` allocates 62% to the tree, at least 24 columns to detail.
+- At 140 columns and 24 rows, `splitWidths` allocates 62% to the content and the rest to detail. At smaller sizes, detail replaces the content.
 - `detailRows` clips content to the pane height and marks the final clipped line with `…`.
 
 #### Footer

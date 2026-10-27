@@ -27,9 +27,10 @@ verified by hand against the live site (first recon 2026-10-17) unless it says
 `kamps` must never automate the SSO login. The user logs in with a browser and
 pastes only the cookie value. `kamps login` verifies the cookie against `/my/`
 and stores it with `0600` in its own state directory; `kamps logout` removes
-it. Session expiry is reported crisply (a login redirect or missing authenticated
-page data means "session expired — log in again"). The live source currently
-loads the enrolled course list; course pages and their coursework are not yet parsed.
+it. Session expiry is reported when a login redirect or missing authenticated
+page data indicates that the session has expired. The live source loads enrolled
+courses and parses course pages, assignment pages, and quiz pages. The parsers
+have fixture coverage; current live-site behavior still needs verification.
 
 ## Data routes that work with a session cookie
 

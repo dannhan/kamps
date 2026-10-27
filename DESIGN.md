@@ -1,7 +1,8 @@
 # Kamps TUI design
 
-Status: **implemented**. The checklist below is the acceptance criteria; the
-redesign tests in `internal/tui/redesign_test.go` and `theme_test.go` guard it.
+Status: historical redesign record. The checklist describes the initial pass.
+Later workspace changes supersede its layout and interaction details. See
+`README.md` for current behavior and `internal/tui` tests for current checks.
 
 This document is the redesign plan for the terminal UI: palette, layout,
 persistent footer, help overlay, and focus/selection styling. It keeps the

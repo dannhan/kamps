@@ -50,7 +50,7 @@ To fix formatting, run `make fmt`.
   [DESIGN.md](DESIGN.md).
 - Keep colors in `internal/tui/theme.go`; widgets use semantic styles.
 - Trees keep a two-column right inset, and long text ends with `…`.
-- `/` is search; `f` cycles filters. Do not bind `v` as a view key.
+- `/` is search; `f` opens filters. Do not bind `v` as a view key.
 - A user decision is saved immediately; the commit queue is session-only.
 - Do not write tests against the real home directory. Use `t.TempDir()`.
 - Prefer moving code before renaming it or changing behavior. Small,

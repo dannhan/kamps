@@ -1,8 +1,8 @@
 # Headless core and CLI
 
 Kamps' application workflow lives in [`internal/core`](../internal/core/core.go). The TUI and
-the non-TTY renderer both consume the same `core.Snapshot`. The next phase exposes the same
-service as JSON CLI commands so an agent can read and mutate kamps without opening the TUI.
+the non-TTY renderer both consume the same `core.Snapshot`. JSON CLI commands expose the
+same service for scripts and agents.
 
 ## Status
 
@@ -15,7 +15,7 @@ service as JSON CLI commands so an agent can read and mutate kamps without openi
 - Planned: full `run(args, stdout, stderr) int` refactor and the optional localhost/MCP
   surface.
 
-## Planned commands
+## Commands
 
 ```text
 kamps courses   [--json]
@@ -47,7 +47,7 @@ Every `--json` command writes exactly one object to stdout. Diagnostics go to st
 }
 ```
 
-Planned item fields:
+Item fields include:
 
 - `courses`: `id`, `code`, `short`, `name`, `term`, `workspace_path`
 - `tasks`: `id`, `course_id`, `course_code`, `name`, `due` (RFC3339 or null), `triage`

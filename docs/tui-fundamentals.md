@@ -128,7 +128,7 @@ A command is a function with the signature `type Cmd func() Msg`.
 
 3. **Termination:** [`tea.Quit`](../internal/tui/app.go) restores the terminal and exits `Program.Run()`.
 
-Not every side effect needs a command. `saveState()` writes a small local JSON file synchronously inside the triage handler; doing that in `Update` keeps the code simple and avoids a race where the next keypress reads stale state. A network or large-file write should use a command instead.
+State persistence uses the bridge in [`state.go`](../internal/tui/state.go). Network and file operations use commands that report their results back to `Update`.
 
 ---
 
@@ -253,7 +253,7 @@ Normal text is truncated with `…`; tree rows reserve a two-column right inset 
 [`detail.go`](../internal/tui/detail.go) implements the detail pane:
 
 - It is opt-in: `enter` opens or closes it.
-- [`splitWidths`](../internal/tui/detail.go) gives 62% to the tree and the rest to detail, enforcing a 24-column minimum for detail.
+- At 140 columns and 24 rows, [`splitWidths`](../internal/tui/detail.go) gives 62% to the content and the rest to detail. At smaller sizes, detail replaces the content.
 - [`splitTreeRows`](../internal/tui/detail.go) renders the left line, a `│` divider, and the right line side by side.
 - The override is global, not per tab.
 

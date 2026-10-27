@@ -44,7 +44,7 @@ Trace a triage decision end to end:
    - changes the in-memory assignment;
    - records the decision in `store.State`;
    - adds or removes the item from the session-only `pending` queue.
-4. Follow `saveState` in [`state.go`](../internal/tui/state.go) into `store.State.Save`.
+4. Follow the state bridge in [`state.go`](../internal/tui/state.go) into the store update path.
 5. Open `commitPreviewText` in [`commit.go`](../internal/tui/commit.go) and
    `taskLine` in [`format.go`](../internal/tui/format.go) to see how a queued
    decision becomes exported text.
@@ -78,7 +78,7 @@ Files:
 
 Acceptance:
 
-- `f` cycles to the new filter;
+- `f` opens the menu and offers the new filter;
 - the title shows the filter name and match count;
 - `esc` clears it;
 - search still composes with it.
