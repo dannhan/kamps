@@ -115,15 +115,34 @@ func (s *Service) Persist(fn func(*store.State)) error {
 
 // Load fetches a snapshot, runs the shared pipeline, and saves it to the cache.
 func (s *Service) Load(ctx context.Context) (Snapshot, error) {
-	raw, err := s.src.Load(ctx)
+	raw, err := s.Fetch(ctx)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	snapshot := s.build(raw, time.Now(), false, time.Time{})
+	return s.BuildSnapshot(raw, time.Now(), false, time.Time{}), nil
+}
+
+// Fetch obtains source data without touching the in-memory state or snapshot.
+func (s *Service) Fetch(ctx context.Context) (source.Snapshot, error) {
+	raw, err := s.src.Load(ctx)
+	if err != nil {
+		return source.Snapshot{}, err
+	}
 	if !strings.HasPrefix(s.src.Label(), "demo") {
 		_ = cache.Save(s.cfg.CachePath(), s.cfg.SiteURL, raw)
 	}
-	return snapshot, nil
+	return raw, nil
+}
+
+// FetchCached reads cached source data without changing service state.
+func (s *Service) FetchCached() (source.Snapshot, time.Time, bool) {
+	raw, savedAt, err := cache.Load(s.cfg.CachePath(), s.cfg.SiteURL)
+	return raw, savedAt, err == nil
+}
+
+// BuildSnapshot folds source data into the current in-memory state.
+func (s *Service) BuildSnapshot(raw source.Snapshot, loadedAt time.Time, fromCache bool, cachedAt time.Time) Snapshot {
+	return s.build(raw, loadedAt, fromCache, cachedAt)
 }
 
 // LoadCached restores the last successful snapshot through the same pipeline.

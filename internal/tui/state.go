@@ -14,13 +14,13 @@ import (
 // the write was running are kept pending.
 type stateSavedMsg struct {
 	decisions map[string]model.Triage
-	downloads map[string]bool
+	downloads map[string]store.DownloadRecord
 	err       error
 }
 
 // persistStateCmd is the only place the TUI writes state to disk. It runs in a
 // Bubble Tea command goroutine, never in Update.
-func persistStateCmd(service *core.Service, decisions map[string]model.Triage, downloads map[string]bool) tea.Cmd {
+func persistStateCmd(service *core.Service, decisions map[string]model.Triage, downloads map[string]store.DownloadRecord) tea.Cmd {
 	return func() tea.Msg {
 		if len(decisions) == 0 && len(downloads) == 0 {
 			return stateSavedMsg{}
@@ -29,8 +29,12 @@ func persistStateCmd(service *core.Service, decisions map[string]model.Triage, d
 			for id, triage := range decisions {
 				state.SetDecision(id, triage)
 			}
-			for id := range downloads {
-				state.SetDownloaded(id, true)
+			for id, record := range downloads {
+				if record.Path == "" {
+					state.SetDownloaded(id, true)
+				} else {
+					state.SetDownloadRecord(id, record)
+				}
 			}
 		})
 		return stateSavedMsg{decisions: decisions, downloads: downloads, err: err}
@@ -47,9 +51,9 @@ func (m *App) queueStatePersist() tea.Cmd {
 	for id, triage := range m.pendingDecisions {
 		decisions[id] = triage
 	}
-	downloads := make(map[string]bool, len(m.pendingDownloads))
-	for id := range m.pendingDownloads {
-		downloads[id] = true
+	downloads := make(map[string]store.DownloadRecord, len(m.pendingDownloads))
+	for id, record := range m.pendingDownloads {
+		downloads[id] = record
 	}
 	m.persistInFlight = true
 	return persistStateCmd(m.service, decisions, downloads)
@@ -77,8 +81,8 @@ func (m *App) handleStateSaved(msg stateSavedMsg) tea.Cmd {
 			delete(m.pendingDecisions, id)
 		}
 	}
-	for id := range msg.downloads {
-		if m.pendingDownloads[id] {
+	for id, record := range msg.downloads {
+		if current, ok := m.pendingDownloads[id]; ok && current == record {
 			delete(m.pendingDownloads, id)
 		}
 	}

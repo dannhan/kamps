@@ -2,9 +2,12 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -92,9 +95,6 @@ func TestHeadlessDownloadDryRun(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &envelope); err != nil {
 		t.Fatal(err)
 	}
-	if len(envelope.Items) == 0 {
-		t.Fatal("no download targets")
-	}
 	for _, item := range envelope.Items {
 		if item.ID == "" || item.Path == "" {
 			t.Fatalf("incomplete target %+v", item)
@@ -122,5 +122,71 @@ func TestHeadlessUnknownCommandFails(t *testing.T) {
 	_, stderr, code := runTestHeadless(t, headlessConfig(t), "bogus")
 	if code != 2 || !strings.Contains(stderr, "unknown command") {
 		t.Fatalf("code = %d, stderr = %s", code, stderr)
+	}
+}
+
+type downloadTestSource struct {
+	materials []model.Material
+	calls     []string
+}
+
+func (s *downloadTestSource) Label() string { return "test" }
+func (s *downloadTestSource) Load(context.Context) (source.Snapshot, error) {
+	return source.Snapshot{Courses: []model.Course{{ID: 1, Code: "C1"}}, Materials: s.materials}, nil
+}
+func (s *downloadTestSource) Download(_ context.Context, material model.Material, path string, _ func(int64, int64)) (string, error) {
+	s.calls = append(s.calls, material.ID)
+	if material.ID == "bad" {
+		return "", errors.New("transfer failed")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return "", err
+	}
+	return path, os.WriteFile(path, []byte("content"), 0600)
+}
+
+func TestHeadlessDownloadSelectionAndPartialResults(t *testing.T) {
+	materials := []model.Material{{ID: "ok", CourseID: 1, Name: "ok", Kind: "file", URL: "https://demo.test/ok"}, {ID: "bad", CourseID: 1, Name: "bad", Kind: "file", URL: "https://demo.test/bad"}, {ID: "link", CourseID: 1, Kind: "url"}, {ID: "book", CourseID: 1, Kind: "book"}, {ID: "page", CourseID: 1, Kind: "page", URL: "https://demo.test/page"}, {ID: "lab", CourseID: 1, Kind: "praktikum", URL: "https://demo.test/lab"}, {ID: "missing-url", CourseID: 1, Kind: "file"}}
+	for _, selector := range [][]string{{"--all-new"}, {"--course", "C1"}} {
+		t.Run(strings.Join(selector, "_"), func(t *testing.T) {
+			src := &downloadTestSource{materials: materials}
+			var stdout, stderr bytes.Buffer
+			args := append([]string{"download", "--json"}, selector...)
+			_, code := runHeadless(args, headlessConfig(t), src, &stdout, &stderr)
+			if code != 5 || !strings.Contains(stdout.String(), `"id":"ok"`) || !strings.Contains(stderr.String(), "bad: transfer failed") {
+				t.Fatalf("code %d stdout %s stderr %s", code, stdout.String(), stderr.String())
+			}
+			sort.Strings(src.calls)
+			if strings.Join(src.calls, ",") != "bad,ok" {
+				t.Fatalf("calls = %v", src.calls)
+			}
+		})
+	}
+}
+
+func TestHeadlessDownloadRejectsUnknownIDsBeforeTransfer(t *testing.T) {
+	src := &downloadTestSource{materials: []model.Material{{ID: "ok", CourseID: 1, Kind: "file"}}}
+	var stdout, stderr bytes.Buffer
+	_, code := runHeadless([]string{"download", "ok", "missing", "--json"}, headlessConfig(t), src, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "missing") || len(src.calls) != 0 {
+		t.Fatalf("code %d calls %v stderr %s", code, src.calls, stderr.String())
+	}
+}
+
+func TestHeadlessDownloadEmptyBulkSelection(t *testing.T) {
+	src := &downloadTestSource{materials: []model.Material{{ID: "link", CourseID: 1, Kind: "url"}}}
+	var stdout, stderr bytes.Buffer
+	_, code := runHeadless([]string{"download", "--all-new", "--json"}, headlessConfig(t), src, &stdout, &stderr)
+	if code != 0 || len(src.calls) != 0 || !strings.Contains(stdout.String(), `"items":[]`) {
+		t.Fatalf("code %d stdout %s stderr %s", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestHeadlessDownloadRejectsIDsOutsideCourse(t *testing.T) {
+	src := &downloadTestSource{materials: []model.Material{{ID: "other", CourseID: 2, Kind: "file"}}}
+	var stdout, stderr bytes.Buffer
+	_, code := runHeadless([]string{"download", "other", "--course", "C1"}, headlessConfig(t), src, &stdout, &stderr)
+	if code != 2 || len(src.calls) != 0 || !strings.Contains(stderr.String(), "does not belong") {
+		t.Fatalf("code %d calls %v stderr %s", code, src.calls, stderr.String())
 	}
 }

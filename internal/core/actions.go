@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -32,6 +33,24 @@ func (s *Service) Decide(ids []string, triage model.Triage) ([]Decision, error) 
 // It is used by headless commands; the TUI applies in memory and persists from
 // a tea.Cmd.
 func (s *Service) SetDecisions(decisions map[string]model.Triage) ([]Decision, error) {
+	if len(decisions) == 0 {
+		return nil, fmt.Errorf("no matching assignments")
+	}
+	missing := make(map[string]bool, len(decisions))
+	for id := range decisions {
+		missing[id] = true
+	}
+	for _, assignment := range s.snapshot.Assignments {
+		delete(missing, assignment.ID)
+	}
+	if len(missing) > 0 {
+		ids := make([]string, 0, len(missing))
+		for id := range missing {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		return nil, fmt.Errorf("unknown assignment IDs: %s", strings.Join(ids, ", "))
+	}
 	changed := s.ApplyDecisions(decisions)
 	if len(changed) == 0 {
 		return nil, fmt.Errorf("no matching assignments")

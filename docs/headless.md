@@ -31,12 +31,12 @@ kamps export    --format markdown|todo|taskwarrior [--out PATH] [--json]
 Existing `login`, `logout`, `version`, and `workspace init` stay unchanged. Running `kamps`
 with no subcommand still opens the TUI (or prints plain text when stdout is not a TTY).
 
-`download` supports `--all-new`, `--course`, and `--dry-run`. `export` defaults to tracked
+`download` supports `--all-new`, `--course`, and `--dry-run`. Bulk selection skips links, pages, books, lab links, local files, and materials without a download URL. An empty bulk selection succeeds without transfers. Explicit material IDs must all exist before a transfer starts. If some transfers fail, successful downloads appear on stdout, the error appears on stderr, and the command exits with code 5. If all transfers fail, it exits with code 4. `export` defaults to tracked
 items and accepts `--ids A,B`; `--format` defaults to `export_format` from config.
 
 ## JSON shape
 
-Every `--json` command writes exactly one object to stdout. Diagnostics go to stderr.
+Successful `--json` commands write one object to stdout. A partially successful download also writes its completed transfers to stdout. Diagnostics go to stderr.
 
 ```json
 {

@@ -64,7 +64,7 @@ func TestExpiredSessionStartupSettlesBeforePublishingFailure(t *testing.T) {
 			if !ok {
 				t.Fatal("expired server failed to produce load error")
 			}
-			if (msg.cached != nil) != cached {
+			if (msg.fetched != nil) != cached {
 				t.Fatal("load command did not resolve cache fallback")
 			}
 			if !strings.Contains(msg.err.Error(), "kamps login") {

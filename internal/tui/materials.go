@@ -326,7 +326,7 @@ func (m *App) download() tea.Cmd {
 		m.state = m.service.State()
 		m.statusErr = ""
 		for _, id := range flaggedIDs {
-			m.pendingDownloads[id] = true
+			m.pendingDownloads[id] = store.DownloadRecord{}
 		}
 		cmds = append(cmds, m.queueStatePersist())
 	}

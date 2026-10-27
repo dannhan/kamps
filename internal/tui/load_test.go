@@ -27,12 +27,12 @@ func TestLoadCmdReturnsSnapshot(t *testing.T) {
 		Courses: []model.Course{{ID: 7, Name: "Test Course"}},
 	}
 	msg := loadCmd(core.New(stubSource{snapshot: want}, config.Config{StateDir: t.TempDir()}))()
-	loaded, ok := msg.(loadedMsg)
+	loaded, ok := msg.(fetchedMsg)
 	if !ok {
-		t.Fatalf("loadCmd returned %T, want loadedMsg", msg)
+		t.Fatalf("loadCmd returned %T, want fetchedMsg", msg)
 	}
-	if len(loaded.Courses) != 1 || loaded.Courses[0].ID != 7 {
-		t.Fatalf("loadCmd lost the snapshot: %+v", loaded.Snapshot)
+	if len(loaded.snapshot.Courses) != 1 || loaded.snapshot.Courses[0].ID != 7 {
+		t.Fatalf("loadCmd lost the snapshot: %+v", loaded.snapshot)
 	}
 }
 

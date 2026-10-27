@@ -200,7 +200,7 @@ func headlessDownload(args []string, jsonOut bool, cfg config.Config, src source
 	if err != nil {
 		return headlessError(stderr, jsonOut, "usage", err)
 	}
-	if opts.dryRun {
+	if opts.dryRun || len(ids) == 0 {
 		if jsonOut {
 			if err := api.Write(stdout, "download", targets, nil); err != nil {
 				return 1
@@ -217,25 +217,29 @@ func headlessDownload(args []string, jsonOut bool, cfg config.Config, src source
 			fmt.Fprintf(stderr, "%s\t%d/%d\n", id, done, total)
 		}
 	})
-	if err != nil {
-		if jsonOut {
-			_ = api.WriteError(stderr, "download", err.Error())
-			return 4
-		}
-		return headlessError(stderr, false, "download", err)
-	}
-	if jsonOut {
+	if jsonOut && (err == nil || len(results) > 0) {
 		items := make([]api.Download, 0, len(results))
 		for _, result := range results {
 			items = append(items, api.Download{ID: result.ID, Path: result.Path, Bytes: result.Bytes})
 		}
-		if err := api.Write(stdout, "download", items, nil); err != nil {
+		if writeErr := api.Write(stdout, "download", items, nil); writeErr != nil {
 			return 1
 		}
-		return 0
+	} else if !jsonOut {
+		for _, result := range results {
+			fmt.Fprintf(stdout, "%s\t%s\n", result.ID, result.Path)
+		}
 	}
-	for _, result := range results {
-		fmt.Fprintf(stdout, "%s\t%s\n", result.ID, result.Path)
+	if err != nil {
+		if jsonOut {
+			_ = api.WriteError(stderr, "download", err.Error())
+		} else {
+			fmt.Fprintln(stderr, err)
+		}
+		if len(results) > 0 {
+			return 5
+		}
+		return 4
 	}
 	return 0
 }
@@ -448,13 +452,36 @@ func downloadTargets(service *core.Service, opts downloadOptions) ([]string, []d
 		}
 		courseID = course.ID
 	}
-	var ids []string
-	var targets []downloadTarget
-	for _, material := range service.Snapshot().Materials {
+	materials := service.Snapshot().Materials
+	for _, material := range materials {
+		delete(wanted, material.ID)
+	}
+	if len(wanted) > 0 {
+		var missing []string
+		for _, id := range opts.ids {
+			if wanted[id] {
+				missing = append(missing, id)
+				delete(wanted, id)
+			}
+		}
+		return nil, nil, fmt.Errorf("unknown material IDs: %s", strings.Join(missing, ", "))
+	}
+	for _, id := range opts.ids {
+		wanted[id] = true
+	}
+	ids := make([]string, 0)
+	targets := make([]downloadTarget, 0)
+	for _, material := range materials {
+		if len(opts.ids) == 0 && (material.Kind == "url" || material.Kind == "book" || material.Kind == "page" || material.Kind == "praktikum" || material.Kind == "local" || material.URL == "") {
+			continue
+		}
 		if len(wanted) > 0 && !wanted[material.ID] {
 			continue
 		}
 		if courseID != 0 && material.CourseID != courseID {
+			if wanted[material.ID] {
+				return nil, nil, fmt.Errorf("material %q does not belong to course %q", material.ID, opts.course)
+			}
 			continue
 		}
 		if opts.allNew && material.Downloaded {
@@ -463,7 +490,7 @@ func downloadTargets(service *core.Service, opts downloadOptions) ([]string, []d
 		ids = append(ids, material.ID)
 		targets = append(targets, downloadTarget{ID: material.ID, Path: service.Destination(material), Downloaded: material.Downloaded})
 	}
-	if len(ids) == 0 {
+	if len(ids) == 0 && len(opts.ids) > 0 {
 		return nil, nil, fmt.Errorf("no matching materials")
 	}
 	return ids, targets, nil

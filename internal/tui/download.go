@@ -15,6 +15,7 @@ import (
 	"github.com/ruyam/kamps/internal/format"
 	"github.com/ruyam/kamps/internal/library"
 	"github.com/ruyam/kamps/internal/model"
+	"github.com/ruyam/kamps/internal/source"
 )
 
 type downloadProgressMsg struct {
@@ -25,6 +26,7 @@ type downloadProgressMsg struct {
 type downloadDoneMsg struct {
 	id   string
 	path string
+	size int64
 	err  error
 }
 
@@ -73,14 +75,25 @@ func (m *App) startDownload(material model.Material) tea.Cmd {
 	id := material.ID
 	ctx, cancel := context.WithCancel(context.Background())
 	m.downloadCancels[id] = cancel
-	service := m.service
+	downloader, ok := m.src.(source.Downloader)
+	destination := m.materialDestination(material)
 	return func() tea.Msg {
-		result, err := service.DownloadOne(ctx, material, func(_ string, done, total int64) {
+		if !ok {
+			return downloadDoneMsg{id: id, err: fmt.Errorf("source cannot download files")}
+		}
+		path, err := downloader.Download(ctx, material, destination, func(done, total int64) {
 			if program != nil {
 				program.Send(downloadProgressMsg{id: id, done: done, total: total})
 			}
 		})
-		return downloadDoneMsg{id: id, path: result.Path, err: err}
+		if err != nil {
+			return downloadDoneMsg{id: id, err: err}
+		}
+		var size int64
+		if info, statErr := os.Stat(path); statErr == nil {
+			size = info.Size()
+		}
+		return downloadDoneMsg{id: id, path: path, size: size}
 	}
 }
 

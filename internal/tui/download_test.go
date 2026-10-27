@@ -9,10 +9,13 @@ import (
 	"sync"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/ruyam/kamps/internal/config"
 	"github.com/ruyam/kamps/internal/library"
 	"github.com/ruyam/kamps/internal/model"
 	"github.com/ruyam/kamps/internal/source"
+	"github.com/ruyam/kamps/internal/store"
 )
 
 type fakeDownloadSource struct {
@@ -111,6 +114,84 @@ func TestDownloadFetchesFileAndMarksDownloaded(t *testing.T) {
 	}
 	if _, ok := app.state.Downloads["M1"]; !ok {
 		t.Fatal("download was not persisted to state")
+	}
+}
+
+func TestConcurrentDownloadsKeepBothRecords(t *testing.T) {
+	src := downloadTestSource()
+	src.snapshot.Materials = append(src.snapshot.Materials, model.Material{ID: "M3", CourseID: 1, CourseCode: "metnum", Name: "notes.pdf", Section: "week-1", Kind: "file", URL: "https://lms/notes"})
+	src.files["M3"] = "notes"
+	app := downloadTestApp(t, src)
+	first := app.startDownload(*app.materialByID("M1"))
+	second := app.startDownload(*app.materialByID("M3"))
+	messages := make(chan downloadDoneMsg, 2)
+	go func() { messages <- first().(downloadDoneMsg) }()
+	go func() { messages <- second().(downloadDoneMsg) }()
+	for range 2 {
+		msg := <-messages
+		if msg.err != nil {
+			t.Fatal(msg.err)
+		}
+		app.Update(msg)
+	}
+	for _, id := range []string{"M1", "M3"} {
+		if !app.materialByID(id).Downloaded || app.state.Downloads[id].Path == "" {
+			t.Fatalf("download %s missing from snapshot or state", id)
+		}
+	}
+}
+
+func TestDownloadCompletionDuringReloadKeepsState(t *testing.T) {
+	src := downloadTestSource()
+	app := downloadTestApp(t, src)
+	download := app.startDownload(*app.materialByID("M1"))
+	load := loadCmd(app.service)
+	done := make(chan downloadDoneMsg, 1)
+	fetched := make(chan tea.Msg, 1)
+	go func() { done <- download().(downloadDoneMsg) }()
+	go func() { fetched <- load() }()
+	msg := <-done
+	if msg.err != nil {
+		t.Fatal(msg.err)
+	}
+	app.Update(msg)
+	app.Update(<-fetched)
+	if !app.materialByID("M1").Downloaded || app.state.Downloads["M1"].Path == "" {
+		t.Fatal("reload lost the completed download")
+	}
+}
+
+func TestDownloadRecordPersistsAfterReloadClearsMissingFile(t *testing.T) {
+	src := downloadTestSource()
+	app := downloadTestApp(t, src)
+	material := *app.materialByID("M1")
+	path := app.materialDestination(material)
+	app.service.ApplyState(func(state *store.State) {
+		state.SetDownloadRecord(material.ID, store.DownloadRecord{Path: path})
+	})
+	if err := app.service.Persist(func(state *store.State) {
+		state.SetDownloadRecord(material.ID, store.DownloadRecord{Path: path})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	download := app.startDownload(material)
+	app.Update(loadCmd(app.service)())
+	state, err := store.Load(app.cfg.StatePath())
+	if err != nil || state.Downloaded(material.ID) {
+		t.Fatalf("reload must clear missing record: state=%+v err=%v", state.Downloads, err)
+	}
+	msg := download().(downloadDoneMsg)
+	if msg.err != nil {
+		t.Fatal(msg.err)
+	}
+	_, persist := app.Update(msg)
+	if persist == nil {
+		t.Fatal("download completion did not schedule persistence")
+	}
+	app.Update(persist())
+	state, err = store.Load(app.cfg.StatePath())
+	if err != nil || state.Downloads[material.ID].Path != path || state.Downloads[material.ID].Size != 5 {
+		t.Fatalf("download record not persisted after reload: state=%+v err=%v", state.Downloads, err)
 	}
 }
 

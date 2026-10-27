@@ -134,7 +134,7 @@ type App struct {
 	// pendingDecisions/pendingDownloads are the in-memory changes waiting for
 	// the single persistence command. persistInFlight serializes disk writes.
 	pendingDecisions map[string]model.Triage
-	pendingDownloads map[string]bool
+	pendingDownloads map[string]store.DownloadRecord
 	persistInFlight  bool
 
 	width      int
@@ -190,7 +190,7 @@ func New(src source.Source, cfg config.Config, version string) *App {
 		statePath:        statePath,
 		stateErr:         stateErr,
 		pendingDecisions: map[string]model.Triage{},
-		pendingDownloads: map[string]bool{},
+		pendingDownloads: map[string]store.DownloadRecord{},
 		lastSync:         state.LastSync,
 		spinner:          sp,
 		width:            100,
@@ -209,24 +209,31 @@ func (m *App) currentTime() time.Time {
 
 type loadedMsg struct{ core.Snapshot }
 
+type fetchedMsg struct{ snapshot source.Snapshot }
+type cachedFetch struct {
+	snapshot source.Snapshot
+	savedAt  time.Time
+}
+
 type errMsg struct {
-	err    error
-	cached *core.Snapshot
+	err     error
+	cached  *core.Snapshot
+	fetched *cachedFetch
 }
 
 func loadCmd(service *core.Service) tea.Cmd {
 	return func() tea.Msg {
-		snapshot, err := service.Load(context.Background())
+		snapshot, err := service.Fetch(context.Background())
 		if err != nil {
 			// Resolve fallback in this command before publishing a failure. An
 			// intermediate error frame would briefly hide cached coursework.
-			cached, ok := service.LoadCached()
+			cached, savedAt, ok := service.FetchCached()
 			if ok {
-				return errMsg{err: err, cached: &cached}
+				return errMsg{err: err, fetched: &cachedFetch{snapshot: cached, savedAt: savedAt}}
 			}
 			return errMsg{err: err}
 		}
-		return loadedMsg{snapshot}
+		return fetchedMsg{snapshot}
 	}
 }
 
@@ -251,6 +258,8 @@ func (m *App) applySnapshot(snapshot core.Snapshot) {
 
 func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case fetchedMsg:
+		return m.Update(loadedMsg{m.service.BuildSnapshot(msg.snapshot, time.Now(), false, time.Time{})})
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.helpScroll = clampInt(m.helpScroll, 0, m.helpMaxScroll())
@@ -281,6 +290,10 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case errMsg:
+		if msg.fetched != nil {
+			cached := m.service.BuildSnapshot(msg.fetched.snapshot, msg.fetched.savedAt, true, msg.fetched.savedAt)
+			msg.cached = &cached
+		}
 		m.loaded = true
 		m.loading = false
 		m.syncing = false
@@ -351,10 +364,17 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.statusErr = ""
+		m.service.ApplyDownloaded([]string{msg.id})
+		m.service.ApplyState(func(state *store.State) {
+			state.SetDownloadRecord(msg.id, store.DownloadRecord{Path: msg.path, Size: msg.size})
+		})
+		m.pendingDownloads[msg.id] = store.DownloadRecord{Path: msg.path, Size: msg.size}
+		m.materials = m.service.Snapshot().Materials
+		m.state = m.service.State()
 		delete(m.downloadErrors, msg.id)
 		m.toast = "saved " + savedFileLabel(msg.path)
 		m.toastTicks = 24
-		return m, nil
+		return m, m.queueStatePersist()
 
 	case openURLMsg:
 		if msg.err != nil {
