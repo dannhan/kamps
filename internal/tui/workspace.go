@@ -76,14 +76,17 @@ func (m *App) chooseCourse() {
 	}
 	m.taskCursor = 0
 	m.matCursor = 0
-	m.clampCursor()
 	m.detailScroll = 0
 	m.paneFocus = 0
-	if m.courseID == localCourseID && m.tab == TabMaterials {
-		m.setPaletteFilter("unknown")
-	} else if previousCourseID == localCourseID && m.tab == TabMaterials && m.filter == "unknown" {
-		m.setPaletteFilter("all")
+	if m.courseID == localCourseID {
+		m.tabFilters[TabMaterials] = "unknown"
+	} else if previousCourseID == localCourseID && m.tabFilters[TabMaterials] == "unknown" {
+		m.tabFilters[TabMaterials] = "all"
 	}
+	if m.tab == TabMaterials {
+		m.filter = m.tabFilters[TabMaterials]
+	}
+	m.clampCursor()
 	m.cancelTriageArm()
 	m.visual = false
 }

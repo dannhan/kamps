@@ -53,6 +53,29 @@ func TestLeavingLocalLibraryShowsCourseMaterials(t *testing.T) {
 	}
 }
 
+func TestCourseSelectionKeepsLocalLibraryFilterAcrossTabs(t *testing.T) {
+	app := libraryWorkspaceApp(t)
+	app.unknownFiles = []string{"local.pdf"}
+	for i, course := range app.sidebarCourses() {
+		if course.ID == localCourseID {
+			app.courseCursor = i + 1
+			break
+		}
+	}
+	app.chooseCourse()
+	app.switchTab(TabMaterials)
+	if app.filter != "unknown" {
+		t.Fatal("local library filter not applied after switching tabs")
+	}
+	app.switchTab(TabTasks)
+	app.courseCursor = 1
+	app.chooseCourse()
+	app.switchTab(TabMaterials)
+	if len(app.visibleMaterials()) == 0 {
+		t.Fatal("course materials hidden after switching tabs")
+	}
+}
+
 func TestWorkspaceHierarchyAndContext(t *testing.T) {
 	app := libraryWorkspaceApp(t)
 	app.expanded[courseKey(1)] = true
