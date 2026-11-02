@@ -44,7 +44,19 @@ func MaterialPath(baseDir, courseCodeOrName, sectionName, folderName, filename s
 // SubPath builds <base>/<section>/<folder>/<file>, used when a course is
 // mapped to a workspace folder and should not get another course directory.
 func SubPath(baseDir, sectionName, folderName, filename string) (string, error) {
-	return MaterialPath(baseDir, ".", sectionName, folderName, filename)
+	section := SanitizeFilename(sectionName)
+	if section == "unnamed" {
+		section = "general"
+	}
+	parts := []string{baseDir, section}
+	if strings.TrimSpace(folderName) != "" {
+		folder := SanitizeFilename(folderName)
+		if folder != "unnamed" {
+			parts = append(parts, folder)
+		}
+	}
+	parts = append(parts, SanitizeFilename(filename))
+	return filepath.Join(parts...), nil
 }
 
 // ScanResult reconciles the materials kamps knows about with the files on disk.

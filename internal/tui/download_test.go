@@ -104,7 +104,7 @@ func TestDownloadFetchesFileAndMarksDownloaded(t *testing.T) {
 	}
 	app.Update(cmd())
 
-	target := filepath.Join(app.cfg.LibraryDir, "metnum", "week-1", "slides.pdf")
+	target := filepath.Join(app.cfg.LibraryDir, "metnum", "week-01", "slides.pdf")
 	body, err := os.ReadFile(target)
 	if err != nil || string(body) != "hello" {
 		t.Fatalf("downloaded file = %q, err = %v", body, err)
@@ -286,7 +286,7 @@ func TestMaterialDestinationUsesLibraryLayout(t *testing.T) {
 	src := downloadTestSource()
 	app := downloadTestApp(t, src)
 	material := *app.materialByID("M1")
-	want := filepath.Join(app.cfg.LibraryDir, "metnum", "week-1", "slides.pdf")
+	want := filepath.Join(app.cfg.LibraryDir, "metnum", "week-01", "slides.pdf")
 	if got := app.materialDestination(material); got != want {
 		t.Fatalf("destination = %q, want %q", got, want)
 	}

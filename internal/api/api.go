@@ -74,6 +74,7 @@ type Material struct {
 	Downloaded   bool   `json:"downloaded"`
 	URL          string `json:"url,omitempty"`
 	AssignmentID string `json:"assignment_id,omitempty"`
+	Destination  string `json:"destination,omitempty"`
 }
 
 // Decision is one triage result.

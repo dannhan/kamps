@@ -18,6 +18,16 @@ Tell kamps where to look for mappings:
 workspace_roots = ["~/projects/university"]
 ```
 
+Existing course metadata can also identify a course without a separate mapping.
+For example, `basdat/course.json` may contain `"lms_course_id": 17964`,
+`"code": "MIK1624303"`, and `"source": "lms"`. Kamps uses `basdat/materi`
+when that directory exists, or `basdat/materials` otherwise. It creates missing
+download directories only when downloading. Existing padded week folders such as
+`week-05` are reused. New week directories use two digits, such as `week-01`.
+An existing `week-1` directory is reused for that week. Course metadata and other course folders are not changed.
+Folders supplied by the LMS remain inside their weekly materials folder; Kamps
+does not infer a practicum or assignment destination from a file name.
+
 Create one `course.json` per repo (checked in, gitignored, or local):
 
 ```json
@@ -66,7 +76,7 @@ produce a notice in the UI instead of a crash.
 For a mapped course with `path: "."`:
 
 ```text
-~/projects/university/basdat/week-1/Slides/week1.pdf
+~/projects/university/basdat/week-01/Slides/week1.pdf
 ```
 
 No extra course directory is added inside the workspace. Every path component

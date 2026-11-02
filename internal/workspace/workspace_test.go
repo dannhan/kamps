@@ -46,6 +46,23 @@ func TestResolveReportsMissingPath(t *testing.T) {
 	}
 }
 
+func TestResolveReportsConflictingCourseFolders(t *testing.T) {
+	root := t.TempDir()
+	for _, dir := range []string{"basdat", "duplicate"} {
+		path := filepath.Join(root, dir)
+		if err := os.MkdirAll(path, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(path, "course.json"), []byte(`{"lms_course_id":17964,"source":"lms"}`), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	courses, notices := Resolve([]model.Course{{ID: 17964, Code: "MIK1624303"}}, []string{root})
+	if courses[0].WorkspacePath != "" || len(notices) != 1 {
+		t.Fatalf("courses: %+v, notices: %v", courses, notices)
+	}
+}
+
 func TestValidateDownloadPath(t *testing.T) {
 	base := t.TempDir()
 	if err := ValidateDownloadPath(base, filepath.Join(base, "week", "file.pdf")); err != nil {

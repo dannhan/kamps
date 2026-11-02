@@ -53,9 +53,9 @@ Item fields include:
 - `tasks`: `id`, `course_id`, `course_code`, `name`, `due` (RFC3339 or null), `triage`
   (`undecided|tracked|missed|ignored`), `submission`, `section`, `overdue`, `attachments`
 - `materials`: `id`, `course_id`, `course_code`, `name`, `section`, `section_name`,
-  `folder`, `kind`, `size`, `downloaded`, `url`, `assignment_id`
+  `folder`, `kind`, `size`, `downloaded`, `url`, `assignment_id`, `destination` for files
 - `status`: `source`, `session_ok`, `session_expires_at`, `last_sync`, `from_cache`,
-  `courses`, `assignments`, `materials`, `downloaded`
+  `courses`, `assignments`, `materials`, `downloaded`, `warnings` when present
 
 Material filters are `all`, `new`, `downloaded`, and `link`. Task filters are `all`,
 `undecided`, `overdue`, `tracked`, `missed`, and `ignored`.

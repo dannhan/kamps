@@ -2,10 +2,26 @@ package core
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 )
+
+func existingSection(base, section string) string {
+	if info, err := os.Stat(filepath.Join(base, section)); err == nil && info.IsDir() {
+		return section
+	}
+	if n, ok := SectionNumber(section); ok {
+		padded := fmt.Sprintf("week-%02d", n)
+		if info, err := os.Stat(filepath.Join(base, padded)); err == nil && info.IsDir() {
+			return padded
+		}
+		return padded
+	}
+	return section
+}
 
 var weekSectionPattern = regexp.MustCompile(`(?i)^week[-_ ]?0*([0-9]+)$`)
 

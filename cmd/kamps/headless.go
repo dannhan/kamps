@@ -54,7 +54,14 @@ func runHeadless(args []string, cfg config.Config, src source.Source, stdout, st
 		})
 	case "materials":
 		return true, headlessRead(command, args, jsonOut, cfg, src, stdout, stderr, func(service *core.Service, query headlessQuery) any {
-			return api.Materials(service.Materials(core.Query{Filter: query.filter, Search: query.search, CourseID: query.courseID}))
+			materials := service.Materials(core.Query{Filter: query.filter, Search: query.search, CourseID: query.courseID})
+			items := api.Materials(materials)
+			for i, material := range materials {
+				if material.Kind == "file" || material.Kind == "attachment" {
+					items[i].Destination = service.Destination(material)
+				}
+			}
+			return items
 		}, func(service *core.Service, query headlessQuery) (string, error) {
 			var b strings.Builder
 			for _, material := range service.Materials(core.Query{Filter: query.filter, Search: query.search, CourseID: query.courseID}) {

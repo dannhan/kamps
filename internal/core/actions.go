@@ -263,6 +263,7 @@ type Status struct {
 	Assignments      int        `json:"assignments"`
 	Materials        int        `json:"materials"`
 	Downloaded       int        `json:"downloaded"`
+	Warnings         []string   `json:"warnings,omitempty"`
 }
 
 // Status returns the current summary without exposing the session cookie.
@@ -273,6 +274,7 @@ func (s *Service) Status() Status {
 		Courses:     len(s.snapshot.Courses),
 		Assignments: len(s.snapshot.Assignments),
 		Materials:   len(s.snapshot.Materials),
+		Warnings:    append([]string(nil), s.snapshot.Warnings...),
 	}
 	if !s.state.LastSync.IsZero() {
 		value := s.state.LastSync

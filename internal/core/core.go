@@ -6,6 +6,8 @@ package core
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -168,6 +170,16 @@ func (s *Service) Destination(material model.Material) string {
 	return Destination(s.cfg, s.snapshot.Courses, material)
 }
 
+// LocalPath returns the recorded file when it still exists, or the planned destination.
+func (s *Service) LocalPath(material model.Material) string {
+	if record, ok := s.state.Downloads[material.ID]; ok && record.Path != "" {
+		if info, err := os.Stat(record.Path); err == nil && !info.IsDir() {
+			return record.Path
+		}
+	}
+	return s.Destination(material)
+}
+
 // Destination resolves a material's on-disk path for a set of courses.
 func Destination(cfg config.Config, courses []model.Course, material model.Material) string {
 	courseName := material.CourseCode
@@ -181,13 +193,17 @@ func Destination(cfg config.Config, courses []model.Course, material model.Mater
 			courseName = course.Code
 		}
 		if course.WorkspacePath != "" {
-			if path, err := library.SubPath(course.WorkspacePath, SectionLabel(material.Section), material.Folder, material.Name); err == nil {
+			if path, err := library.SubPath(course.WorkspacePath, existingSection(course.WorkspacePath, SectionLabel(material.Section)), material.Folder, material.Name); err == nil {
 				return path
 			}
 		}
 		break
 	}
-	path, err := library.MaterialPath(cfg.LibraryDir, courseName, SectionLabel(material.Section), material.Folder, material.Name)
+	section := SectionLabel(material.Section)
+	basePath, _ := library.MaterialPath(cfg.LibraryDir, courseName, section, "", material.Name)
+	courseDir := filepath.Dir(filepath.Dir(basePath))
+	section = existingSection(courseDir, section)
+	path, err := library.MaterialPath(cfg.LibraryDir, courseName, section, material.Folder, material.Name)
 	if err != nil {
 		return library.SectionPath(cfg.LibraryDir, courseName, SectionLabel(material.Section), material.Name)
 	}
@@ -294,7 +310,7 @@ func (s *Service) reconcile() error {
 		s.snapshot.Scan = ScanSummary{}
 		return nil
 	}
-	result := library.Scan(s.snapshot.Materials, s.Destination, []string{s.cfg.LibraryDir})
+	result := library.Scan(s.snapshot.Materials, s.LocalPath, []string{s.cfg.LibraryDir})
 	s.snapshot.Scan = ScanSummary{
 		Found:        result.Found,
 		Missing:      len(result.Missing),

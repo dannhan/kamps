@@ -25,8 +25,11 @@ type courseMap struct {
 }
 
 type file struct {
-	Version int         `json:"version"`
-	Courses []courseMap `json:"courses"`
+	Version     int         `json:"version"`
+	Courses     []courseMap `json:"courses"`
+	LMSCourseID int         `json:"lms_course_id"`
+	Code        string      `json:"code"`
+	Source      string      `json:"source"`
 }
 
 type mapping struct {
@@ -152,6 +155,13 @@ func discover(roots []string) ([]discovered, []string) {
 				return nil
 			}
 			dir := filepath.Dir(path)
+			if len(parsed.Courses) == 0 && parsed.LMSCourseID != 0 && (parsed.Source == "" || parsed.Source == "lms") {
+				materialDir := filepath.Join(dir, "materials")
+				if info, err := os.Stat(filepath.Join(dir, "materi")); err == nil && info.IsDir() {
+					materialDir = filepath.Join(dir, "materi")
+				}
+				found = append(found, discovered{courseMap: courseMap{LMSID: parsed.LMSCourseID, Code: parsed.Code, Path: materialDir}, File: path})
+			}
 			for _, item := range parsed.Courses {
 				if item.Path == "" {
 					notices = append(notices, path+": course entry has no path")
