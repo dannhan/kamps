@@ -72,6 +72,54 @@ func downloadTestSource() *fakeDownloadSource {
 	}
 }
 
+func TestDownloadProgressShowsBatchAndDestination(t *testing.T) {
+	app := downloadTestApp(t, downloadTestSource())
+	focusMaterial(t, app, "M1")
+	nodes := app.matNodes()
+	line := stripANSI(strings.Join(app.materialDetailLines(nodes[app.matCursor], 80), "\n"))
+	if !strings.Contains(line, "save to") || !strings.Contains(line, "slides.pdf") {
+		t.Fatalf("detail = %s", line)
+	}
+	if app.download() == nil {
+		t.Fatal("download did not start")
+	}
+	if app.toast != "downloading 0/1 file" {
+		t.Fatalf("status = %q", app.toast)
+	}
+	app.Update(downloadProgressMsg{id: "M1", done: 2, total: 5})
+	if app.toast != "downloading 0/1 file" {
+		t.Fatalf("status changed for individual progress: %q", app.toast)
+	}
+	app.Update(downloadDoneMsg{id: "M1", path: filepath.Join(app.cfg.LibraryDir, "slides.pdf")})
+	if app.toast != "downloaded 1 file" {
+		t.Fatalf("status = %q", app.toast)
+	}
+}
+
+func TestBatchProgressDoesNotFlashIndividualNames(t *testing.T) {
+	src := downloadTestSource()
+	src.snapshot.Materials[1].Kind = "file"
+	app := downloadTestApp(t, src)
+	app.selectedM["M1"] = true
+	app.selectedM["M2"] = true
+	if app.download() == nil {
+		t.Fatal("batch did not start")
+	}
+	app.Update(downloadProgressMsg{id: "M1", done: 1, total: 5})
+	app.Update(downloadProgressMsg{id: "M2", done: 2, total: 5})
+	if app.toast != "downloading 0/2 files" {
+		t.Fatalf("status = %q", app.toast)
+	}
+	app.Update(downloadDoneMsg{id: "M1", path: filepath.Join(app.cfg.LibraryDir, "one")})
+	if app.toast != "downloading 1/2 files" {
+		t.Fatalf("status = %q", app.toast)
+	}
+	app.Update(downloadDoneMsg{id: "M2", path: filepath.Join(app.cfg.LibraryDir, "two")})
+	if app.toast != "downloaded 2 files" {
+		t.Fatalf("status = %q", app.toast)
+	}
+}
+
 func downloadTestApp(t *testing.T, src *fakeDownloadSource) *App {
 	t.Helper()
 	cfg := config.Config{StateDir: t.TempDir(), LibraryDir: t.TempDir()}
@@ -385,5 +433,38 @@ func TestOpenLocalFileUsesDownloadedPath(t *testing.T) {
 	}
 	if msg.url != app.materialDestination(material) {
 		t.Fatal("local action did not use library destination")
+	}
+}
+
+func TestMaterialsShowAndOpenRecordedFilename(t *testing.T) {
+	app := downloadTestApp(t, downloadTestSource())
+	actual := filepath.Join(t.TempDir(), "lecture.pptx")
+	if err := os.WriteFile(actual, []byte("slides"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	app.service.ApplyState(func(s *store.State) { s.SetDownloadRecord("M1", store.DownloadRecord{Path: actual}) })
+	app.service.ApplyDownloaded([]string{"M1"})
+	app.materials = app.service.Snapshot().Materials
+	focusMaterial(t, app, "M1")
+	nodes := app.matNodes()
+	detail := stripANSI(strings.Join(app.materialDetailLines(nodes[app.matCursor], 80), "\n"))
+	if !strings.Contains(detail, "saved at") || !strings.Contains(detail, "lecture.pptx") {
+		t.Fatalf("detail = %q", detail)
+	}
+	row := stripANSI(strings.Join(app.materialBlock(nodes[app.matCursor], app.matCursor, 100), "\n"))
+	if !strings.Contains(row, "PPTX") {
+		t.Fatalf("row = %q", row)
+	}
+	previous := openExternalURL
+	defer func() { openExternalURL = previous }()
+	opened := ""
+	openExternalURL = func(path string) error { opened = path; return nil }
+	cmd := app.openLocalFile()
+	if cmd == nil {
+		t.Fatal("no open action")
+	}
+	msg := cmd().(openURLMsg)
+	if msg.err != nil || opened != actual {
+		t.Fatalf("opened %q; error %v", opened, msg.err)
 	}
 }

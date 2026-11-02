@@ -1,6 +1,7 @@
 package library
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -46,6 +47,11 @@ type partMeta struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
+func hasFilenameExtension(filename string) bool {
+	extension := filepath.Ext(filename)
+	return extension != "" && len(strings.Fields(extension)) == 1
+}
+
 // DownloadFileWithOptions streams a remote resource to destPath. With
 // Resume=true it keeps a stable .part file (and .part.json metadata) across
 // cancellations and process restarts, and continues with a Range request when
@@ -55,7 +61,7 @@ func DownloadFileWithOptions(ctx context.Context, client *http.Client, downloadU
 		client = http.DefaultClient
 	}
 
-	resolvedPath, action, destLock, err := reserveDestination(destPath, opts.ExpectedSize, opts.LockDir)
+	resolvedPath, action, destLock, err := reserveDestination(destPath, 0, opts.LockDir)
 	if err != nil {
 		return DownloadResult{}, err
 	}
@@ -77,7 +83,7 @@ func DownloadFileWithOptions(ctx context.Context, client *http.Client, downloadU
 		}
 	}
 
-	partPath := resolvedPath + ".part"
+	partPath := destPath + ".part"
 	metaPath := partPath + ".json"
 	offset, meta := loadPart(partPath, metaPath, downloadURL, opts.Resume)
 
@@ -117,6 +123,7 @@ func DownloadFileWithOptions(ctx context.Context, client *http.Client, downloadU
 		offset = 0
 		_ = os.Remove(partPath)
 		_ = os.Remove(metaPath)
+		destLock.Unlock()
 		return DownloadFileWithOptions(ctx, client, downloadURL, destPath, opts, progress)
 	case http.StatusUnauthorized, http.StatusForbidden:
 		cleanupPart(partPath, metaPath, opts.Resume)
@@ -164,25 +171,15 @@ func DownloadFileWithOptions(ctx context.Context, client *http.Client, downloadU
 		}
 	}
 
-	// Prefer the server's filename when the caller only knows an activity name
-	// such as "Slides" and has no extension to work with.
-	if disposition := dispositionFilename(resp); disposition != "" && filepath.Ext(resolvedPath) == "" {
-		candidate := filepath.Join(filepath.Dir(resolvedPath), SanitizeFilename(disposition))
-		if candidate != resolvedPath {
-			resolved, action := ResolveDestination(candidate, opts.ExpectedSize)
-			if action == ActionSkip {
-				cleanupPart(partPath, metaPath, opts.Resume)
-				return DownloadResult{Path: resolved}, nil
-			}
-			if offset > 0 {
-				newPart := resolved + ".part"
-				newMeta := newPart + ".json"
-				if err := os.Rename(partPath, newPart); err == nil {
-					partPath, metaPath = newPart, newMeta
-				}
-			}
-			resolvedPath = resolved
+	finalBase := destPath
+	if offset > 0 && meta.Target != "" && filepath.Dir(meta.Target) == destDir {
+		finalBase = meta.Target
+	}
+	if filename := dispositionFilename(resp); filename != "" {
+		if !hasFilenameExtension(filename) {
+			filename += filepath.Ext(destPath)
 		}
+		finalBase = filepath.Join(destDir, SanitizeFilename(filename))
 	}
 
 	flags := os.O_CREATE | os.O_WRONLY
@@ -239,7 +236,7 @@ func DownloadFileWithOptions(ctx context.Context, client *http.Client, downloadU
 			ETag:         resp.Header.Get("ETag"),
 			LastModified: resp.Header.Get("Last-Modified"),
 			Total:        total,
-			Target:       resolvedPath,
+			Target:       finalBase,
 			UpdatedAt:    time.Now(),
 		})
 	}
@@ -296,11 +293,75 @@ func DownloadFileWithOptions(ctx context.Context, client *http.Client, downloadU
 	if err := partFile.Close(); err != nil {
 		return DownloadResult{Path: resolvedPath, Bytes: written}, fmt.Errorf("close part file: %w", err)
 	}
-	if err := os.Rename(partPath, resolvedPath); err != nil {
-		return DownloadResult{Path: resolvedPath, Bytes: written}, fmt.Errorf("rename to target destination: %w", err)
+	resolvedPath, err = publishDownload(partPath, finalBase)
+	if err != nil {
+		keep = opts.Resume
+		return DownloadResult{Path: resolvedPath, Bytes: written}, err
 	}
 	success = true
 	return DownloadResult{Path: resolvedPath, Bytes: written, Resumed: resumed}, nil
+}
+
+// publishDownload compares bytes before using an existing file and never replaces one.
+func publishDownload(partPath, base string) (string, error) {
+	for version := 1; version < 1000; version++ {
+		candidate := base
+		if version > 1 {
+			ext := filepath.Ext(base)
+			candidate = strings.TrimSuffix(base, ext) + fmt.Sprintf("_v%d", version) + ext
+		}
+		if err := os.Link(partPath, candidate); err == nil {
+			if err := os.Remove(partPath); err != nil {
+				return candidate, fmt.Errorf("remove completed temporary file: %w", err)
+			}
+			return candidate, nil
+		} else if !errors.Is(err, os.ErrExist) {
+			return "", fmt.Errorf("save download: %w", err)
+		}
+		matches, err := sameFileContent(partPath, candidate)
+		if err != nil {
+			return "", err
+		}
+		if matches {
+			if err := os.Remove(partPath); err != nil {
+				return candidate, err
+			}
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("too many versions of %s", base)
+}
+
+func sameFileContent(a, b string) (bool, error) {
+	left, err := os.Open(a)
+	if err != nil {
+		return false, err
+	}
+	defer left.Close()
+	right, err := os.Open(b)
+	if err != nil {
+		return false, err
+	}
+	defer right.Close()
+	leftInfo, err := left.Stat()
+	if err != nil {
+		return false, err
+	}
+	rightInfo, err := right.Stat()
+	if err != nil {
+		return false, err
+	}
+	if !rightInfo.Mode().IsRegular() || leftInfo.Size() != rightInfo.Size() {
+		return false, nil
+	}
+	lh, rh := sha256.New(), sha256.New()
+	if _, err = io.Copy(lh, left); err != nil {
+		return false, err
+	}
+	if _, err = io.Copy(rh, right); err != nil {
+		return false, err
+	}
+	return bytes.Equal(lh.Sum(nil), rh.Sum(nil)), nil
 }
 
 // reserveDestination serializes writers targeting the same file. The lock is

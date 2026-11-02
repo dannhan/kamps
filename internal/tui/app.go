@@ -58,6 +58,9 @@ type App struct {
 	syncError        string
 	loadNotice       string
 	downloadProgress map[string]string
+	downloadTotal    int
+	downloadFinished int
+	downloadFailed   int
 	downloadErrors   map[string]string
 	downloads        map[string]bool
 	scanSummary      string
@@ -350,13 +353,15 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.downloadProgress[msg.id] = fmt.Sprintf("%d KB", msg.done/1024)
 		}
-		if material := m.materialByID(msg.id); material != nil {
-			m.toast = downloadProgressText(*material, msg.done, msg.total)
-			m.toastTicks = 24
-		}
 		return m, nil
 
 	case downloadDoneMsg:
+		if m.downloads[msg.id] {
+			m.downloadFinished++
+			if msg.err != nil {
+				m.downloadFailed++
+			}
+		}
 		delete(m.downloads, msg.id)
 		delete(m.downloadProgress, msg.id)
 		if cancel := m.downloadCancels[msg.id]; cancel != nil {
@@ -364,7 +369,7 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			delete(m.downloadCancels, msg.id)
 		}
 		if msg.err != nil {
-			m.toast = "download failed"
+			m.toast = m.downloadSummary()
 			m.downloadErrors[msg.id] = downloadErrorText(msg.err)
 			m.statusErr = "d retry · download failed: " + downloadErrorText(msg.err)
 			m.toastTicks = 40
@@ -379,7 +384,7 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.materials = m.service.Snapshot().Materials
 		m.state = m.service.State()
 		delete(m.downloadErrors, msg.id)
-		m.toast = "saved " + savedFileLabel(msg.path)
+		m.toast = m.downloadSummary()
 		m.toastTicks = 24
 		return m, m.queueStatePersist()
 

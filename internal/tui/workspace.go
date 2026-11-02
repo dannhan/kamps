@@ -187,8 +187,12 @@ func (m *App) materialBlock(n node, index, width int) []string {
 		title = cleanMaterialLabel(n.mat.Folder) + "/"
 	case nodeFile:
 		title = cleanMaterialLabel(n.mat.Name)
-		kind := strings.TrimPrefix(strings.ToUpper(filepath.Ext(n.mat.Name)), ".")
-		if len(kind) > 8 {
+		name := n.mat.Name
+		if n.mat.Downloaded {
+			name = m.service.LocalPath(n.mat)
+		}
+		kind := strings.TrimPrefix(strings.ToUpper(filepath.Ext(name)), ".")
+		if len(kind) > 8 || strings.ContainsAny(kind, " \t\n") {
 			kind = ""
 		}
 		state := "Not downloaded"
@@ -330,10 +334,19 @@ func (m *App) workspaceContent(width, height int) (string, string, []string, []s
 		right += " · ↓ more"
 	}
 
-	if !m.searchActive() || m.triageArmed || m.statusErr != "" {
+	if !m.searchActive() || m.triageArmed || m.statusErr != "" || len(m.downloads) > 0 {
 		status := m.footerSummary()
 		if m.toast != "" {
 			status = rightAligned(m.selectionLabel(), m.toast)
+		}
+		if m.tab == TabMaterials && m.toast == "" && m.matCursor >= 0 && m.matCursor < len(nodes) && nodes[m.matCursor].kind == nodeFile {
+			material := nodes[m.matCursor].mat
+			if material.Kind == "file" || material.Kind == "attachment" {
+				status = "folder: " + filepath.Dir(m.service.LocalPath(material))
+			}
+		}
+		if len(m.downloads) > 0 {
+			status = m.downloadSummary()
 		}
 		if m.statusErr != "" {
 			status = m.statusErr + " · esc dismiss"

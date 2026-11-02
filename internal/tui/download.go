@@ -202,6 +202,19 @@ func downloadProgressText(material model.Material, done, total int64) string {
 	return fmt.Sprintf("%s: %s", material.Name, format.HumanSize(done))
 }
 
+func (m *App) downloadSummary() string {
+	if m.downloadTotal == 0 {
+		return "download finished"
+	}
+	if len(m.downloads) > 0 {
+		return fmt.Sprintf("downloading %d/%d %s", m.downloadFinished, m.downloadTotal, plural(m.downloadTotal, "file", "files"))
+	}
+	if m.downloadFailed > 0 {
+		return fmt.Sprintf("downloaded %d/%d files · %d failed", m.downloadFinished-m.downloadFailed, m.downloadTotal, m.downloadFailed)
+	}
+	return fmt.Sprintf("downloaded %d %s", m.downloadTotal, plural(m.downloadTotal, "file", "files"))
+}
+
 func savedFileLabel(path string) string {
 	if path == "" {
 		return "file"
@@ -219,7 +232,7 @@ func (m *App) openLocalFile() tea.Cmd {
 		return nil
 	}
 	material := nodes[m.matCursor].mat
-	path := m.materialDestination(material)
+	path := m.service.LocalPath(material)
 	if material.Kind == "local" {
 		path = material.URL
 	}

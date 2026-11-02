@@ -93,6 +93,15 @@ func (m *App) materialDetailLines(n node, width int) []string {
 		}
 		state, style := materialTreeState(material)
 		addKV("state", state, style)
+		if material.Kind == "file" || material.Kind == "attachment" {
+			add("")
+			label := "save to (server may change filename)"
+			if material.Downloaded {
+				label = "saved at"
+			}
+			add(stFaint.Render(label))
+			addWrapped(m.service.LocalPath(material), stRow)
+		}
 		if assignment := m.assignmentForMaterial(material); assignment != nil {
 			add("")
 			add(stKey.Render("Related task"))
@@ -103,10 +112,6 @@ func (m *App) materialDetailLines(n node, width int) []string {
 			add("")
 			add(stFaint.Render("url"))
 			addWrapped(material.URL, stRow)
-			if material.Downloaded {
-				add(stFaint.Render("local path"))
-				addWrapped(m.materialDestination(material), stRow)
-			}
 		}
 	case nodeMaterialAssignment:
 		task := n.task

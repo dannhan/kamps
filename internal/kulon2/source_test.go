@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -12,8 +13,39 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ruyam/kamps/internal/model"
 	"github.com/ruyam/kamps/internal/session"
 )
+
+func TestLiveDownloadUsesStateLockDirectory(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("course material"))
+	}))
+	defer srv.Close()
+	state := t.TempDir()
+	sessionPath := filepath.Join(state, "session.json")
+	if err := session.Save(sessionPath, session.Session{SiteURL: srv.URL, Cookie: "cookie"}); err != nil {
+		t.Fatal(err)
+	}
+	locks := filepath.Join(state, "locks")
+	src, err := NewSource(srv.URL, sessionPath, locks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src.minRequestGap = 0
+	dest := filepath.Join(t.TempDir(), "material.pdf")
+	_, err = src.Download(context.Background(), model.Material{ID: "1", Kind: "file", URL: srv.URL + "/pluginfile.php/1/file.pdf"}, dest, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(dest + ".lock"); !os.IsNotExist(err) {
+		t.Fatalf("lock beside file: %v", err)
+	}
+	entries, err := os.ReadDir(locks)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("locks = %v, err = %v", entries, err)
+	}
+}
 
 func courseListHandler(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")

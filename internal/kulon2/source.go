@@ -45,6 +45,7 @@ func NewSource(siteURL, sessionPath, lockDir string) (*LiveSource, error) {
 	}
 	return &LiveSource{
 		siteURL: siteURL, session: saved, minRequestGap: 100 * time.Millisecond, maxConcurrent: defaultMaxConcurrent,
+		lockDir:       lockDir,
 		downloadSlots: make(chan struct{}, defaultMaxConcurrent),
 		client: &http.Client{
 			Timeout: 30 * time.Second,

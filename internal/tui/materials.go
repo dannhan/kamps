@@ -294,7 +294,11 @@ func (m *App) download() tea.Cmd {
 			continue
 		}
 		delete(m.downloadErrors, material.ID)
+		if len(m.downloads) == 0 && started == 0 {
+			m.downloadTotal, m.downloadFinished, m.downloadFailed = 0, 0, 0
+		}
 		m.downloads[material.ID] = true
+		m.downloadTotal++
 		cmds = append(cmds, m.startDownload(material))
 		started++
 	}
@@ -302,7 +306,7 @@ func (m *App) download() tea.Cmd {
 	m.selectedM = map[string]bool{}
 	switch {
 	case started > 0:
-		m.toast = fmt.Sprintf("downloading %d %s…", started, plural(started, "file", "files"))
+		m.toast = m.downloadSummary()
 	case local > 0:
 		m.toast = "local file: press o to open"
 	case links > 0:
