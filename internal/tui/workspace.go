@@ -100,7 +100,7 @@ func (m *App) sidebar(width, height int) []string {
 		labels = append(labels, name)
 	}
 	rows := []string{stFaint.Render(" Courses")}
-	start, end := windowRange(len(labels), m.courseCursor, maxInt(1, height-1))
+	start, end := cursorWindow(len(labels), m.courseCursor, maxInt(1, height-1), m.cfg.Scrolloff, &m.courseOffset)
 	for i := start; i < end; i++ {
 		active := i == 0 && !m.courseScoped
 		if i > 0 {
@@ -242,7 +242,7 @@ func (m *App) materialListWindow(nodes []node, width, height int) ([]string, int
 			blocks[i] = blocks[i][:height]
 		}
 	}
-	return m.courseContextWindow(nodes, blocks, m.matCursor, width, height)
+	return m.courseContextWindow(nodes, blocks, m.matCursor, width, height, &m.matOffset)
 }
 
 func (m *App) quietMaterialRows(nodes []node, width, height int) []string {
@@ -384,7 +384,7 @@ func (m *App) filterRows(width int) []string {
 	descriptions := map[string]string{"attention": "Undecided work, including overdue and undated", "upcoming": "Undecided, due today through the next 7 days", "closed": "Missed or ignored; tracked remains separate"}
 	rows := []string{}
 	options := m.filterOptions()
-	start, end := windowRange(len(options), m.filterCursor, maxInt(1, bodyHeightFor(m.width, m.height)))
+	start, end := cursorWindow(len(options), m.filterCursor, maxInt(1, bodyHeightFor(m.width, m.height)), m.cfg.Scrolloff, &m.filterOffset)
 	for i := start; i < end; i++ {
 		f := options[i]
 		label := f

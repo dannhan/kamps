@@ -67,6 +67,8 @@ type Config struct {
 	AutoTrackSubmitted bool
 	// NoAnim disables cheerful motion.
 	NoAnim bool
+	// Scrolloff is the desired number of visible lines around the cursor.
+	Scrolloff int
 	// Theme is auto, dark, light, or mono.
 	Theme string
 }
@@ -83,6 +85,7 @@ func Default() Config {
 		ExportFormat:       "markdown",
 		AutoTrackSubmitted: true,
 		Theme:              ThemeAuto,
+		Scrolloff:          5,
 	}
 }
 
@@ -160,6 +163,12 @@ func LoadFrom(path string) (Config, error) {
 			return cfg, fmt.Errorf("%s: export_format must be markdown, todo, or taskwarrior", path)
 		}
 	}
+	if file.Scrolloff != nil {
+		if *file.Scrolloff < 0 {
+			return cfg, fmt.Errorf("%s: scrolloff must be non-negative", path)
+		}
+		cfg.Scrolloff = *file.Scrolloff
+	}
 	if file.AutoTrackSubmitted != nil {
 		cfg.AutoTrackSubmitted = *file.AutoTrackSubmitted
 	}
@@ -174,6 +183,7 @@ func LoadFrom(path string) (Config, error) {
 }
 
 type fileConfig struct {
+	Scrolloff          *int     `toml:"scrolloff"`
 	SiteURL            string   `toml:"site_url"`
 	LibraryDir         string   `toml:"library_dir"`
 	Source             string   `toml:"source"`

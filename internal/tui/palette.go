@@ -89,7 +89,7 @@ func (m *App) paletteLines(width int) []string {
 	if len(actions) == 0 {
 		return append(lines, stEmpty.Render("no matching commands"))
 	}
-	start, end := windowRange(len(actions), cursor, maxInt(1, bodyHeightFor(m.width, m.height)-2))
+	start, end := cursorWindow(len(actions), cursor, maxInt(1, bodyHeightFor(m.width, m.height)-2), m.cfg.Scrolloff, &m.paletteOffset)
 	for i := start; i < end; i++ {
 		action := actions[i]
 		line := "  " + action.label

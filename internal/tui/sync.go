@@ -180,7 +180,7 @@ func (m *App) syncBody(width, height int) []string {
 	if m.cacheNotice != "" {
 		values = append(values, [2]string{"cache", "cached from " + m.cacheNotice})
 	}
-	start, end := windowRange(len(values), m.syncCursor, height)
+	start, end := cursorWindow(len(values), m.syncCursor, height, m.cfg.Scrolloff, &m.syncOffset)
 	rows := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
 		focused := i == m.syncCursor

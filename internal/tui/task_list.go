@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -144,12 +145,12 @@ func (m *App) taskListWindow(nodes []node, width, height int) ([]string, int, in
 			blocks[i] = append([]string{fitLine(truncate(blocks[i][0], maxInt(1, width-1))+"…", width)}, blocks[i][len(blocks[i])-height+1:]...)
 		}
 	}
-	return m.courseContextWindow(nodes, blocks, m.taskCursor, width, height)
+	return m.courseContextWindow(nodes, blocks, m.taskCursor, width, height, &m.taskOffset)
 }
 
 // Keep ownership visible when a course heading has scrolled above the window.
-func (m *App) courseContextWindow(nodes []node, blocks [][]string, cursor, width, height int) ([]string, int, int) {
-	rows, start, end := blockWindow(blocks, cursor, height)
+func (m *App) courseContextWindow(nodes []node, blocks [][]string, cursor, width, height int, offset *int) ([]string, int, int) {
+	rows, start, end := blockWindow(blocks, cursor, height, *offset, m.cfg.Scrolloff)
 	needsContext := func(index int) bool {
 		if index <= 0 || index >= len(nodes) {
 			return false
@@ -163,10 +164,12 @@ func (m *App) courseContextWindow(nodes []node, blocks [][]string, cursor, width
 		}
 		return false
 	}
-	if height < 4 || !needsContext(start) {
+	if height < 4 || !needsContext(start) || len(blocks[clampInt(cursor, 0, len(blocks)-1)]) >= height {
+		*offset = start
 		return rows, start, end
 	}
-	contextRows, contextStart, contextEnd := blockWindow(blocks, cursor, height-1)
+	contextRows, contextStart, contextEnd := blockWindow(blocks, cursor, height-1, *offset, m.cfg.Scrolloff)
+	*offset = contextStart
 	if !needsContext(contextStart) {
 		return contextRows, contextStart, contextEnd
 	}
@@ -176,19 +179,48 @@ func (m *App) courseContextWindow(nodes []node, blocks [][]string, cursor, width
 }
 
 // blockWindow keeps focus visible and never detaches metadata from its title.
-func blockWindow(blocks [][]string, cursor, height int) ([]string, int, int) {
+func blockWindow(blocks [][]string, cursor, height, offset, scrolloff int) ([]string, int, int) {
 	if height <= 0 {
 		return nil, 0, 0
 	}
-	cursor = clampInt(cursor, 0, maxInt(0, len(blocks)-1))
-	start, used := 0, 0
-	for i := 0; i <= cursor && i < len(blocks); i++ {
-		used += len(blocks[i])
+	if len(blocks) == 0 {
+		return nil, 0, 0
 	}
-	for used > height && start < cursor {
-		used -= len(blocks[start])
-		start++
+	cursor = clampInt(cursor, 0, len(blocks)-1)
+	offset = clampInt(offset, 0, cursor)
+	margin := minInt(maxInt(0, scrolloff), maxInt(0, (height-len(blocks[cursor]))/2))
+	prefix := make([]int, len(blocks)+1)
+	for i := range blocks {
+		prefix[i+1] = prefix[i] + len(blocks[i])
 	}
+	lastStart := len(blocks)
+	for lastStart > 0 && prefix[len(blocks)]-prefix[lastStart-1] <= height {
+		lastStart--
+	}
+	offset = minInt(offset, lastStart)
+	wantAbove := minInt(margin, prefix[cursor])
+	wantBelow := minInt(margin, prefix[len(blocks)]-prefix[cursor+1])
+	start, bestPenalty, bestDistance := 0, int(^uint(0)>>1), int(^uint(0)>>1)
+	for candidate := 0; candidate <= minInt(cursor, lastStart); candidate++ {
+		if prefix[cursor+1]-prefix[candidate] > height {
+			continue
+		}
+		end := sort.Search(len(prefix), func(i int) bool { return prefix[i] > prefix[candidate]+height }) - 1
+		if end < 0 {
+			end = len(blocks)
+		}
+		above := prefix[cursor] - prefix[candidate]
+		below := prefix[end] - prefix[cursor+1]
+		penalty := maxInt(0, wantAbove-above) + maxInt(0, wantBelow-below)
+		distance := candidate - offset
+		if distance < 0 {
+			distance = -distance
+		}
+		if penalty < bestPenalty || penalty == bestPenalty && distance < bestDistance {
+			start, bestPenalty, bestDistance = candidate, penalty, distance
+		}
+	}
+
 	rows := []string{}
 	end := start
 	for end < len(blocks) && len(rows)+len(blocks[end]) <= height {

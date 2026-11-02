@@ -65,6 +65,7 @@ The default material library is `~/Documents/kamps`. You can override it:
 # ~/.config/kamps/config.toml
 site_url = "https://kulon2.undip.ac.id/"
 library_dir = "~/projects/university"
+scrolloff = 5 # visible lines around the cursor; set to 0 to disable
 ```
 
 Live mode parses in-progress courses, course pages, assignments, resources, assignment attachments, and folder files. Materials are grouped as `week-0`, `week-1`, … from the course section order (an explicit “Week N” name wins), and downloads go to `library_dir` and resume after interruption. Course rows use the cleaned course name and code instead of Moodle’s category prefixes. An optional `course.json` in a workspace maps a course to that repo so downloads land there; see [`docs/workspace.md`](docs/workspace.md). Use `./kamps --demo` to explore the bundled UI without a session.

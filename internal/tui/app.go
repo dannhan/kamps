@@ -89,6 +89,13 @@ type App struct {
 	paletteQuery  string
 	paletteCursor int
 
+	courseOffset         int
+	filterOffset         int
+	paletteOffset        int
+	syncOffset           int
+	commitOffset         int
+	taskOffset           int
+	matOffset            int
 	taskCursor           int
 	materialsOldestFirst bool
 	matCursor            int

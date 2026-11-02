@@ -189,6 +189,7 @@ CONFIG
     export_format = "markdown"
     auto_track_submitted = true
     theme = "auto"
+    scrolloff = 5
 
 SCREENS
   1 Tasks       2 Materials       3 Sync       4 Commit

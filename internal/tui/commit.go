@@ -146,7 +146,7 @@ func (m *App) commitBody(width, height int) []string {
 			displayRow{text: stFaint.Render("  decide with t/m/i in Tasks; y copies the lines")},
 		)
 	}
-	start, end := windowRange(len(all), cursorRow, height)
+	start, end := cursorWindow(len(all), cursorRow, height, m.cfg.Scrolloff, &m.commitOffset)
 	rows := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
 		rows = append(rows, paneRow(all[i].text, width, rowHighlight{cursor: all[i].focused}))
